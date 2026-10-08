@@ -310,6 +310,20 @@ export class Hud {
     );
   }
 
+  private chronAll = false;
+
+  private chronHtml(): string {
+    const c = this.g.s.chron;
+    if (!c.length) return "";
+    const list = [...c].reverse().slice(0, this.chronAll ? 80 : 6);
+    return (
+      `<h3>${ic("parsomen")} Ozanın Defteri</h3><div class="chron">` +
+      list.map((e) => `<div class="cr"><em>Gün ${e.d}</em><p>${e.t}</p></div>`).join("") +
+      `</div>` +
+      (c.length > 6 ? `<button class="btn sm" style="width:100%" data-a="${this.act(() => (this.chronAll = !this.chronAll))}">${this.chronAll ? "Kısalt" : `Bütün destanı oku (${c.length})`}</button>` : "")
+    );
+  }
+
   private nemesisHtml(): string {
     const g = this.g;
     const s = g.s;
@@ -927,6 +941,7 @@ export class Hud {
           return `<div class="srow">${ic(SKILL_INFO[k].icon, "gimg")}<div class="bi2"><b>${SKILL_INFO[k].name} <em>Sv ${lv}</em></b>${bar(xp - 20 * lv * lv, skillNext(lv) - 20 * lv * lv, "", `${xp}/${skillNext(lv)}`)}<small>${SKILL_INFO[k].desc}</small></div></div>`;
         }).join("") +
         (s.free ? this.repHtml() : "") +
+        this.chronHtml() +
         (g.seraiCount()
           ? `<h3>${ic("map/serai")} Kervansarayların · dakikada ${g.seraiIncome().toFixed(1)} altın</h3>` +
             Object.entries(s.serais)

@@ -12,6 +12,7 @@ import { CITY_TRADE, GOODS, GOOD_KEYS, PLUS_CHANCE, SLOTS, STAT_INFO, canPlus, c
 import { SETS, SET_FORGE, SET_KEYS, SET_SLOTS, UNIQUES, addMods, type GearMods, type SetId } from "./legend";
 import { TITLE_CATS, titleKey, titleOf, titleReward } from "./titles";
 import { DAILY_POOL, today, yesterday, type Daily, type DailyTask } from "./daily";
+import { gen } from "./text";
 import { LAST_WORDS, NEM_MAX, NEM_TRAITS, REVENGE, SCAR_EPITHETS, TAUNTS, makeNemesis, nemBoss, nemName, type Nemesis } from "./nemesis";
 import { DEEP_LORE, DOORS, DOOR_KEYS, RIDDLES, deepBoss, deepGuard, deepTier, type DeepRun, type DoorKind } from "./deep";
 import { FACTIONS, FACTION_KEYS, HOSTILE, REP_RANKS, RANK_PERKS, factionOf, repRank, type FactionId } from "./factions";
@@ -709,6 +710,7 @@ export class Game {
     const armor = makeItem(s.nextId++, "zirh", 1, 0, c.armor);
     s.hero.equip.zirh = armor;
     this.view.heroPortrait(c.portrait);
+    this.chron(`Semerkant'ta demir halka çözüldü; ${s.hero.name} köle doğdu, hür bir ${c.name} olarak yola düştü.`);
     this.hud.story(
       "Hürriyet!",
       c.portrait,
@@ -814,6 +816,7 @@ export class Game {
     const fac = FACTIONS[f];
     audio.play("quest");
     this.hud.toast(`${fac.name} gözünde artık ${REP_RANKS[r1].you}${why ? ` (${why})` : ""}`, "good");
+    if (r1 >= 3) this.chron(`${fac.ruler} ${s.hero.name} için "${REP_RANKS[r1].name}" dedi; ${fac.name} kapıları ardına kadar açıldı.`);
     if (r1 >= 3 && !s.repGift.includes(f)) {
       s.repGift.push(f);
       const it = setPiece(s.nextId++, this.cls(), fac.gift, "tilsim", this.legendTier());
@@ -1326,6 +1329,7 @@ export class Game {
     const key = it.uq ? `uq:${it.uq}` : `set:${it.set}:${it.slot}`;
     const first = !s.codex.includes(key);
     if (first) s.codex.push(key);
+    if (first && it.uq) this.chron(`Yüzyıllardır kayıp olan <b class="r4">${it.name}</b> ${gen(s.hero.name)} eline geçti.`);
     audio.play("level");
     const lore = it.uq ? UNIQUES.find((u) => u.id === it.uq)!.lore : SETS[it.set!].lore;
     const tag = it.set ? `${SETS[it.set].name} parçası` : "Destan eşyası";
@@ -1771,6 +1775,7 @@ export class Game {
     if (why === "loss") n.wins = 1;
     s.nemeses.push(n);
     s.nemDay = Math.max(s.nemDay, this.dayOf().day);
+    this.chron(`${nemName(n)} ${why === "loss" ? `${gen(s.hero.name)} kanını yere döktü` : "yanan kampından kaçtı"} ve kan davası yemini etti.`);
     const pick = <T,>(a: T[]) => a[Math.floor(Math.random() * a.length)];
     const line = (why === "loss" ? pick(TAUNTS) : pick(REVENGE)).replace("{hero}", s.hero.name);
     const t = NEM_TRAITS[n.trait];
@@ -1814,6 +1819,7 @@ export class Game {
       }
       n.alive = false;
       s.c.slain++;
+      this.chron(`${n.wins ? `${n.wins} kez galip gelen ` : ""}${nemName(n)}, ${s.hero.name} karşısında son nefesini verdi. Kan davası kapandı.`);
       s.c.wins++;
       this.gain({ gold });
       const renown = 10 + 8 * n.lv;
@@ -2014,6 +2020,7 @@ export class Game {
       const gold = Math.round(this.caravanValue(cv) * 0.25 * this.stealMult());
       this.gain({ gold });
       s.c.robbed++;
+      if (s.c.robbed === 1) this.chron(`${FACTIONS[fac].name} kervanı yolda soyuldu. O günden beri hanlarda ${gen(s.hero.name)} adı fısıltıyla anılıyor.`);
       const lg = this.legendDrop(0.03);
       return `Kervan senin! +${k} ${GOODS[cv.good].name}${k < cv.qty ? ` (yükün doldu, ${cv.qty - k} adet geride kaldı)` : ""}, +${gold} altın.<br><b class="dear">Aranıyorsun (${"★".repeat(s.wanted)}) · ${FACTIONS[fac].name} itibarı −60</b>${lg ? `<br>Efsane: <b class="r4">${lg.name}</b>` : ""}`;
     }, null, `${FACTIONS[fac].short} muhafızları`);
@@ -2220,6 +2227,7 @@ export class Game {
       h.tpts++;
       h.hp = this.maxHp();
       up = true;
+      if (h.lv % 10 === 0) this.chron(`${h.lv}. baharını gören kılıç: ${h.name} artık ${h.lv >= 30 ? "hanlara denk" : h.lv >= 20 ? "beylere denk" : "alplara denk"} sayılıyor.`);
     }
     return up;
   }
@@ -2267,6 +2275,7 @@ export class Game {
       k.alive = false;
       k.respawnAt = this.now + 20 * 60000;
       this.s.c.kurgans++;
+      if (this.s.c.kurgans === 1) this.chron(`İlk Kurgan Taşı çatladı; mor ışık içinde ruhlar göğe yükseldi. ${this.s.hero.name} ataların sesini duydu.`);
       this.repNear(k.x, k.y, 3 * k.tier, "ruhları özgür bıraktın");
       const ruh = 2 * k.tier + Math.floor(Math.random() * 3);
       const gold = Math.round((50 * k.tier * k.tier + 30) * this.stealMult());
@@ -2290,6 +2299,12 @@ export class Game {
   kurganOdds(i: number): number {
     const k = this.s.kurgans[i];
     return this.odds(k.guard, 0.1 * k.tier, kurganBoss(k.tier));
+  }
+
+  chron(t: string): void {
+    const s = this.s;
+    s.chron.push({ d: this.dayOf().day, t });
+    if (s.chron.length > 80) s.chron.splice(1, s.chron.length - 80);
   }
 
   // ---------- kurgan depths ----------
@@ -2543,6 +2558,7 @@ export class Game {
     this.battleLock = false;
     saveGame(s);
     const best = floors > this.deepBest0;
+    if (best && floors >= 5 && Math.floor(floors / 5) > Math.floor(this.deepBest0 / 5)) this.chron(`${s.hero.name} Kurgan Derinliklerinde ${floors}. kata indi${lost ? " ve karanlık onu geri kustu" : ", gün ışığına ganimetle döndü"}. Bu kadar derine inen az görülmüştür.`);
     this.hud.story(
       lost ? "Derinlikler seni yuttu" : "Gün ışığı",
       lost ? "icons/ruh" : "map/kurgan",
@@ -2825,6 +2841,7 @@ export class Game {
       this.gain({ gold: 5000 });
       const it = uniqueItem(s.nextId++, this.cls(), UNIQUES[0], 5);
       this.gainLegend(it);
+      this.chron(`Kara Tamga Kalesi düştü. Kara Han'ın kılıcı kırıldı, esirlerin ruhları göğe ağdı. Ozanlar o gün ${gen(s.hero.name)} adını ilk kez türküye kattı.`);
       this.hud.story(
         "Destan tamamlandı: Kara Tamga yıkıldı",
         this.face(),

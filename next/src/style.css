@@ -250,6 +250,11 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #1c120a; col
 .res .wanted { color: #ff5a3c; font-weight: 900; letter-spacing: -1px; text-shadow: 0 0 6px #ff2a1a; animation: wantedblink 1s steps(2) infinite; }
 @keyframes wantedblink { 50% { opacity: .55; } }
 .bbox.choice .btn.big { width: 100%; margin-top: 8px; }
+.chron { border-left: 2px solid #b8843e88; margin: 6px 0 8px 6px; padding-left: 12px; }
+.chron .cr { position: relative; margin-bottom: 8px; }
+.chron .cr::before { content: ""; position: absolute; left: -17px; top: 5px; width: 8px; height: 8px; border-radius: 50%; background: #e0b04a; box-shadow: 0 0 6px #e0b04a; }
+.chron .cr em { font-size: 0.75em; color: #c9a86a; font-style: normal; letter-spacing: 0.04em; }
+.chron .cr p { margin: 1px 0 0; font-style: italic; font-family: Georgia, serif; line-height: 1.35; }
 .bbox.choice .btn.door { flex-direction: column; gap: 2px; line-height: 1.2; }
 .bbox.choice .btn.door small { font-weight: 500; opacity: 0.85; font-size: 0.78em; }
 .bbox.choice .btn.bad { background: linear-gradient(#a8402c, #6e2216); color: #ffe2d8; border-color: #ff7a5c; }

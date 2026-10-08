@@ -231,6 +231,7 @@ export interface GameState {
   deepBest: number;
   nemeses: Nemesis[];
   nemDay: number;
+  chron: { d: number; t: string }[];
 }
 
 export interface MarketEvent {
@@ -440,6 +441,7 @@ export function newGame(w: World): GameState {
     deepBest: 0,
     nemeses: [],
     nemDay: 0,
+    chron: [],
   };
 }
 
