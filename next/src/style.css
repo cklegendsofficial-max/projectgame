@@ -250,6 +250,8 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #1c120a; col
 .res .wanted { color: #ff5a3c; font-weight: 900; letter-spacing: -1px; text-shadow: 0 0 6px #ff2a1a; animation: wantedblink 1s steps(2) infinite; }
 @keyframes wantedblink { 50% { opacity: .55; } }
 .bbox.choice .btn.big { width: 100%; margin-top: 8px; }
+.bbox.choice .btn.door { flex-direction: column; gap: 2px; line-height: 1.2; }
+.bbox.choice .btn.door small { font-weight: 500; opacity: 0.85; font-size: 0.78em; }
 .bbox.choice .btn.bad { background: linear-gradient(#a8402c, #6e2216); color: #ffe2d8; border-color: #ff7a5c; }
 .ttl { color: #ffc27a; }
 .tcat { padding: 7px 9px; margin-bottom: 6px; border-radius: 10px; background: #0004; border: 1px solid #3b2614; }

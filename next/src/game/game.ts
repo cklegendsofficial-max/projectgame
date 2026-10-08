@@ -12,6 +12,7 @@ import { CITY_TRADE, GOODS, GOOD_KEYS, PLUS_CHANCE, SLOTS, STAT_INFO, canPlus, c
 import { SETS, SET_FORGE, SET_KEYS, SET_SLOTS, UNIQUES, addMods, type GearMods, type SetId } from "./legend";
 import { TITLE_CATS, titleKey, titleOf, titleReward } from "./titles";
 import { DAILY_POOL, today, yesterday, type Daily, type DailyTask } from "./daily";
+import { DEEP_LORE, DOORS, DOOR_KEYS, RIDDLES, deepBoss, deepGuard, deepTier, type DeepRun, type DoorKind } from "./deep";
 import { FACTIONS, FACTION_KEYS, HOSTILE, REP_RANKS, RANK_PERKS, factionOf, repRank, type FactionId } from "./factions";
 import { CLASS_BY_ID, CLASS_SKILLS, SKILL_MAX, WEAPON_NAME, WEAPON_STAT, skillPow, skillRank, type ClassDef, type ClassId, type ClassSkill, type WeaponKind } from "./classes";
 import { CHAPTERS, COMP_BY_ID, COMP_MAX, FORT_GUARD, KARA_HAN, KASIM, type Chapter, type CompId, type CompMods, type Companion } from "./story";
@@ -67,6 +68,9 @@ export class Game {
   lastTactic: Tactic = "hucum";
   private spawnAt = new Map<number, number>();
   battleLock = false;
+  deep: DeepRun | null = null;
+  private deepBest0 = 0;
+  private afterBattle: (() => void) | null = null;
 
   constructor(public world: World, public view: WorldView, public cam: Camera) {
     this.s = loadGame(world);
@@ -138,7 +142,7 @@ export class Game {
     if (!s.free) return null;
     const d = today();
     if (!s.daily || s.daily.date !== d) {
-      const pool = [...DAILY_POOL].sort(() => Math.random() - 0.5).slice(0, 3);
+      const pool = DAILY_POOL.filter((p) => s.hero.lv >= (p.lv ?? 0)).sort(() => Math.random() - 0.5).slice(0, 3);
       s.daily = { date: d, tasks: pool.map((p) => ({ key: p.key, need: p.need(s.hero.lv), base: s.c[p.key], done: false })), chest: false, streak: s.daily?.streak ?? 0, last: s.daily?.last ?? "" };
     }
     return s.daily;
@@ -512,6 +516,7 @@ export class Game {
     for (const k of s.kurgans)
       if (!k.alive && now >= k.respawnAt) {
         k.alive = true;
+        k.delved = false;
         k.guard = kurganGuard(k.tier);
       }
   }
@@ -2012,6 +2017,7 @@ export class Game {
     const s = this.s;
     const h = s.hero;
     this.battleLock = false;
+    if (this.deep) return this.deepFlee();
     const near = s.bandits.filter((b) => Math.hypot(b.x - h.x, b.y - h.y) < 80);
     if (!near.length) return;
     let lost = 0;
@@ -2082,6 +2088,9 @@ export class Game {
     this.hud.showBattle(title, before, enemy, res, { hpBefore, maxHp: this.maxHp() }, xp, lvUp, note, boss, foe, () => {
       this.battleLock = false;
       saveGame(this.s);
+      const f = this.afterBattle;
+      this.afterBattle = null;
+      f?.();
     });
   }
 
@@ -2167,6 +2176,265 @@ export class Game {
   kurganOdds(i: number): number {
     const k = this.s.kurgans[i];
     return this.odds(k.guard, 0.1 * k.tier, kurganBoss(k.tier));
+  }
+
+  // ---------- kurgan depths ----------
+
+  deepTorches(): number {
+    return 6 + Math.floor(this.stat("cev") / 4) + (this.s.cls === "hirsiz" ? 2 : 0) + (this.hasComp("ferhat") ? 1 : 0);
+  }
+
+  deepReason(i: number): string {
+    const k = this.s.kurgans[i];
+    if (k.alive) return "Önce taşı kır.";
+    if (k.delved) return "Bu mezar boşaltıldı. Taş yeniden toplanınca kapı yine açılır.";
+    if (this.s.hero.lv < 6) return "Derinliklere inmek için en az 6. seviye ol.";
+    if (armySize(this.s.hero.army) < 5) return "Yanına en az 5 asker al.";
+    return "";
+  }
+
+  enterDeep(i: number): void {
+    if (this.deepReason(i) || this.deep) return;
+    const k = this.s.kurgans[i];
+    k.delved = true;
+    this.deepBest0 = this.s.deepBest;
+    this.deep = { kurgan: i, floor: 1, torch: this.deepTorches(), gold: 0, ruh: 0, items: [], bless: 0, curse: 0, greed: 1, doors: [] };
+    this.battleLock = true;
+    this.target = null;
+    this.s.hero.path = null;
+    audio.play("story");
+    this.hud.story(
+      "Kurgan Derinlikleri",
+      "map/kurgan",
+      `Kırık taşın altında, toprağın içine inen dar bir merdiven buldun. Aşağıdan soğuk bir nefes yükseliyor.<br><br>Her kapı bir meşale yakar. Meşalen biterse karanlık seni yukarı kusar. Her <b>5. katta</b> bir bekçi seni bekler. İstediğin an ganimetinle yukarı çıkabilirsin; ama yenilirsen topladığın altının ve Ruh Taşlarının yarısını, bütün eşyaları kaybedersin.<br><br>Yanında <b>${this.deep.torch} meşale</b> var. En derin inişin: <b>${this.s.deepBest ? `${this.s.deepBest}. kat` : "henüz yok"}</b>.`,
+      "Aşağı in",
+    );
+    this.deepRoom();
+  }
+
+  private deepStatus(): string {
+    const r = this.deep!;
+    const mods = [r.bless ? `<b class="cheap">Umay lütfu ×${r.bless}</b>` : "", r.curse ? `<b class="dear">Erlik laneti ×${r.curse}</b>` : "", r.greed > 1 ? `ganimet ×${r.greed.toFixed(1)}` : ""].filter(Boolean).join(" · ");
+    return `<b>${r.torch}</b> meşale · <b>${r.gold}</b> altın · <b>${r.ruh}</b> Ruh Taşı · <b>${r.items.length}</b> eşya<br>Can ${Math.round(this.s.hero.hp)}/${this.maxHp()} · ${armySize(this.s.hero.army)} asker${mods ? `<br>${mods}` : ""}`;
+  }
+
+  private deepRoom(): void {
+    const r = this.deep;
+    if (!r) return;
+    if (r.torch <= 0) return this.deepExit("Son meşalen de söndü. Karanlıkta duvarları yoklayarak yukarı çıktın.");
+    const lore = DEEP_LORE[(r.floor * 7 + r.kurgan) % DEEP_LORE.length];
+    const exit = { label: `Yukarı çık · ganimetin seninle`, cls: "", fn: () => this.deepExit("Ganimetini sırtlayıp gün ışığına çıktın.") };
+    if (r.floor % 5 === 0) {
+      const b = deepBoss(r.floor);
+      this.hud.choice(`${r.floor}. Kat · Bekçi`, b.icon, `<i>${b.lore}</i><br><br>${this.deepStatus()}`, [
+        { label: `${b.name} ile dövüş · %${Math.round(this.deepOdds(true) * 100)}`, cls: "red", fn: () => this.deepFight(true) },
+        exit,
+      ]);
+      return;
+    }
+    const pool = DOOR_KEYS.filter((d) => d !== "tuccar" || r.floor >= 3);
+    const doors: DoorKind[] = [];
+    while (doors.length < 3) {
+      let x = Math.random() * pool.reduce((a, d) => a + DOORS[d].w, 0);
+      const d = pool.find((k) => (x -= DOORS[k].w) < 0) ?? "savas";
+      if (!doors.includes(d)) doors.push(d);
+    }
+    r.doors = doors;
+    this.hud.choice(`${r.floor}. Kat`, "map/kurgan", `<i class="dim">${lore}</i><br><br>${this.deepStatus()}`, [
+      ...doors.map((d) => ({ label: `<span>${DOORS[d].name}</span><small>${DOORS[d].hint}</small>`, cls: `door ${d === "savas" ? "red" : "go"}`, fn: () => this.deepDoor(d) })),
+      exit,
+    ]);
+  }
+
+  deepOdds(boss: boolean): number {
+    const r = this.deep!;
+    const base = this.s.kurgans[r.kurgan].tier;
+    return this.odds(deepGuard(r.floor, base, () => 0.5), this.deepBonus(), boss ? deepBoss(r.floor) : null);
+  }
+
+  private deepBonus(): number {
+    const r = this.deep!;
+    return 0.04 * r.floor + 0.08 * r.curse - 0.06 * r.bless;
+  }
+
+  private deepNext(txt: string, icon = "map/kurgan"): void {
+    const r = this.deep;
+    if (!r) return;
+    r.floor++;
+    this.s.c.floors++;
+    if (r.floor - 1 > this.s.deepBest) this.s.deepBest = r.floor - 1;
+    this.hud.choice(`${r.floor - 1}. Kat geçildi`, icon, `${txt}<br><br>${this.deepStatus()}`, [{ label: "Daha derine", cls: "go", fn: () => this.deepRoom() }]);
+  }
+
+  private deepDoor(d: DoorKind): void {
+    const r = this.deep;
+    if (!r) return;
+    r.torch--;
+    const h = this.s.hero;
+    const t = deepTier(r.floor, this.s.kurgans[r.kurgan].tier);
+    const pick = <T,>(a: T[]) => a[Math.floor(Math.random() * a.length)];
+    if (d === "savas") return this.deepFight(false);
+    if (d === "hazine") {
+      if (Math.random() < 0.2) {
+        const dmg = Math.round(this.maxHp() * 0.22);
+        h.hp = Math.max(1, h.hp - dmg);
+        const torch = Math.random() < 0.5 && r.torch > 0;
+        if (torch) r.torch--;
+        return this.deepNext(`<b class="dear">Tuzak!</b> Sandığı açınca tavandan zehirli oklar yağdı. −${dmg} can${torch ? ", bir meşale de söndü" : ""}.`, "icons/chest");
+      }
+      const gold = Math.round(30 * t * t * r.greed * this.stealMult());
+      const ruh = Math.random() < 0.5 ? 1 + Math.floor(t / 2) : 0;
+      r.gold += gold;
+      r.ruh += ruh;
+      let txt = `Hakanın mezar hazinesi! +${gold} altın${ruh ? `, +${ruh} Ruh Taşı` : ""}.`;
+      if (Math.random() < 0.35) {
+        const it = rollItem(this.s.nextId++, Math.min(5, Math.max(1, Math.round(t))), this.cls(), 0.15);
+        r.items.push(it);
+        txt += `<br>Sandığın dibinde: <b class="r${it.rar}">${it.name}</b>`;
+      }
+      if (Math.random() < 0.25) {
+        r.torch++;
+        txt += "<br>Bir de yağlı meşale buldun (+1).";
+      }
+      return this.deepNext(txt, "icons/chest");
+    }
+    if (d === "pinar") {
+      const heal = this.maxHp() - h.hp;
+      h.hp = this.maxHp();
+      r.torch++;
+      return this.deepNext(`Buz gibi suyu avuçlayıp içtin; yaraların kapandı. +${Math.round(heal)} can, meşalelerini kuruttun (+1).`, "icons/healer");
+    }
+    if (d === "tuccar") {
+      const tp = 60 + r.floor * 15;
+      const ip = 4 + Math.floor(r.floor / 3);
+      const nx = () => this.deepNext("Tüccar fenerini kısıp karanlığa karıştı.", "icons/coins");
+      this.hud.choice("Yeraltı Tüccarı", "icons/coins", `Yüzü görünmeyen, sesi taş gibi bir yaşlı: "Ölüler altın harcamaz, yolcu. Sen harcarsın."<br><br>${this.deepStatus()}`, [
+        { label: `2 meşale · ${tp} altın (ganimetten)`, cls: r.gold >= tp ? "go" : "off", fn: () => ((r.gold -= tp), (r.torch += 2), nx()) },
+        { label: `Mühürlü sandık · ${ip} Ruh Taşı`, cls: r.ruh >= ip ? "go" : "off", fn: () => {
+          r.ruh -= ip;
+          const it = rollItem(this.s.nextId++, Math.min(5, Math.round(t) + 1), this.cls(), 0.35);
+          r.items.push(it);
+          this.deepNext(`Sandıktan <b class="r${it.rar}">${it.name}</b> çıktı.`, "icons/coins");
+        } },
+        { label: "Umay'ın duası · 1 meşale", cls: r.torch >= 2 ? "go" : "off", fn: () => ((r.torch -= 1), r.bless++, nx()) },
+        { label: "Geç", cls: "", fn: nx },
+      ]);
+      return;
+    }
+    const roll = Math.random();
+    if (roll < 0.34) {
+      const q = pick(RIDDLES);
+      const opts = [q.a, ...q.wrong].sort(() => Math.random() - 0.5);
+      this.hud.choice("Taş Ozan", "icons/ruh", `Kemik kopuzlu bir hayalet yolunu kesti: "Bilirsen geçersin, bilemezsen bedel ödersin."<br><br><i>"${q.q}"</i>`, opts.map((o) => ({
+        label: o,
+        cls: "go",
+        fn: () => {
+          if (o === q.a) {
+            const ruh = 2 + Math.floor(r.floor / 3);
+            r.ruh += ruh;
+            r.bless++;
+            this.deepNext(`"Doğru, ${o}." Ozan kopuzunu çalıp kayboldu. <b class="cheap">Umay'ın lütfu</b> üstünde. +${ruh} Ruh Taşı.`, "icons/ruh");
+          } else {
+            r.curse++;
+            this.deepNext(`"Yanlış. Cevap ${q.a} idi." Hayalet çığlık atarak içine girdi. <b class="dear">Erlik laneti</b>: düşmanlar daha güçlü.`, "icons/ruh");
+          }
+        },
+      })));
+      return;
+    }
+    if (roll < 0.58) {
+      this.hud.choice("Erlik'in Teklifi", "icons/ruh", `Kara bir duman şekillendi: "Altın mı istiyorsun, yolcu? Al. Ama karşılığında askerlerin biraz daha çok kanayacak."`, [
+        { label: "Kabul et · ganimet ×1.4, Erlik laneti", cls: "bad", fn: () => ((r.greed = +(r.greed + 0.4).toFixed(1)), r.curse++, this.deepNext("Duman ciğerlerine doldu. Gözlerin altın rengine döndü.", "icons/ruh")) },
+        { label: "Reddet", cls: "", fn: () => this.deepNext("\"Akıllı yolcu…\" Duman dağıldı.", "icons/ruh") },
+      ]);
+      return;
+    }
+    if (roll < 0.78) {
+      const cost = Math.round(this.maxHp() * 0.3);
+      this.hud.choice("Kanlı Sunak", "icons/ruh", `Kurt başlı bir sunak. Üstünde kurumuş kan. Yazıt: "Kanını veren, Umay'ın kanadı altına girer."`, [
+        { label: `Kanını ver · −${cost} can, Umay lütfu`, cls: h.hp > cost + 5 ? "go" : "off", fn: () => ((h.hp -= cost), r.bless++, this.deepNext("Sunak kanını içti; sıcak bir el omzuna dokundu.", "icons/ruh")) },
+        { label: "Geç", cls: "", fn: () => this.deepNext("Sunağın önünden başını eğerek geçtin.", "icons/ruh") },
+      ]);
+      return;
+    }
+    const u = pick(UNIT_KEYS);
+    const n = 2 + Math.floor(Math.random() * (2 + r.floor / 2));
+    h.army[u] += n;
+    this.deepNext(`Duvara zincirli ölü alplerin ruhları uyandı: "Bizi buradan çıkar, kılıcımız senindir." <b class="cheap">+${n} ${UNITS[u].name}</b> birliğine katıldı.`, "icons/soldier");
+  }
+
+  private deepFight(boss: boolean): void {
+    const r = this.deep!;
+    const base = this.s.kurgans[r.kurgan].tier;
+    const guard = deepGuard(r.floor, base);
+    const b = boss ? deepBoss(r.floor) : null;
+    const t = deepTier(r.floor, base);
+    const h = this.s.hero;
+    if (armySize(h.army) === 0 && h.hp < this.maxHp() * 0.15) return this.deepExit("Kılıcını kaldıracak gücün kalmadı. Duvarlara tutuna tutuna yukarı çıktın.");
+    let won = false;
+    let txt = "";
+    this.afterBattle = () => {
+      if (!this.deep) return;
+      if (won) this.deepNext(txt, b?.icon ?? "icons/swords");
+      else this.deepExit("", true);
+    };
+    this.battle(`${r.floor}. Kat · ${b ? b.name : "Taş askerler"}`, guard, this.deepBonus(), (win) => {
+      won = win;
+      if (!win) return "";
+      const gold = Math.round((boss ? 90 : 18) * t * t * r.greed * this.stealMult());
+      const ruh = (boss ? 4 + r.floor / 2 : Math.random() < 0.45 ? 1 + t / 3 : 0) | 0;
+      r.gold += gold;
+      r.ruh += ruh;
+      txt = `${b ? `<b>${b.name}</b> yere yığıldı!` : "Taş askerler toza dönüştü."} +${gold} altın${ruh ? `, +${ruh} Ruh Taşı` : ""}.`;
+      if (Math.random() < (boss ? 1 : 0.22)) {
+        const it = rollItem(this.s.nextId++, Math.min(5, Math.max(1, Math.round(t) + (boss ? 1 : 0))), this.cls(), boss ? 0.4 : 0.1);
+        r.items.push(it);
+        txt += `<br>Ganimet: <b class="r${it.rar}">${it.name}</b>`;
+      }
+      if (boss) {
+        r.torch += 3;
+        this.s.mats.parsomen++;
+        txt += "<br>+1 Kutsal Parşömen · bekçinin kandilinden +3 meşale";
+      }
+      const lg = this.legendDrop(boss ? 0.12 + r.floor * 0.012 : 0.006 * r.floor);
+      if (lg) txt += `<br>Efsane: <b class="r4">${lg.name}</b>`;
+      return txt;
+    }, b, "Taş askerler");
+  }
+
+  private deepFlee(): void {
+    const r = this.deep;
+    if (!r) return;
+    r.gold = Math.round(r.gold * 0.7);
+    this.deepExit("Kılıçlar çekilmeden geri döndün ve merdivenlere koştun. Kaçarken altının bir kısmı döküldü.");
+  }
+
+  private deepExit(txt: string, lost = false): void {
+    const r = this.deep;
+    if (!r) return;
+    this.deep = null;
+    this.afterBattle = null;
+    const s = this.s;
+    const floors = r.floor - 1;
+    if (lost) {
+      r.gold = Math.floor(r.gold / 2);
+      r.ruh = Math.floor(r.ruh / 2);
+      r.items = [];
+    }
+    this.gain({ gold: r.gold });
+    s.mats.ruh += r.ruh;
+    s.hero.bag.push(...r.items);
+    const renown = Math.floor(floors * 1.5);
+    s.renown += renown;
+    this.battleLock = false;
+    saveGame(s);
+    const best = floors > this.deepBest0;
+    this.hud.story(
+      lost ? "Derinlikler seni yuttu" : "Gün ışığı",
+      lost ? "icons/ruh" : "map/kurgan",
+      `${lost ? `${r.floor}. katta yenildin. Yoldaşların seni yukarı sürükledi; eşyalar karanlıkta kaldı.` : txt}<br><br>İndiğin kat: <b>${floors}</b>${best ? ` <b class="cheap">· yeni rekor!</b>` : ` · rekorun ${s.deepBest}`}<br>Getirdiğin: <b>+${r.gold} altın · +${r.ruh} Ruh Taşı · ${r.items.length} eşya · +${renown} şöhret</b>${r.items.map((it) => `<br><b class="r${it.rar}">${it.name}</b>`).join("")}`,
+      "Devam",
+    );
   }
 
   // ---------- living world ----------

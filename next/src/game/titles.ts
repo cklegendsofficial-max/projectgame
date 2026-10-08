@@ -19,6 +19,7 @@ export const TITLE_CATS: TitleCat[] = [
   { id: "codex", icon: "parsomen", what: "efsane eşya keşfet", value: (s) => s.codex.length, tiers: [{ need: 3, name: "Defineci", mods: { crit: 0.02 } }, { need: 10, name: "Efsane Avcısı", mods: { crit: 0.04 } }, { need: 20, name: "Destan Koleksiyoncusu", mods: { crit: 0.06 } }] },
   { id: "robbed", icon: "wanted", what: "kervan soy", value: (s) => s.c.robbed, tiers: [{ need: 1, name: "Yol Kesen", mods: { loot: 0.1 } }, { need: 10, name: "Kara Atlı", mods: { loot: 0.2 } }, { need: 30, name: "Bozkırın Belası", mods: { loot: 0.3 } }] },
   { id: "rescued", icon: "j_caravan", what: "kervan kurtar", value: (s) => s.c.rescued, tiers: [{ need: 1, name: "Kervan Dostu", mods: { hp: 0.05 } }, { need: 8, name: "Kervan Kalkanı", mods: { hp: 0.1 } }, { need: 25, name: "Yolların Koruyucusu", mods: { hp: 0.15 } }] },
+  { id: "deep", icon: "ruh", what: "kat derinliğe in", value: (s) => s.deepBest, tiers: [{ need: 5, name: "Mezar Gezgini", mods: { def: 0.03, hp: 0.03 } }, { need: 15, name: "Karanlığın Yolcusu", mods: { def: 0.05, hp: 0.06 } }, { need: 30, name: "Erlik'i Gören", mods: { def: 0.08, hp: 0.1, atk: 0.04 } }] },
   { id: "lv", icon: "crown", what: "seviyeye ulaş", value: (s) => s.hero.lv, tiers: [{ need: 10, name: "Alp", mods: { spd: 0.03 } }, { need: 20, name: "Bey", mods: { spd: 0.06 } }, { need: 30, name: "Han", mods: { spd: 0.1 } }] },
 ];
 

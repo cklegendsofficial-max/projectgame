@@ -278,6 +278,19 @@ export class Hud {
     );
   }
 
+  private deepHtml(i: number, near: boolean): string {
+    const g = this.g;
+    const s = g.s;
+    const k = s.kurgans[i];
+    const why = g.deepReason(i);
+    const t: Target = { kind: "kurgan", i };
+    return `<p>Taş paramparça. Kara büyü ${dur(k.respawnAt - g.now)} sonra yeniden toplanacak.</p>
+      <h3>${ic("map/kurgan")} Kurgan Derinlikleri</h3>
+      <p>Kırık taşın altında mezara inen bir merdiven açıldı. Kat kat aşağı in: her katta üç kapıdan birini seç. Savaş, hazine, şifa pınarı, Taş Ozan'ın bilmeceleri, Erlik'in teklifleri… Her 5 katta bir bekçi. Ne kadar derine inersen ganimet o kadar büyür.</p>
+      <div class="odds mid">Meşale: <b>${g.deepTorches()}</b> · En derin inişin: <b>${s.deepBest ? `${s.deepBest}. kat` : "—"}</b> · Toplam kat: <b>${s.c.floors}</b></div>
+      ${why ? `<p class="dim">${why}</p>` : near ? `<button class="btn red big" data-a="${this.act(() => { this.close(); g.enterDeep(i); })}">${ic("map/kurgan")} Derinliklere in</button>` : this.walkBtn(t, "Mezara yürü")}`;
+  }
+
   private dailyHtml(): string {
     const g = this.g;
     const d = g.daily();
@@ -389,11 +402,11 @@ export class Hud {
     setTimeout(() => el.remove(), 3300);
   }
 
-  private storyQ: [string, string, string, string][] = [];
+  private storyQ: (() => void)[] = [];
 
   story(title: string, img: string, html: string, btn = "Devam"): void {
     if (this.storyOpen || this.battleOpen) {
-      this.storyQ.push([title, img, html, btn]);
+      this.storyQ.push(() => this.story(title, img, html, btn));
       return;
     }
     this.storyOpen = true;
@@ -411,6 +424,10 @@ export class Hud {
   }
 
   choice(title: string, img: string, html: string, opts: { label: string; cls: string; fn: () => void }[]): void {
+    if (this.storyOpen || this.battleOpen) {
+      this.storyQ.push(() => this.choice(title, img, html, opts));
+      return;
+    }
     this.storyOpen = true;
     this.close();
     const el = document.createElement("div");
@@ -463,8 +480,7 @@ export class Hud {
   }
 
   private nextStory(): void {
-    const n = this.storyQ.shift();
-    if (n) this.story(...n);
+    this.storyQ.shift()?.();
   }
 
   questDone(q: Quest, label = "Görev tamamlandı"): void {
@@ -608,7 +624,7 @@ export class Hud {
           <h3>Sen ve birliğin</h3>${armyHtml(s.hero.army)}
           <div class="odds ${p >= 65 ? "good" : p >= 35 ? "mid" : "bad"}">Zafer şansı: <b>%${p}</b></div>
           <p class="dim">Ödül: ${2 * k.tier}+ Ruh Taşı, altın, kesin bir eşya (çoğu zaman bir kademe üstü), Kutsal Parşömen şansı.</p>
-          ${near ? `<button class="btn red big" data-a="${this.act(() => { this.close(); g.attackKurgan(t.i); })}">${ic("swords")} Taşa saldır!</button>` : this.walkBtn(t, "Taşa yürü")}` : `<p>Taş paramparça. Kara büyü ${dur(k.respawnAt - g.now)} sonra yeniden toplanacak.</p>`);
+          ${near ? `<button class="btn red big" data-a="${this.act(() => { this.close(); g.attackKurgan(t.i); })}">${ic("swords")} Taşa saldır!</button>` : this.walkBtn(t, "Taşa yürü")}` : this.deepHtml(t.i, near));
         break;
       }
       case "ruin": {
@@ -1041,8 +1057,8 @@ export class Hud {
       el.querySelector(".result .btn")!.addEventListener("click", () => {
         el.remove();
         this.battleOpen = false;
-        onClose();
         this.nextStory();
+        onClose();
       });
     };
     setTimeout(step, 600);
@@ -1143,6 +1159,24 @@ export class Hud {
     });
     c.fillStyle = "#7fd36a";
     for (const m of g.s.marches) c.fillRect(m.x * sx - 1.5, m.y * sy - 1.5, 3, 3);
+    for (const st of g.s.storms) {
+      c.fillStyle = st.kind === "kum" ? "rgba(214,160,80,0.35)" : "rgba(90,120,170,0.35)";
+      c.beginPath();
+      c.arc(st.x * sx, st.y * sy, Math.max(3, st.r * sx), 0, Math.PI * 2);
+      c.fill();
+    }
+    for (const cv of g.s.caravans) {
+      if (!g.isExplored(cv.x, cv.y)) continue;
+      c.fillStyle = cv.raid ? "#ff5a3c" : FACTIONS[cv.fac as keyof typeof FACTIONS].color;
+      c.beginPath();
+      c.moveTo(cv.x * sx, cv.y * sy - 2.5);
+      c.lineTo(cv.x * sx + 2.5, cv.y * sy);
+      c.lineTo(cv.x * sx, cv.y * sy + 2.5);
+      c.lineTo(cv.x * sx - 2.5, cv.y * sy);
+      c.fill();
+    }
+    c.fillStyle = "#6aa8ff";
+    for (const b of g.s.bandits) if (b.posse) c.fillRect(b.x * sx - 1.5, b.y * sy - 1.5, 3, 3);
     c.fillStyle = "#fff";
     c.beginPath();
     c.arc(g.s.hero.x * sx, g.s.hero.y * sy, 3, 0, Math.PI * 2);

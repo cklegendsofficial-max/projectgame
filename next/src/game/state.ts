@@ -49,6 +49,7 @@ export interface Kurgan {
   alive: boolean;
   respawnAt: number;
   guard: Army;
+  delved?: boolean;
 }
 
 export interface Hero {
@@ -167,6 +168,7 @@ export interface Counters {
   sides: number;
   robbed: number;
   rescued: number;
+  floors: number;
 }
 
 export interface GameState {
@@ -223,6 +225,7 @@ export interface GameState {
   daily: Daily | null;
   wanted: number;
   wantedT: number;
+  deepBest: number;
 }
 
 export interface MarketEvent {
@@ -350,7 +353,7 @@ export function banditArmy(tier: number): Army {
 }
 
 export function newCounters(): Counters {
-  return { shifts: 0, trains: 0, profit: 0, wins: 0, recruits: 0, bought: 0, moved: 0, camps: 0, built: 0, trained: 0, marched: 0, spent: 0, plus: 0, kurgans: 0, contracts: 0, crafted: 0, raids: 0, sides: 0, robbed: 0, rescued: 0 };
+  return { shifts: 0, trains: 0, profit: 0, wins: 0, recruits: 0, bought: 0, moved: 0, camps: 0, built: 0, trained: 0, marched: 0, spent: 0, plus: 0, kurgans: 0, contracts: 0, crafted: 0, raids: 0, sides: 0, robbed: 0, rescued: 0, floors: 0 };
 }
 
 export function newGame(w: World): GameState {
@@ -429,6 +432,7 @@ export function newGame(w: World): GameState {
     daily: null,
     wanted: 0,
     wantedT: 0,
+    deepBest: 0,
   };
 }
 
