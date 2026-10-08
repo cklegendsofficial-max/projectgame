@@ -2,6 +2,9 @@ import { defineConfig } from "vite";
 
 export default defineConfig({
   base: "./",
+  server: {
+    watch: { ignored: ["**/release/**", "**/playtest/**", "**/dist/**"] },
+  },
   build: {
     outDir: "dist",
     assetsInlineLimit: 0,
