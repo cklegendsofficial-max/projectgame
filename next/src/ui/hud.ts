@@ -16,6 +16,7 @@ import { SETS, SET_FORGE, SET_KEYS, SET_SLOTS, UNIQUES, modsText, type SetId } f
 import { FACTIONS, FACTION_KEYS, HOSTILE, REP_RANKS, RANK_PERKS, factionOf } from "../game/factions";
 import { NEM_TRAITS, nemName } from "../game/nemesis";
 import { BIRDS, birdSight, birdXpNeed } from "../game/falcon";
+import { BREEDS, BREED_GOLD, BREED_TIME } from "../game/horse";
 import { TITLE_CATS, titleKey, titleOf } from "../game/titles";
 import { DAILY_POOL } from "../game/daily";
 
@@ -317,6 +318,42 @@ export class Hud {
         .join("") +
       (d.chest ? `<div class="odds good">Bugünün sandığı açıldı. Yarın yeni fermanlar gelecek.</div>` : `<button class="btn big ${g.chestReady() ? "go" : "off"}" style="width:100%" data-a="${this.act(() => g.openChest())}"> ${ic("chest")} Ferman sandığını aç</button>`)
     );
+  }
+
+  private studPick: number[] = [];
+
+  private stableHtml(city: string, near: boolean): string {
+    const g = this.g;
+    const s = g.s;
+    const shop =
+      `<h3>${ic("mount_2")} At pazarı</h3>` +
+      g
+        .horseShop(city)
+        .map((k) => {
+          const b = BREEDS[k];
+          return `<div class="grow">${ic(b.icon, "gimg")}<div class="bi2"><b>${b.name}</b><small>${b.desc}</small><small>Hız +%${Math.round(b.spd * 100)} · Yük +${b.carry} · Can +${b.hp}</small></div><button class="btn sm ${!near || !s.free || s.res.gold < b.gold ? "off" : ""}" data-a="${this.act(() => g.buyHorse(k, city))}">Al<br>${ic("coins")}${b.gold}</button></div>`;
+        })
+        .join("");
+    if (!g.canStud(city)) return shop + `<p class="dim">Kendi ahırında at çiftleştirmek için burada bir kervansaray kur (ya da Semerkant'ta çiftleştir).</p>`;
+    const st = s.stud;
+    let stud = `<h3>${ic("stable")} Ahır</h3>`;
+    if (st) {
+      stud += `<div class="brow">${ic("foal", "bimg")}<div class="bi2"><b>${st.a.name.split(" (")[0]} × ${st.b.name.split(" (")[0]}</b>${bar(BREED_TIME - (st.until - g.now), BREED_TIME, "", `Tay ${dur(st.until - g.now)} sonra`)}<small>${CITY_NAME[st.city]} ahırında</small></div></div>`;
+    } else {
+      const hs = g.studHorses();
+      this.studPick = this.studPick.filter((id) => hs.some((x) => x.id === id));
+      stud += `<p class="dim">İki atını seç ve çiftleştir. Tay, ebeveynlerinin hızını, yük gücünü ve dayanıklılığını karışık alır; bazen ikisinden de üstün doğar. Kuşaklar ilerledikçe efsanevi <b>Tulpar</b> doğabilir.</p>` +
+        (hs.length < 2
+          ? `<p class="dim">En az iki atın olmalı (${hs.length}/2).</p>`
+          : hs
+              .map((it) => {
+                const on = this.studPick.includes(it.id);
+                return `<div class="grow ${on ? "pick" : ""}">${ic(it.icon, "gimg")}<div class="bi2"><b class="r${it.rar}">${it.name}</b><small>${itemStats(it)}</small></div><button class="btn sm ${on ? "go" : ""}" data-a="${this.act(() => (this.studPick = on ? this.studPick.filter((x) => x !== it.id) : [...this.studPick.slice(-1), it.id]))}">${on ? "Seçili" : "Seç"}</button></div>`;
+              })
+              .join("") +
+            `<button class="btn big ${this.studPick.length === 2 && near && s.res.gold >= BREED_GOLD ? "go" : "off"}" style="width:100%" data-a="${this.act(() => { g.breedHorses(this.studPick[0], this.studPick[1], city); this.studPick = []; })}">${ic("foal")} Çiftleştir · ${ic("coins")}${BREED_GOLD}</button>`);
+    }
+    return shop + stud;
   }
 
   private birdShopHtml(city: string, near: boolean): string {
@@ -866,7 +903,7 @@ export class Hud {
               ? `<div class="brow">${ic("map/serai", "bimg")}<div class="bi2">${bar(sr.coffer, g.seraiCap(c.id), "", `Kasa ${Math.floor(sr.coffer)}/${Math.round(g.seraiCap(c.id))}`)}<small>Dakikada ${g.seraiRate(c.id).toFixed(1)} altın · Ağında ${g.seraiCount()} kervansaray · Bedava konaklama, ticarette %${2 * sr.lv} avantaj</small>${swhy && sr.lv < 3 ? `<small class="why">${swhy}</small>` : ""}</div>${sr.lv < 3 ? `<button class="btn sm ${swhy ? "off" : ""}" data-a="${this.act(() => g.buildSerai(c.id))}">Geliştir<br>${ic("coins")}${g.seraiCost(c.id)}</button>` : ""}</div>`
               : `<div class="brow">${ic("map/serai", "bimg")}<div class="bi2"><b>${CITY_NAME[c.id]} yolunda kendi hanın</b><small>Kasası her dakika altın biriktirir, uğradığında toplarsın. Burada konaklama bedava, emanet teslimine %25 prim. Her yeni kervansaray tüm ağın gelirini %15 artırır.</small>${swhy ? `<small class="why">${swhy}</small>` : ""}</div><button class="btn sm ${swhy || !near ? "off" : ""}" data-a="${this.act(() => g.buildSerai(c.id))}">Kur<br>${ic("coins")}${g.seraiCost(c.id)}</button></div>`);
       body = `${nearNote}<div class="brow">${ic("han", "bimg")}<div class="bi2"><b>Kervansaray odası</b><small>Canını ve enerjini tamamen doldurur.</small></div><button class="btn ${!near || g.act ? "off" : ""}" data-a="${this.act(() => g.rest())}">Uyu ${g.restCost() ? `${ic("coins")}${g.restCost()}` : "· bedava"}</button></div>
-        ${this.boardHtml(c.id, near)}${serai}${this.birdShopHtml(c.id, near)}${rumor}
+        ${this.boardHtml(c.id, near)}${serai}${this.stableHtml(c.id, near)}${this.birdShopHtml(c.id, near)}${rumor}
         <h3>${ic("wanted")} Ödül ilanları</h3>` +
         (bl.map(({ b, i }) => {
           const cp = s.camps[b.camp];

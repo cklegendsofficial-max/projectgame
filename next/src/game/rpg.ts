@@ -1,5 +1,6 @@
 import { WEAPON_NAME, WEAPON_STAT, type ArmorKind, type ClassDef, type WeaponKind } from "./classes";
 import { SETS, modsText, type GearMods, type SetId, type Unique } from "./legend";
+import { BREEDS, horseName, type Breed, type HorseInfo } from "./horse";
 
 export type Stat = "guc" | "cev" | "day" | "lid" | "kar";
 export const STAT_KEYS: Stat[] = ["guc", "cev", "day", "lid", "kar"];
@@ -55,6 +56,7 @@ export interface Item {
   set?: SetId;
   uq?: string;
   mods?: GearMods;
+  horse?: HorseInfo;
 }
 
 export function setPiece(id: number, cls: ClassDef, set: SetId, slot: Slot, tier: number): Item {
@@ -210,7 +212,21 @@ export function itemStats(it: Item): string {
   if (it.lid) p.push(`Liderlik +${it.lid}`);
   if (it.kar) p.push(`Karizma +${it.kar}`);
   if (it.mods) p.push(modsText(it.mods));
+  if (it.horse) p.push(`${it.horse.gen}. kuşak${it.horse.sire ? ` · ${it.horse.sire} × ${it.horse.dam}` : ""}`);
   return p.join(" · ");
+}
+
+export function makeHorse(id: number, breed: Breed, info: HorseInfo, st?: { spd: number; carry: number; hp: number }, name?: string): Item {
+  const b = BREEDS[breed];
+  const s = st ?? { spd: b.spd, carry: b.carry, hp: b.hp };
+  const score = s.spd * 100 + s.carry * 0.3 + s.hp;
+  const rar = breed === "tulpar" ? 4 : score > 75 ? 3 : score > 58 ? 2 : score > 44 ? 1 : 0;
+  return {
+    id, slot: "at", kind: "", tier: Math.min(5, 1 + Math.floor(score / 18)), rar,
+    name: `${name ?? horseName()} (${b.name})`, icon: breed === "tulpar" ? "mount_3" : b.icon,
+    atk: 0, def: 0, hp: Math.round(s.hp), spd: Math.round(s.spd * 100) / 100, carry: Math.round(s.carry), lid: 0, kar: 0, crit: 0, lvReq: 1, req: null,
+    horse: info, ...(breed === "tulpar" ? { mods: { atk: 0.05, army: 0.04 } } : {}),
+  };
 }
 
 export type Good = "pamuk" | "deri" | "demir" | "baharat" | "hali" | "ipek" | "porselen" | "turkuaz" | "yesim" | "gumus";

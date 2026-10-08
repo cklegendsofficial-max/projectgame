@@ -8,11 +8,12 @@ import { GIVERS, SIDE_TEXT, type SideKind, type SideQuest } from "./sidequests";
 import { audio } from "../audio";
 import { TACTICS, TACTIC_KEYS, fight, odds, stanceWeights, tacticDelta, type BattleResult, type Boss, type Champion, type Tactic } from "./battle";
 import { BUILDINGS, BUILDING_BY_ID, CITY_NAME, DAY_SEC, RES_KEYS, UNITS, UNIT_KEYS, army, armyPower, armySize, buildCost, buildTime, prodPerMin, storageCap, trainSpeed, unitUnlocked, xpNeed, type Army, type BuildingId, type Res, type Unit } from "./data";
-import { CITY_TRADE, GOODS, GOOD_KEYS, PLUS_CHANCE, SLOTS, STAT_INFO, canPlus, classItem, goodMult, itemPrice, makeItem, plusCost, rollItem, setPiece, setPlus, skillLv, uniqueItem, type Good, type Item, type Skill, type Slot, type Stat } from "./rpg";
+import { CITY_TRADE, GOODS, GOOD_KEYS, PLUS_CHANCE, SLOTS, STAT_INFO, canPlus, classItem, goodMult, itemPrice, itemStats, makeHorse, makeItem, plusCost, rollItem, setPiece, setPlus, skillLv, uniqueItem, type Good, type Item, type Skill, type Slot, type Stat } from "./rpg";
 import { SETS, SET_FORGE, SET_KEYS, SET_SLOTS, UNIQUES, addMods, type GearMods, type SetId } from "./legend";
 import { TITLE_CATS, titleKey, titleOf, titleReward } from "./titles";
 import { DAILY_POOL, today, yesterday, type Daily, type DailyTask } from "./daily";
 import { gen } from "./text";
+import { BREEDS, BREED_GOLD, BREED_TIME, SHOP_BREEDS, tulparChance, type Breed } from "./horse";
 import { BIRDS, BIRD_KEYS, BIRD_MAX, BIRD_NAMES, HUNTS, birdSight, birdXpNeed, type BirdFlight, type BirdKind } from "./falcon";
 import { LAST_WORDS, NEM_MAX, NEM_TRAITS, REVENGE, SCAR_EPITHETS, TAUNTS, makeNemesis, nemBoss, nemName, type Nemesis } from "./nemesis";
 import { DEEP_LORE, DOORS, DOOR_KEYS, RIDDLES, deepBoss, deepGuard, deepTier, type DeepRun, type DoorKind } from "./deep";
@@ -142,6 +143,89 @@ export class Game {
     const b = this.s.bird;
     if (b) addMods(m, BIRDS[b.kind].mods(b.lv));
     return m;
+  }
+
+  // ---------- horse breeding ----------
+
+  horseShop(city: string): Breed[] {
+    return SHOP_BREEDS.filter((b) => !BREEDS[b].cities.length || BREEDS[b].cities.includes(city));
+  }
+
+  private atCity(city: string): boolean {
+    const ci = this.nearCity();
+    return ci >= 0 && CITIES[ci].id === city;
+  }
+
+  buyHorse(breed: Breed, city: string): void {
+    const s = this.s;
+    const b = BREEDS[breed];
+    if (!s.free || !this.atCity(city) || !this.horseShop(city).includes(breed) || !this.pay({ gold: b.gold })) return;
+    const j = () => 0.92 + Math.random() * 0.16;
+    const it = makeHorse(s.nextId++, breed, { breed, gen: 1, sire: "", dam: "" }, { spd: b.spd * j(), carry: b.carry * j(), hp: b.hp * j() });
+    s.hero.bag.push(it);
+    audio.play("quest");
+    this.hud.toast(`${it.name} artık senin. Teçhizat sekmesinden bin.`, "good");
+  }
+
+  canStud(city: string): boolean {
+    return city === CAPITAL.id || !!this.s.serais[city];
+  }
+
+  studHorses(): Item[] {
+    const h = this.s.hero;
+    return [...(h.equip.at ? [h.equip.at] : []), ...h.bag.filter((it) => it.slot === "at")];
+  }
+
+  breedHorses(aId: number, bId: number, city: string): void {
+    const s = this.s;
+    const h = s.hero;
+    if (s.stud || aId === bId || !this.atCity(city) || !this.canStud(city)) return;
+    const all = this.studHorses();
+    const a = all.find((x) => x.id === aId);
+    const b = all.find((x) => x.id === bId);
+    if (!a || !b || !this.pay({ gold: BREED_GOLD })) return;
+    for (const x of [a, b]) {
+      if (h.equip.at?.id === x.id) delete h.equip.at;
+      else h.bag = h.bag.filter((y) => y.id !== x.id);
+    }
+    s.stud = { a, b, until: this.now + BREED_TIME, city };
+    this.hud.toast(`${a.name.split(" (")[0]} ile ${b.name.split(" (")[0]} ahıra alındı. Tay ${Math.round(BREED_TIME / 60000)} dakika sonra doğacak.`, "good");
+  }
+
+  private studTick(): void {
+    const s = this.s;
+    const st = s.stud;
+    if (!st || this.now < st.until || this.battleLock) return;
+    s.stud = null;
+    const ia = st.a.horse ?? { breed: "bozkir" as Breed, gen: 1, sire: "", dam: "" };
+    const ib = st.b.horse ?? { breed: "bozkir" as Breed, gen: 1, sire: "", dam: "" };
+    const gen = Math.max(ia.gen, ib.gen) + 1;
+    const mix = (x: number, y: number) => ((x + y) / 2) * (0.94 + Math.random() * 0.2) + (Math.random() < 0.5 ? Math.max(x, y) - (x + y) / 2 : 0) * 0.5;
+    let spd = mix(st.a.spd, st.b.spd);
+    let carry = mix(st.a.carry, st.b.carry);
+    let hp = mix(st.a.hp, st.b.hp);
+    const tul = Math.random() < tulparChance(gen, Math.max(st.a.spd, st.b.spd)) || ia.breed === "tulpar" && ib.breed === "tulpar";
+    let breed: Breed = ia.breed === ib.breed ? ia.breed : Math.random() < 0.5 ? ia.breed : ib.breed;
+    if (tul) {
+      breed = "tulpar";
+      const t = BREEDS.tulpar;
+      spd = Math.max(spd, t.spd);
+      carry = Math.max(carry, t.carry);
+      hp = Math.max(hp, t.hp);
+    }
+    const sire = st.a.name.split(" (")[0];
+    const dam = st.b.name.split(" (")[0];
+    const foal = makeHorse(s.nextId++, breed, { breed, gen, sire, dam }, { spd, carry, hp });
+    s.hero.bag.push(st.a, st.b, foal);
+    s.c.foals++;
+    audio.play("level");
+    if (tul) this.chron(`${CITY_NAME[st.city]} ahırında gök gürledi: ${sire} ile ${dam} bir Tulpar doğurdu. Ozanlar yüz yıldır böyle bir at görmemişti.`);
+    this.hud.story(
+      tul ? "Bir Tulpar doğdu!" : "Tay doğdu!",
+      "icons/foal",
+      `${tul ? "Ahırın çatısından mavi bir ışık süzüldü; tayın sırtında tüyden kanat izleri var. Seyisler diz çöktü." : `${CITY_NAME[st.city]} ahırında, saman kokusu arasında titrek bacaklarıyla ayağa kalktı.`}<br><br><b class="r${foal.rar}">${foal.name}</b><br>${itemStats(foal)}<br><br><i>${sire} × ${dam} · ${gen}. kuşak</i>${!tul && gen >= 2 ? `<br><small class="dim">Kuşaklar ilerledikçe ve hızlı atlar çiftleştikçe Tulpar doğma şansı artar (${Math.round(tulparChance(gen + 1, Math.max(foal.spd, st.a.spd)) * 100)}%).</small>` : ""}`,
+      "Adını yaz",
+    );
   }
 
   // ---------- falconry ----------
@@ -548,6 +632,7 @@ export class Game {
       this.wantedTick(dt);
       this.nemTick();
       this.birdTick(dt);
+      this.studTick();
       this.stormTick(dt);
       this.marches(dt, now);
     }
