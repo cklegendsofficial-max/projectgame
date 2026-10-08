@@ -7,6 +7,7 @@ export default defineConfig({
   },
   build: {
     outDir: "dist",
+    assetsDir: "",
     assetsInlineLimit: 0,
     target: "es2020",
   },
