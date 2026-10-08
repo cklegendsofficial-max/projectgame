@@ -3,7 +3,7 @@ import { CITIES, H, NH, NW, TW, W, type World } from "../world/gen";
 import type { Camera } from "./camera";
 import type { Game } from "../game/game";
 import { CITY_NAME, NODE_SPRITE, armySize } from "../game/data";
-import { CAPITAL } from "../game/state";
+import { CAPITAL, SLAVE_RADIUS } from "../game/state";
 
 const urls: Record<string, string> = {};
 for (const [p, u] of Object.entries(import.meta.glob<string>("../assets/**/*.webp", { eager: true, query: "?url", import: "default" }))) {
@@ -144,6 +144,8 @@ export class WorldView {
   private cityM: Marker[] = [];
   private hero!: Container;
   private heroCount!: Text;
+  private heroFlag!: Sprite;
+  private heroBars!: Graphics;
   private bandits = new Map<number, Container>();
   private marchesM = new Map<number, Container>();
   private mark: { x: number; y: number; t: number } | null = null;
@@ -258,6 +260,7 @@ export class WorldView {
     this.ruinM = s.ruins.map((r) => this.place("map/ruins", r.x, r.y, 72));
     for (const m of [...this.campM]) if (m.label) m.label.style.fill = "#ffb0a0";
     this.places.children.sort((a, b) => a.y - b.y);
+    this.heroPortrait(s.free ? "heroes/hero1" : "heroes/slave");
   }
 
   private ring(color: number, r: number): Graphics {
@@ -271,10 +274,19 @@ export class WorldView {
     s.anchor.set(0.5);
     const sc = (r * 2.1) / Math.max(s.texture.width, s.texture.height);
     s.scale.set(sc);
+    s.label = "face";
     const mask = new Graphics().circle(0, 0, r).fill(0xffffff);
     s.mask = mask;
     c.addChild(mask, s);
     return c;
+  }
+
+  heroPortrait(key: string): void {
+    const s = this.hero.getChildByLabel("face", true) as Sprite | null;
+    if (!s) return;
+    s.texture = this.t(key);
+    s.scale.set(44 / Math.max(s.texture.width, s.texture.height));
+    this.heroFlag.visible = key !== "heroes/slave";
   }
 
   private buildHero(): void {
@@ -289,7 +301,9 @@ export class WorldView {
     this.heroCount.anchor.set(0.5, 0);
     this.heroCount.position.set(0, 26);
     this.heroCount.resolution = 2;
-    c.addChild(sh, flag, p, this.heroCount);
+    this.heroBars = new Graphics();
+    c.addChild(sh, flag, p, this.heroCount, this.heroBars);
+    this.heroFlag = flag;
     this.hero = c;
     this.units.addChild(c);
   }
@@ -341,9 +355,21 @@ export class WorldView {
     const h = s.hero;
     const moving = !!h.path;
     this.hero.position.set(h.x, h.y - (moving ? Math.abs(Math.sin(this.time * 9)) * 3 : 0));
-    this.heroCount.text = String(armySize(h.army));
+    const n = armySize(h.army);
+    this.heroCount.text = n > 0 ? String(n) : "";
     const inv = Math.min(2.2, Math.max(0.7, 0.75 / cam.zoom));
     this.hero.scale.set(inv);
+    const hb = this.heroBars;
+    hb.clear();
+    const hpK = Math.max(0, Math.min(1, h.hp / game.maxHp()));
+    if (hpK < 0.999) {
+      hb.rect(-22, -34, 44, 5).fill({ color: 0x000000, alpha: 0.6 });
+      hb.rect(-22, -34, 44 * hpK, 5).fill(hpK > 0.5 ? 0x7fd36a : hpK > 0.25 ? 0xffd56a : 0xff5a3c);
+    }
+    if (game.act) {
+      const k = game.act.t / game.act.dur;
+      hb.arc(0, 0, 31, -Math.PI / 2, -Math.PI / 2 + k * Math.PI * 2).stroke({ color: 0xffe08a, width: 5 });
+    }
 
     this.pathG.clear();
     if (h.path) {
@@ -419,6 +445,12 @@ export class WorldView {
     }
 
     this.fxG.clear();
+    if (!s.free) this.fxG.circle(CAPITAL.x, CAPITAL.y, SLAVE_RADIUS).stroke({ color: 0xff6a4a, width: 4, alpha: 0.35 + Math.sin(this.time * 2) * 0.1 });
+    for (const b of s.bounties) {
+      if (!b.taken) continue;
+      const c = s.camps[b.camp];
+      if (c.alive) this.fxG.circle(c.x, c.y, 52 + Math.sin(this.time * 4) * 4).stroke({ color: 0xffd56a, width: 4, alpha: 0.8 });
+    }
     if (this.mark) {
       this.mark.t += dt;
       const k = this.mark.t / 0.8;

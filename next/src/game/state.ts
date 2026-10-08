@@ -1,6 +1,7 @@
-import { CITIES, H, NAV, NH, NW, W, type World } from "../world/gen";
+import { CITIES, H, NAV, NW, NH, W, type World } from "../world/gen";
 import { rng } from "../world/noise";
 import { BANDIT_NAMES, BUILDINGS, VILLAGE_NAMES, army, type Army, type BuildingId, type NodeKind, type Res, type Unit } from "./data";
+import type { Good, Item, Skill, Slot, Stat } from "./rpg";
 
 export interface Village {
   name: string;
@@ -40,7 +41,6 @@ export interface Ruin {
 
 export interface Hero {
   name: string;
-  portrait: number;
   lv: number;
   xp: number;
   x: number;
@@ -48,7 +48,15 @@ export interface Hero {
   army: Army;
   path: number[] | null;
   pathI: number;
-  trophies: number;
+  stats: Record<Stat, number>;
+  points: number;
+  skills: Record<Skill, number>;
+  hp: number;
+  energy: number;
+  equip: Partial<Record<Slot, Item>>;
+  bag: Item[];
+  cargo: Partial<Record<Good, number>>;
+  paid: Partial<Record<Good, number>>;
 }
 
 export interface Bandit {
@@ -61,6 +69,7 @@ export interface Bandit {
   ty: number;
   wait: number;
   chase: boolean;
+  tier: number;
 }
 
 export interface March {
@@ -83,6 +92,29 @@ export interface TrainOrder {
   each: number;
 }
 
+export interface Bounty {
+  city: string;
+  camp: number;
+  gold: number;
+  renown: number;
+  taken: boolean;
+}
+
+export interface Counters {
+  shifts: number;
+  trains: number;
+  profit: number;
+  wins: number;
+  recruits: number;
+  bought: number;
+  moved: number;
+  camps: number;
+  built: number;
+  trained: number;
+  marched: number;
+  spent: number;
+}
+
 export interface GameState {
   v: number;
   res: Res;
@@ -102,9 +134,19 @@ export interface GameState {
   time: number;
   kills: number;
   nextId: number;
+  free: boolean;
+  beylik: boolean;
+  renown: number;
+  c: Counters;
+  markets: Record<string, Partial<Record<Good, number>>>;
+  smith: Record<string, { items: Item[]; day: number }>;
+  bounties: Bounty[];
+  bountyDay: number;
+  wageDebt: number;
 }
 
 export const CAPITAL = CITIES.find((c) => c.id === "samarkand")!;
+export const SLAVE_RADIUS = 300;
 
 function navOk(w: World, x: number, y: number): boolean {
   const nx = Math.floor(x / NAV);
@@ -136,16 +178,28 @@ export function placeWorld(w: World): Pick<GameState, "villages" | "camps" | "no
     }
     return out;
   };
+  const nodes: ResNode[] = [];
+  for (const [kind, ang] of [["wood", 0.6], ["stone", 2.4], ["food", 4.2]] as const) {
+    for (let k = 0; k < 200; k++) {
+      const a = ang + (R() - 0.5) * 1.6;
+      const d = 170 + R() * 100;
+      const x = CAPITAL.x + Math.cos(a) * d;
+      const y = CAPITAL.y + Math.sin(a) * d;
+      if (!navOk(w, x, y) || !free(x, y, 50)) continue;
+      taken.push({ x, y, r: 50 });
+      nodes.push({ kind, x, y, lv: 1, left: 1500, max: 1500, regenAt: 0 });
+      break;
+    }
+  }
   const villages: Village[] = pick(46, 70, (x, y) => terrainAt(w, x, y).h < 0.34).map((p, i) => {
     const t = terrainAt(w, p.x, p.y);
-    return { name: VILLAGE_NAMES[i % VILLAGE_NAMES.length], x: p.x, y: p.y, yurt: t.m < 0.42, rec: 8, recAt: 0, rep: 0 };
+    return { name: VILLAGE_NAMES[i % VILLAGE_NAMES.length], x: p.x, y: p.y, yurt: t.m < 0.42, rec: 4, recAt: 0, rep: 0 };
   });
-  const camps: Camp[] = pick(22, 90, (x, y) => Math.hypot(x - CAPITAL.x, y - CAPITAL.y) > 380 && CITIES.every((c) => Math.hypot(c.x - x, c.y - y) > 300)).map((p, i) => {
+  const camps: Camp[] = pick(24, 90, (x, y) => Math.hypot(x - CAPITAL.x, y - CAPITAL.y) > 650 && CITIES.every((c) => Math.hypot(c.x - x, c.y - y) > 280)).map((p, i) => {
     const d = Math.hypot(p.x - CAPITAL.x, p.y - CAPITAL.y);
-    const tier = Math.min(5, 1 + Math.floor(d / 700));
+    const tier = Math.min(5, 1 + Math.floor(d / 650));
     return { name: BANDIT_NAMES[i % BANDIT_NAMES.length], x: p.x, y: p.y, tier, alive: true, respawnAt: 0, garrison: campGarrison(tier, R) };
   });
-  const nodes: ResNode[] = [];
   const addNodes = (kind: NodeKind, n: number, test: (h: number, m: number) => boolean) => {
     for (const p of pick(n, 55, (x, y) => {
       const t = terrainAt(w, x, y);
@@ -166,32 +220,54 @@ export function placeWorld(w: World): Pick<GameState, "villages" | "camps" | "no
 }
 
 export function campGarrison(tier: number, R: () => number = Math.random): Army {
-  const n = Math.round(14 * Math.pow(1.7, tier - 1) * (0.85 + R() * 0.3));
+  const n = Math.round(10 * Math.pow(1.75, tier - 1) * (0.85 + R() * 0.3));
   const a = 0.25 + R() * 0.25;
   const h = tier >= 2 ? 0.1 + R() * 0.2 : 0;
   return army(Math.round(n * (1 - a - h)), Math.round(n * a), Math.round(n * h));
 }
 
 export function banditArmy(tier: number): Army {
-  const n = Math.round(6 * Math.pow(1.65, tier - 1) * (0.7 + Math.random() * 0.6));
+  const n = Math.max(2, Math.round(2.5 * Math.pow(1.8, tier - 1) * (0.7 + Math.random() * 0.6)));
   const r = Math.random();
-  if (r < 0.4) return army(Math.round(n * 0.7), Math.round(n * 0.3), 0);
+  if (tier <= 1 || r < 0.4) return army(Math.round(n * 0.75), Math.round(n * 0.25), 0);
   if (r < 0.75) return army(Math.round(n * 0.3), Math.round(n * 0.6), Math.round(n * 0.1));
   return army(Math.round(n * 0.3), Math.round(n * 0.2), Math.round(n * 0.5));
+}
+
+export function newCounters(): Counters {
+  return { shifts: 0, trains: 0, profit: 0, wins: 0, recruits: 0, bought: 0, moved: 0, camps: 0, built: 0, trained: 0, marched: 0, spent: 0 };
 }
 
 export function newGame(w: World): GameState {
   const now = Date.now();
   const places = placeWorld(w);
-  const buildings = Object.fromEntries(BUILDINGS.map((b) => [b.id, { lv: b.id === "sur" ? 0 : 1, until: 0 }])) as GameState["buildings"];
+  const buildings = Object.fromEntries(BUILDINGS.map((b) => [b.id, { lv: 0, until: 0 }])) as GameState["buildings"];
   return {
-    v: 1,
-    res: { gold: 300, food: 600, wood: 500, stone: 300 },
+    v: 2,
+    res: { gold: 0, food: 0, wood: 0, stone: 0 },
     resAt: now,
     buildings,
     queue: [],
-    garrison: army(10, 0, 0),
-    hero: { name: "Alp Er Tunga", portrait: 1, lv: 1, xp: 0, x: CAPITAL.x + 10, y: CAPITAL.y + 115, army: army(12, 4, 0), path: null, pathI: 0, trophies: 0 },
+    garrison: army(),
+    hero: {
+      name: "Toygar",
+      lv: 1,
+      xp: 0,
+      x: CAPITAL.x + 10,
+      y: CAPITAL.y + 115,
+      army: army(),
+      path: null,
+      pathI: 0,
+      stats: { guc: 2, cev: 2, day: 2, lid: 1, kar: 1 },
+      points: 0,
+      skills: { kilic: 0, ok: 0, ticaret: 0, emek: 0 },
+      hp: 999,
+      energy: 999,
+      equip: {},
+      bag: [],
+      cargo: {},
+      paid: {},
+    },
     marches: [],
     explored: new Uint8Array(NW * NH),
     ...places,
@@ -200,10 +276,19 @@ export function newGame(w: World): GameState {
     time: 0,
     kills: 0,
     nextId: 1,
+    free: false,
+    beylik: false,
+    renown: 0,
+    c: newCounters(),
+    markets: {},
+    smith: {},
+    bounties: [],
+    bountyDay: 0,
+    wageDebt: 0,
   };
 }
 
-const KEY = "kervan_krallik_v1";
+const KEY = "kervan_krallik_v2";
 
 function encodeBits(a: Uint8Array): string {
   let s = "";
@@ -243,12 +328,13 @@ export function loadGame(w: World): GameState {
     const raw = localStorage.getItem(KEY);
     if (!raw) return fresh;
     const r = JSON.parse(raw) as Partial<GameState> & { explored?: string };
-    if (r.v !== 1) return fresh;
+    if (r.v !== 2) return fresh;
     return {
       ...fresh,
       ...r,
       buildings: { ...fresh.buildings, ...(r.buildings ?? {}) },
       hero: { ...fresh.hero, ...(r.hero ?? {}), path: null, pathI: 0 },
+      c: { ...fresh.c, ...(r.c ?? {}) },
       explored: typeof r.explored === "string" ? decodeBits(r.explored, NW * NH) : fresh.explored,
       bandits: [],
       marches: Array.isArray(r.marches) ? r.marches : [],
