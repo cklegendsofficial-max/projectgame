@@ -126,7 +126,7 @@ const en = {
 export type StrKey = keyof typeof en;
 
 const tr: Record<StrKey, string> = {
-  title: "Kervan Tycoon",
+  title: "Caravan Tycoon",
   subtitle: "İpek Yolu Idle",
   perSec: "/sn",
   tabRoutes: "Rotalar",
