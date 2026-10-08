@@ -7,7 +7,7 @@ import { BUILDINGS, BUILDING_BY_ID, CITY_NAME, DAY_SEC, RES_KEYS, UNITS, UNIT_KE
 import { CITY_TRADE, GOODS, GOOD_KEYS, PLUS_CHANCE, STAT_INFO, canPlus, classItem, goodMult, itemPrice, makeItem, plusCost, rollItem, setPlus, skillLv, type Good, type Item, type Skill, type Slot, type Stat } from "./rpg";
 import { CLASS_BY_ID, CLASS_SKILLS, SKILL_MAX, WEAPON_NAME, WEAPON_STAT, skillPow, skillRank, type ClassDef, type ClassId, type ClassSkill, type WeaponKind } from "./classes";
 import { CHAPTERS, COMP_BY_ID, COMP_MAX, FORT_GUARD, KARA_HAN, KASIM, type Chapter, type CompId, type CompMods, type Companion } from "./story";
-import { CAPITAL, SLAVE_RADIUS, banditArmy, campGarrison, kurganBoss, kurganGuard, loadGame, saveGame, type Bandit, type Bounty, type Contract, type GameState } from "./state";
+import { CAPITAL, SLAVE_RADIUS, banditArmy, campGarrison, kurganBoss, kurganGuard, loadGame, saveGame as rawSave, wipeGame, type Bandit, type Bounty, type Contract, type GameState } from "./state";
 
 export type Target =
   | { kind: "village" | "camp" | "node" | "ruin" | "city" | "bandit" | "kurgan"; i: number }
@@ -36,6 +36,8 @@ const MARCH_SPEED = 26;
 const CAP_I = CITIES.findIndex((c) => c.id === "samarkand");
 const RES_SELL: Record<keyof Res, number> = { gold: 1, wood: 3, stone: 4, food: 2 };
 const WAGE: Record<Unit, number> = { spear: 0.5, archer: 0.8, horse: 1.4 };
+let wiped = false;
+const saveGame = (s: GameState) => wiped || rawSave(s);
 
 export class Game {
   s: GameState;
@@ -61,6 +63,12 @@ export class Game {
     cam.y = this.s.hero.y;
     window.addEventListener("beforeunload", () => saveGame(this.s));
     document.addEventListener("visibilitychange", () => document.hidden && saveGame(this.s));
+  }
+
+  resetGame(): void {
+    wiped = true;
+    wipeGame();
+    location.reload();
   }
 
   get now(): number {

@@ -672,7 +672,14 @@ export class Hud {
           const xp = h.skills[k];
           const lv = skillLv(xp);
           return `<div class="srow">${ic(SKILL_INFO[k].icon, "gimg")}<div class="bi2"><b>${SKILL_INFO[k].name} <em>Sv ${lv}</em></b>${bar(xp - 20 * lv * lv, skillNext(lv) - 20 * lv * lv, "", `${xp}/${skillNext(lv)}`)}<small>${SKILL_INFO[k].desc}</small></div></div>`;
-        }).join("");
+        }).join("") +
+        (g.seraiCount()
+          ? `<h3>${ic("map/serai")} Kervansarayların · dakikada ${g.seraiIncome().toFixed(1)} altın</h3>` +
+            Object.entries(s.serais)
+              .map(([id, sr]) => `<div class="qrow">${CITY_NAME[id]} <em>Sv ${sr.lv}</em><span class="cheap">kasa ${Math.floor(sr.coffer)}/${Math.round(g.seraiCap(id))}</span></div>`)
+              .join("")
+          : "") +
+        `<button class="btn sm red reset" data-a="${this.act(() => confirm("Tüm ilerlemen silinip yeni bir oyun başlayacak. Emin misin?") && g.resetGame())}">Yeni oyun başlat</button>`;
     } else if (this.tab === "beceri") {
       const cl = g.cls();
       body = `<p class="dim">${cl.name} becerileri savaşta kendiliğinden devreye girer. 3. seviyeden itibaren her seviyede 1 beceri puanı kazanırsın. Bir beceri en fazla ${SKILL_MAX}. seviyeye (Usta) çıkar.</p>
