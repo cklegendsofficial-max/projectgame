@@ -34,8 +34,9 @@ await ev(`g.s.res.gold = 300; const c = g.targetPos({kind:"capital"}); g.s.hero.
 await dismiss();
 await ev(`for (let i = 0; i < 10; i++) { g.s.hero.xp += 999999; g.addXp(0); } const st = g.s.hero.stats; for (const k of Object.keys(st)) st[k] += 20;`);
 
-await ev(`g.s.res.gold = 20000; const p = g.targetPos({ kind: "city", i: 1 }); g.s.hero.x = p.x + 10; g.s.hero.y = p.y + 60;`);
-console.log("near", await ev(`return g.nearCity();`));
+console.log("pos", JSON.stringify(await ev(`g.s.res.gold = 20000; const p = g.targetPos({ kind: "city", i: 1 }); g.s.hero.path = null; g.target = null; g.s.hero.x = p.x; g.s.hero.y = p.y - 40; return { p, near: g.nearCity() };`)));
+await page.waitForTimeout(300);
+console.log("near", await ev(`return [g.nearCity(), g.s.hero.x, g.s.hero.y];`));
 await ev(`g.hud.openPlace({ kind: "city", i: 1 }); g.hud.tab = "han"; g.hud.render();`);
 await page.waitForTimeout(300);
 await page.evaluate(() => [...document.querySelectorAll(".panel h3")].find((h) => h.textContent?.includes("Kuşçu"))?.scrollIntoView());
@@ -63,6 +64,7 @@ await page.waitForTimeout(800);
 await ev(`g.s.bird.xp = 9999; g["birdXp"](1);`);
 console.log("lv", JSON.stringify(await ev(`return { bird: g.s.bird, scouts: g.scouts(), mods: g.gearMods() };`)));
 await ev(`g.hud["openHero"](); g.hud.tab = "ordu"; g.hud.render();`);
+await page.evaluate(() => [...document.querySelectorAll(".panel h3")].find((h) => h.textContent?.includes("Av kuşu"))?.scrollIntoView());
 await shot("04-tab");
 console.log("errors:", errs);
 await browser.close();

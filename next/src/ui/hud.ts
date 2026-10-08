@@ -937,7 +937,7 @@ export class Hud {
     if (this.tab === "ordu") {
       const at = g.atCapital();
       const room = g.heroCap() - armySize(s.hero.army);
-      return this.birdHtml() + `<h3>${ic("tug")} Askerler</h3><p class="dim">${at ? "Askerleri garnizon ile birliğin arasında aktar." : "Asker aktarmak için başkentte olmalısın."}</p>
+      return `<p class="dim">${at ? "Askerleri garnizon ile birliğin arasında aktar." : "Asker aktarmak için başkentte olmalısın."}</p>
         <div class="stats"><div>${ic("tug")}Birlik: <b>${armySize(s.hero.army)}/${g.heroCap()}</b></div><div>${ic("food")}Garnizon gideri: <b>${g.upkeepPerMin().toFixed(0)}/dk</b></div></div>` + UNIT_KEYS.map((u) => `
         <div class="brow">${ic(UNITS[u].icon, "bimg")}<div class="bi2"><b>${UNITS[u].name}</b><small>Garnizon ${s.garrison[u]} · Birlik ${s.hero.army[u]}</small></div>
         <div class="col2"><button class="btn ${!at || s.hero.army[u] <= 0 ? "off" : ""}" data-a="${this.act(() => g.transfer(u, -10))}">◀ 10</button><button class="btn ${!at || s.garrison[u] <= 0 || room <= 0 ? "off" : ""}" data-a="${this.act(() => g.transfer(u, 10))}">10 ▶</button></div></div>`).join("");
@@ -1044,6 +1044,7 @@ export class Hud {
     } else {
       body = `<div class="stats"><div>${ic("tug")}Birlik: <b>${armySize(h.army)}/${g.heroCap()}</b></div><div>${ic("coins")}Ücret: <b>${g.wagePerMin().toFixed(1)}/dk</b></div><div>${ic("shield")}Toplam güç: <b>${Math.round(g.heroPower())}</b></div></div>
         ${armyHtml(h.army)}
+        ${s.free ? this.birdHtml() : ""}
         <h3>${ic("tug")} Yoldaşlar (${s.comps.length})</h3>${s.comps.map((id) => {
           const cp = COMP_BY_ID[id as CompId];
           return cp ? `<div class="comp on"><img src="${assetUrl(cp.icon)}" alt=""><div class="bi2"><b>${cp.name} <em>${cp.role}</em></b><small class="cheap">${cp.perk}</small></div></div>` : "";

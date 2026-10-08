@@ -443,11 +443,11 @@ export class WorldView {
     if (!this.birdC || this.birdKind !== b.kind) {
       this.birdC?.destroy({ children: true });
       const c = new Container();
-      const sh = new Graphics().ellipse(0, 0, 10, 3.5).fill({ color: 0x000000, alpha: 0.3 });
+      const sh = new Graphics().ellipse(0, 0, 14, 5).fill({ color: 0x000000, alpha: 0.32 });
       sh.label = "sh";
       const sp = new Sprite(this.t("bird_" + b.kind));
       sp.anchor.set(0.5);
-      sp.scale.set(30 / Math.max(sp.texture.width, sp.texture.height));
+      sp.scale.set(48 / Math.max(sp.texture.width, sp.texture.height));
       sp.label = "sp";
       c.addChild(sh, sp);
       this.units.addChild(c);
