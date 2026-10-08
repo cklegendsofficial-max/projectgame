@@ -170,6 +170,7 @@ export interface GameState {
   offers: Record<string, Contract & { day: number }>;
   raid: { v: number; army: Army; until: number } | null;
   raidAt: number;
+  serais: Record<string, { lv: number; coffer: number }>;
 }
 
 export interface MarketEvent {
@@ -359,6 +360,7 @@ export function newGame(w: World): GameState {
     offers: {},
     raid: null,
     raidAt: 0,
+    serais: {},
   };
 }
 

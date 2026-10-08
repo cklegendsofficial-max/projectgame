@@ -63,6 +63,7 @@ export class Hud {
   private sel: Army = { spear: 0, archer: 0, horse: 0 };
   private battleOpen = false;
   private storyOpen = false;
+  private sagaOpen = false;
 
   constructor(private g: Game) {
     this.root.innerHTML = `
@@ -513,8 +514,17 @@ export class Hud {
           : off2
             ? `<div class="grow">${ic("j_caravan", "gimg")}<div class="bi2"><b>${off2.cargo} → ${CITY_NAME[off2.to]}</b><small>Ödül ${off2.gold} altın · Süre ${dur(off2.until * 1000)} · Yolda yağmacılar saldırabilir</small></div><button class="btn sm ${!near || !s.free ? "off" : ""}" data-a="${this.act(() => g.takeContract(c.id))}">Kabul et</button></div>`
             : `<p class="dim">Bugünlük kervan işi kalmadı.</p>`);
-      body = `${nearNote}<div class="brow">${ic("han", "bimg")}<div class="bi2"><b>Kervansaray odası</b><small>Canını ve enerjini tamamen doldurur.</small></div><button class="btn ${!near || g.act ? "off" : ""}" data-a="${this.act(() => g.rest())}">Uyu ${ic("coins")}${g.restCost()}</button></div>
-        ${rumor}
+      const sr = s.serais[c.id];
+      const swhy = g.seraiReason(c.id);
+      const serai =
+        c.id === CAPITAL.id
+          ? ""
+          : `<h3>${ic("tug")} ${sr ? `Senin kervansarayın <em>Sv ${sr.lv}</em>` : "Kervansaray kur"}</h3>` +
+            (sr
+              ? `<div class="brow">${ic("map/serai", "bimg")}<div class="bi2">${bar(sr.coffer, g.seraiCap(c.id), "", `Kasa ${Math.floor(sr.coffer)}/${Math.round(g.seraiCap(c.id))}`)}<small>Dakikada ${g.seraiRate(c.id).toFixed(1)} altın · Ağında ${g.seraiCount()} kervansaray · Bedava konaklama, ticarette %${2 * sr.lv} avantaj</small>${swhy && sr.lv < 3 ? `<small class="why">${swhy}</small>` : ""}</div>${sr.lv < 3 ? `<button class="btn sm ${swhy ? "off" : ""}" data-a="${this.act(() => g.buildSerai(c.id))}">Geliştir<br>${ic("coins")}${g.seraiCost(c.id)}</button>` : ""}</div>`
+              : `<div class="brow">${ic("map/serai", "bimg")}<div class="bi2"><b>${CITY_NAME[c.id]} yolunda kendi hanın</b><small>Kasası her dakika altın biriktirir, uğradığında toplarsın. Burada konaklama bedava, emanet teslimine %25 prim. Her yeni kervansaray tüm ağın gelirini %15 artırır.</small>${swhy ? `<small class="why">${swhy}</small>` : ""}</div><button class="btn sm ${swhy || !near ? "off" : ""}" data-a="${this.act(() => g.buildSerai(c.id))}">Kur<br>${ic("coins")}${g.seraiCost(c.id)}</button></div>`);
+      body = `${nearNote}<div class="brow">${ic("han", "bimg")}<div class="bi2"><b>Kervansaray odası</b><small>Canını ve enerjini tamamen doldurur.</small></div><button class="btn ${!near || g.act ? "off" : ""}" data-a="${this.act(() => g.rest())}">Uyu ${g.restCost() ? `${ic("coins")}${g.restCost()}` : "· bedava"}</button></div>
+        ${serai}${rumor}
         <h3>${ic("wanted")} Ödül ilanları</h3>` +
         (bl.map(({ b, i }) => {
           const cp = s.camps[b.camp];
@@ -550,7 +560,8 @@ export class Hud {
             const w = c.why?.(g);
             return `<button class="btn ${w ? "off" : "go"}" title="${w ?? ""}" data-a="${this.act(() => c.run(g))}">${c.label}</button>`;
           }).join("")}</div>`;
-    return `<div class="saga-box"><img src="${assetUrl(ch.scene.img)}" alt=""><div><h3>Destan · ${ch.title}</h3><p>${why ? ch.goal : ch.scene.text(g)}</p>${btns}</div></div>`;
+    const more = why ? "" : `<button class="more" data-a="${this.act(() => (this.sagaOpen = !this.sagaOpen))}">${this.sagaOpen ? "Kısalt" : "Hikâyenin devamı…"}</button>`;
+    return `<div class="saga-box ${this.sagaOpen ? "open" : ""}"><img src="${assetUrl(ch.scene.img)}" alt=""><div><h3>Destan · ${ch.title}</h3><p class="st">${why ? ch.goal : ch.scene.text(g)}</p>${more}${btns}</div></div>`;
   }
 
   private beylikTabs(): string {

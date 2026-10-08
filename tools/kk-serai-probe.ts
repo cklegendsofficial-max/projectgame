@@ -1,0 +1,53 @@
+import { chromium } from "playwright-core";
+
+const mode = process.argv[2] ?? "desk";
+const out = `playtest/serai-${mode}`;
+const browser = await chromium.launch({ channel: "msedge", headless: true, args: ["--enable-gpu", "--ignore-gpu-blocklist", "--use-angle=d3d11"] });
+const vp = mode === "mob" ? { width: 390, height: 844 } : { width: 1280, height: 720 };
+const page = await browser.newPage({ viewport: vp, deviceScaleFactor: mode === "mob" ? 2 : 1 });
+const errs: string[] = [];
+page.on("pageerror", (e) => errs.push(e.message));
+page.on("console", (m) => m.type() === "error" && errs.push(m.text()));
+await page.goto("http://localhost:5174/");
+await page.evaluate(() => localStorage.clear());
+await page.reload();
+await page.waitForFunction(() => !document.getElementById("loading"), null, { timeout: 60000 });
+const ev = <T = unknown>(fn: string) => page.evaluate(`(() => { const g = window.game; ${fn} })()`) as Promise<T>;
+const dismiss = async () => {
+  for (let k = 0; k < 5 && (await page.locator(".battle .bbox.story .btn").count()); k++) {
+    await page.locator(".battle .bbox.story .btn").first().click();
+    await page.waitForTimeout(250);
+  }
+};
+await page.locator('.ccard[data-c="hirsiz"]').click();
+await page.locator(".cname .btn").click();
+await dismiss();
+await ev(`g.s.res.gold = 300; const c = g.targetPos({kind:"capital"}); g.s.hero.x = c.x; g.s.hero.y = c.y; g.buyFreedom();`);
+await dismiss();
+await ev(`g.s.res.gold = 2500; g.s.renown = 35; const c = g.targetPos({kind:"city", i: 6}); g.s.hero.x = c.x; g.s.hero.y = c.y; g.s.hero.path = null; g.cam.flyTo(c.x, c.y, 0.8); g.hud.openPlace({kind:"city", i: 6});`);
+await page.locator(".tab", { hasText: "Han" }).click();
+await page.waitForTimeout(400);
+await page.screenshot({ path: `${out}-01-han.png` });
+await page.locator(".panel .btn", { hasText: "Kur" }).click();
+await page.waitForTimeout(500);
+await page.screenshot({ path: `${out}-02-story.png` });
+await dismiss();
+console.log("after build", JSON.stringify(await ev(`return { serais: g.s.serais, gold: g.s.res.gold, rate: g.seraiRate("bukhara"), rest: g.restCost(), q: g.s.quest };`)));
+await ev(`g.buildSerai("bukhara");`);
+await ev(`g.s.res.gold += 1500; const c = g.targetPos({kind:"city", i: 5}); g.s.hero.x = c.x; g.s.hero.y = c.y; g.buildSerai("merv");`);
+await dismiss();
+await ev(`g.hud.close(); const c = g.targetPos({kind:"city", i: 6}); g.s.hero.x = c.x + 600; g.s.hero.y = c.y; g.s.resAt -= 10 * 60000;`);
+await page.waitForTimeout(1500);
+console.log("coffers", JSON.stringify(await ev(`return g.s.serais;`)));
+const g0 = await ev<number>(`return g.s.res.gold;`);
+await ev(`const c = g.targetPos({kind:"city", i: 6}); g.s.hero.x = c.x; g.s.hero.y = c.y; g.cam.flyTo(c.x, c.y, 0.8);`);
+await page.waitForTimeout(800);
+await page.screenshot({ path: `${out}-03-collect.png` });
+const g1 = await ev<number>(`return g.s.res.gold;`);
+console.log("collected", Math.round(g1 - g0), JSON.stringify(await ev(`return { serais: g.s.serais, buy: g.buyPrice("bukhara", "ipek"), income: g.seraiIncome() };`)));
+await ev(`g.hud.openPlace({kind:"city", i: 6});`);
+await page.locator(".tab", { hasText: "Han" }).click();
+await page.waitForTimeout(400);
+await page.screenshot({ path: `${out}-04-owned.png` });
+console.log("errors:", errs);
+await browser.close();

@@ -47,6 +47,7 @@ export class Game {
   private saveT = 0;
   private desertT = 0;
   private ambushT = 30;
+  private lastCity = -2;
   private spawnAt = new Map<number, number>();
   battleLock = false;
 
@@ -269,6 +270,7 @@ export class Game {
     this.storyTick();
     this.worldEvents(dt, now);
     this.checkContract();
+    this.seraiVisit();
     this.saveT += dt;
     if (this.saveT > 8) {
       this.saveT = 0;
@@ -322,6 +324,7 @@ export class Game {
       }
     }
     for (const n of s.nodes) if (n.left < n.max && now >= n.regenAt) n.left = n.max;
+    for (const [id, sr] of Object.entries(s.serais)) sr.coffer = Math.min(this.seraiCap(id), sr.coffer + this.seraiRate(id) * el);
     for (const k of s.kurgans)
       if (!k.alive && now >= k.respawnAt) {
         k.alive = true;
@@ -486,6 +489,8 @@ export class Game {
   }
 
   restCost(): number {
+    const ci = this.nearCity();
+    if (ci >= 0 && this.s.serais[CITIES[ci].id]) return 0;
     return 2 + this.s.hero.lv * 2;
   }
 
@@ -493,7 +498,7 @@ export class Game {
     const h = this.s.hero;
     if (this.busy()) return;
     if (this.nearCity() < 0) return;
-    if (!this.pay({ gold: this.restCost() })) return this.hud.toast("Han parası yok", "bad");
+    if (this.restCost() > 0 && !this.pay({ gold: this.restCost() })) return this.hud.toast("Han parası yok", "bad");
     this.start("Handa dinleniyorsun", 3, () => {
       h.energy = this.maxEnergy();
       h.hp = this.maxHp();
@@ -570,11 +575,11 @@ export class Game {
   }
 
   buyPrice(city: string, g: Good): number {
-    return Math.max(1, Math.round(this.price(city, g) * this.buyFactor()));
+    return Math.max(1, Math.round(this.price(city, g) * this.buyFactor() * (1 - 0.02 * (this.s.serais[city]?.lv ?? 0))));
   }
 
   sellPrice(city: string, g: Good): number {
-    return Math.max(1, Math.round(this.price(city, g) * this.sellFactor()));
+    return Math.max(1, Math.round(this.price(city, g) * this.sellFactor() * (1 + 0.02 * (this.s.serais[city]?.lv ?? 0))));
   }
 
   buyGood(city: string, g: Good, n: number): void {
@@ -1268,6 +1273,11 @@ export class Game {
         v.rep = Math.max(0, v.rep - 15);
         v.rec = 0;
         this.hud.toast(`${v.name} yağmalandı! Köylüler sana küstü.`, "bad");
+        const sc = CITIES.find((c) => s.serais[c.id] && Math.hypot(c.x - v.x, c.y - v.y) < 700);
+        if (sc && s.serais[sc.id].coffer > 0) {
+          s.serais[sc.id].coffer = 0;
+          this.hud.toast(`Haramiler ${CITY_NAME[sc.id]} kervansarayının kasasını da boşalttı!`, "bad");
+        }
         s.raid = null;
         s.raidAt = now + 180000;
       }
@@ -1329,12 +1339,82 @@ export class Game {
     if (!c) return;
     const ci = CITIES.findIndex((x) => x.id === c.to);
     if (this.nearCity() !== ci) return;
-    this.s.res.gold += c.gold;
+    const gold = Math.round(c.gold * (this.s.serais[c.to] ? 1.25 : 1));
+    this.s.res.gold += gold;
     this.s.renown += 4;
     this.s.c.contracts++;
     const up = this.addXp(Math.round(c.gold / 3));
-    this.hud.toast(`Emanet teslim edildi: +${c.gold} altın, +4 şöhret${up ? " · Seviye atladın!" : ""}`, "good");
+    this.hud.toast(`Emanet teslim edildi: +${gold} altın, +4 şöhret${this.s.serais[c.to] ? " (kervansaray primi)" : ""}${up ? " · Seviye atladın!" : ""}`, "good");
     this.s.contract = null;
+  }
+
+  // ---------- caravanserai network ----------
+
+  seraiCount(): number {
+    return Object.keys(this.s.serais).length;
+  }
+
+  seraiCost(city: string): number {
+    const sr = this.s.serais[city];
+    return sr ? 450 + sr.lv * 550 : 500 + 350 * this.seraiCount();
+  }
+
+  seraiReason(city: string): string | null {
+    const s = this.s;
+    const sr = s.serais[city];
+    if (!s.free) return "Önce hürriyetini kazan";
+    if (city === CAPITAL.id) return "Semerkant hanları efendinin elinde";
+    if (sr && sr.lv >= 3) return "En yüksek seviye";
+    const need = sr ? 30 * sr.lv : 15;
+    if (s.renown < need) return `${need} şöhret gerekli`;
+    if (s.res.gold < this.seraiCost(city)) return "Altın yetersiz";
+    return null;
+  }
+
+  buildSerai(city: string): void {
+    if (this.seraiReason(city)) return;
+    const s = this.s;
+    s.res.gold -= this.seraiCost(city);
+    const sr = (s.serais[city] ??= { lv: 0, coffer: 0 });
+    sr.lv++;
+    const c = CITIES.find((x) => x.id === city)!;
+    this.reveal(c.x, c.y, 16);
+    if (sr.lv === 1) {
+      s.renown += 5;
+      const n = this.seraiCount();
+      this.hud.story(
+        `${CITY_NAME[city]} Kervansarayı`,
+        "map/serai",
+        `Ustalar avluyu taşla döşedi, kapının üstüne senin tamganı kazıdılar. Artık ${CITY_NAME[city]} yolundaki kervanlar senin çatının altında konaklıyor.<br><br>• Kasa her dakika gelir biriktirir; şehre uğradığında toplanır.<br>• Burada konaklamak bedava, ticarette %2 avantaj.<br>• Buraya teslim edilen emanetlere %25 prim.<br>• Ağındaki her yeni kervansaray, tümünün gelirini artırır (şu an <b>${n}</b>).<br><br>Dikkat: yakındaki köyler yağmalanırsa haramiler kasayı da boşaltır.`,
+      );
+    } else this.hud.toast(`${CITY_NAME[city]} kervansarayı ${sr.lv}. seviyeye çıktı`, "good");
+  }
+
+  seraiRate(city: string): number {
+    const sr = this.s.serais[city];
+    if (!sr) return 0;
+    return sr.lv * 5 * (1 + 0.15 * (this.seraiCount() - 1));
+  }
+
+  seraiCap(city: string): number {
+    return this.seraiRate(city) * 12;
+  }
+
+  seraiIncome(): number {
+    return Object.keys(this.s.serais).reduce((a, id) => a + this.seraiRate(id), 0);
+  }
+
+  private seraiVisit(): void {
+    const ci = this.nearCity();
+    if (ci === this.lastCity) return;
+    this.lastCity = ci;
+    if (ci < 0) return;
+    const sr = this.s.serais[CITIES[ci].id];
+    if (!sr || sr.coffer < 1) return;
+    const g = Math.floor(sr.coffer);
+    sr.coffer -= g;
+    this.s.res.gold += g;
+    this.hud.toast(`Kervansaray kasası: +${g} altın`, "good");
   }
 
   defendRaid(): void {
@@ -1610,6 +1690,7 @@ export class Game {
     { title: "Güçlen", text: "3. seviyeye ulaş ve stat puanlarını Kahraman ekranından dağıt.", done: (g) => g.s.hero.lv >= 3 && g.s.hero.points === 0, reward: { gold: 40 } },
     { title: "İpek Yolu tüccarı", text: "Bir şehirde ucuz mal al, başka şehirde pahalıya sat. Toplam 150 altın kâr et.", done: (g) => g.s.c.profit >= 150, reward: { gold: 60 }, goto: () => CITIES[6] },
     { title: "Ödül avcısı", text: "Bir handan ödül ilanı al ve bir harami kampını yerle bir et.", done: (g) => g.s.c.camps >= 1, reward: { gold: 100 }, goto: (g) => g.nearest(g.s.camps.filter((c) => c.alive)) },
+    { title: "Kendi hanın", text: "Semerkant dışında bir şehrin hanında kendi kervansarayını kur. Kasası sen yoldayken altın biriktirir.", done: (g) => g.seraiCount() >= 1, reward: { gold: 120 }, goto: () => CITIES[6] },
     { title: "Beylik", text: "40 şöhret ve 1500 altın topla, Semerkant'ta kendi beyliğini kur.", done: (g) => g.s.beylik, reward: { wood: 200, stone: 200 }, goto: () => ({ x: CAPITAL.x, y: CAPITAL.y }) },
     { title: "Başkenti büyüt", text: "Sarayı 2. seviyeye çıkar.", done: (g) => g.bld("saray") >= 2, reward: { gold: 200 }, goto: () => ({ x: CAPITAL.x, y: CAPITAL.y }) },
     { title: "Kaynak seferi", text: "Başkent garnizonundan bir kaynak noktasına toplama seferi gönder.", done: (g) => g.s.c.marched >= 1, reward: { food: 300, wood: 300 }, goto: (g) => g.nearest(g.s.nodes) },
