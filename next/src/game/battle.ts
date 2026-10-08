@@ -90,7 +90,8 @@ export function fight(a0: Army, aBonus0: number, b0: Army, bBonus = 0, champ: Ch
   const hpA = { spear: 0, archer: 0, horse: 0 };
   const hpB = { spear: 0, archer: 0, horse: 0 };
   const sk = (k: SkillKind) => c?.skills.filter((s) => s.kind === k) ?? [];
-  const aBonus = aBonus0 + sk("aura").reduce((t, s) => t + s.pow, 0);
+  const luck = (Math.random() + Math.random() - 1) * 0.6;
+  const aBonus = aBonus0 + sk("aura").reduce((t, s) => t + s.pow, 0) + luck;
   if (c) {
     for (const s of sk("fury")) c.atk *= 1 + s.pow;
     for (const s of sk("evade")) c.dodge = Math.min(0.6, c.dodge + s.pow);
@@ -130,7 +131,7 @@ export function fight(a0: Army, aBonus0: number, b0: Army, bBonus = 0, champ: Ch
   }
   const maxR = boss ? 16 : 12;
   for (let r = 0; r < maxR && aAlive() && bAlive(); r++) {
-    const ev: string[] = [];
+    const ev: string[] = r === 0 && luck > 0.25 ? ["Rüzgâr arkanda"] : r === 0 && luck < -0.25 ? ["Talih yüz çevirdi"] : [];
     let extra = champHit(ev) * (1 + aBonus);
     if (c && c.hp > 0) {
       if (r % 3 === 0)
