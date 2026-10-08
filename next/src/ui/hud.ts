@@ -8,7 +8,7 @@ import { BRANCHES, BRANCH_KEYS, ROW_NEED, TALENTS, branchSpent } from "../game/t
 import { CONSUMABLES, CONS_BY_ID, CRAFT_SLOTS, REFINES, gearCost, type Cost, type Mat } from "../game/crafting";
 import { SIDE_TEXT, type SideQuest } from "../game/sidequests";
 import { CITY_NAME } from "../game/data";
-import { COMPANIONS, COMP_BY_ID, COMP_MAX, FORT_GUARD, KARA_HAN, type CompId } from "../game/story";
+import { COMPANIONS, COMP_BY_ID, COMP_MAX, ERLIK, FORT_GUARD, GATE_GUARD, KARA_HAN, type CompId } from "../game/story";
 import { CITIES, H, NH, NW, W } from "../world/gen";
 import { assetUrl } from "../render/worldView";
 import { audio } from "../audio";
@@ -759,6 +759,21 @@ export class Hud {
           ${near ? `<button class="btn red big" data-a="${this.act(() => { this.close(); g.attackFort(); })}">${ic("swords")} Kaleye saldır!</button>` : this.walkBtn(t, "Kaleye yürü")}`);
         break;
       }
+      case "gate": {
+        const f = s.act2.gate;
+        if (!f) return this.close();
+        const near = Math.hypot(f.x - s.hero.x, f.y - s.hero.y) < 110;
+        const p = Math.round(g.gateOdds() * 100);
+        html = this.frame("Erlik'in Kapısı", "Yeraltı Hanı'nın eşiği · Erlik Destanı'nın sonu", assetUrl("map/erlik_gate"), s.act2.done ? "<p>Kapı mühürlendi. Balbalların gözlerindeki mor ışık söndü.</p>" : `
+          <p>İki dev balbalın arasında, kayaya oyulmuş kemerli bir kapı. İçeriden mor bir sis ve dokuz katın uğultusu yükseliyor. Erlik Han tahtında seni bekliyor.</p>
+          <div class="brow">${ic(ERLIK.icon, "bimg round")}<div class="bi2"><b>${ERLIK.name}</b><small>Can ${ERLIK.hp} · Saldırı ${ERLIK.atk} · Savunma ${ERLIK.def}</small></div></div>
+          <h3>Erlik'in ordusu</h3>${armyHtml(GATE_GUARD, "enemy")}
+          <h3>Sen ve birliğin</h3>${armyHtml(s.hero.army)}
+          <div class="odds ${p >= 65 ? "good" : p >= 35 ? "mid" : "bad"}">Zafer şansı: <b>%${p}</b> · Müttefik desteği +%${Math.round(g.allyBonus() * 100)}</div>
+          <p class="dim">Önerilen: 25+ seviye, dolu birlik, efsanevi setler, müttefik beyler ve kan kardeşleri.</p>
+          ${near ? `<button class="btn red big" data-a="${this.act(() => { this.close(); g.attackGate(); })}">${ic("swords")} Kapıdan in!</button>` : this.walkBtn(t, "Kapıya yürü")}`);
+        break;
+      }
       case "kurgan": {
         const k = s.kurgans[t.i];
         const b = kurganBoss(k.tier);
@@ -1291,7 +1306,7 @@ export class Hud {
     this.sagaEl.classList.toggle("hidden", !(ch && s.free) && !lordGoal);
     if (ch && s.free) {
       const why = ch.req?.(g);
-      const html = `${ic(ch.img, "qi round")}<div><small>Kara Tamga Destanı · Bölüm ${s.story.ch + 1}/5</small><b>${ch.title}</b><span>${ch.goal}${why ? ` <i class="why">(${why})</i>` : ""}</span></div>`;
+      const html = `${ic(ch.img, "qi round")}<div><small>${g.sagaLabel()}</small><b>${ch.title}</b><span>${ch.goal}${why ? ` <i class="why">(${why})</i>` : ""}</span></div>`;
       if (this.sagaEl.innerHTML !== html) this.sagaEl.innerHTML = html;
     } else if (lordGoal) {
       const html = `${ic("map/serai", "qi round")}<div><small>Destan sonrası</small><b>İpek Yolu'nun Efendisi</b><span>Semerkant dışındaki ${LORD_SERAIS} şehrin hepsinde kervansaray kur (${g.seraiCount()}/${LORD_SERAIS}).</span></div>`;
@@ -1385,6 +1400,14 @@ export class Hud {
       c.beginPath();
       c.arc(r.x * sx, r.y * sy, 3, 0, Math.PI * 2);
       c.fill();
+    }
+    const gt = g.s.act2.gate;
+    if (gt && !g.s.act2.done) {
+      c.strokeStyle = "#c27bff";
+      c.lineWidth = 2;
+      c.beginPath();
+      c.arc(gt.x * sx, gt.y * sy, 4 + Math.sin(performance.now() / 300), 0, Math.PI * 2);
+      c.stroke();
     }
     c.fillStyle = "#fff";
     c.beginPath();

@@ -150,6 +150,7 @@ export class WorldView {
   private ruinM: Marker[] = [];
   private kurganM: Marker[] = [];
   private fortM: Marker | null = null;
+  private gateM: Marker | null = null;
   private seraiF = new Map<string, Sprite>();
   private ownF = new Map<string, Sprite>();
   private rivalsM = new Map<string, { c: Container; st: string }>();
@@ -646,6 +647,14 @@ export class WorldView {
       this.fortM.sp.visible = !s.story.done;
       if (this.fortM.label) this.fortM.label.visible = !s.story.done;
     }
+    if (s.act2.gate && !this.gateM) {
+      this.gateM = this.place("map/erlik_gate", s.act2.gate.x, s.act2.gate.y, 150, "Erlik'in Kapısı", 1);
+      if (this.gateM.label) this.gateM.label.style.fill = "#d9a3ff";
+    }
+    if (this.gateM) {
+      this.gateM.sp.alpha = s.act2.done ? 0.45 : 1;
+      if (this.gateM.label) this.gateM.label.text = s.act2.done ? "Mühürlü Kapı" : "Erlik'in Kapısı";
+    }
     const hb = this.heroBars;
     hb.clear();
     const hpK = Math.max(0, Math.min(1, h.hp / game.maxHp()));
@@ -827,6 +836,11 @@ export class WorldView {
     if (s.story.fort && !s.story.done) {
       const pr = (this.time * 0.5) % 1;
       this.fxG.circle(s.story.fort.x, s.story.fort.y - 20, 60 + pr * 50).stroke({ color: 0xff3a3a, width: 4, alpha: 0.6 * (1 - pr) });
+    }
+    if (s.act2.gate && !s.act2.done) {
+      const pr = (this.time * 0.4) % 1;
+      this.fxG.circle(s.act2.gate.x, s.act2.gate.y - 30, 70 + pr * 70).stroke({ color: 0xa64dff, width: 5, alpha: 0.7 * (1 - pr) });
+      this.fxG.circle(s.act2.gate.x, s.act2.gate.y - 30, 26 + Math.sin(this.time * 3) * 6).fill({ color: 0xa64dff, alpha: 0.18 });
     }
     for (const k of s.kurgans) {
       if (!game.isExplored(k.x, k.y) || (!k.alive && k.delved)) continue;

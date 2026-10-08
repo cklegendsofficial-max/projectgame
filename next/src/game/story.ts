@@ -136,3 +136,78 @@ export const CHAPTERS: Chapter[] = [
 ];
 
 export const FORT_GUARD = army(70, 45, 30);
+
+export const ERLIK: Boss = { name: "Erlik Han", icon: "boss_erlik", atk: 95, def: 42, hp: 5200 };
+export const ERLIK_SHADE: Boss = { name: "Erlik'in Gölgesi", icon: "boss_erlik", atk: 40, def: 18, hp: 1400 };
+export const GATE_GUARD = army(120, 90, 70);
+export const SHADE_GUARD = army(40, 40, 25);
+
+export const ACT2: Chapter[] = [
+  {
+    title: "Kara Han'ın Mirası",
+    goal: "15. seviyeye ulaş ve Buhara'da Derviş Korkut'u dinle.",
+    img: "companions/korkut",
+    intro: "Kara Han'ın kalesi yıkıldı ama Kurgan Taşları hâlâ mor ışıkla titriyor. Korkut seni Buhara'ya çağırıyor: <i>\"Bitmedi, evlat. Asıl olan daha başlamadı.\"</i>",
+    city: "bukhara",
+    req: (g) => (g.s.hero.lv >= 15 ? null : "15. seviye gerekir"),
+    scene: {
+      img: "companions/korkut",
+      text: (g) => `Korkut kopuzunun tellerine dokunmadan oturuyordu. Gözleri kıpkırmızıydı.<br><br><i>"Kara Han bir kuldu, ${g.s.hero.name}. Efendisi yerin dokuz kat altında: <b>Erlik Han</b>. Esirlerin ruhlarıyla uyandırılan her taş, Erlik'in zincirinden bir halkayı çözüyordu. Kara Han öldü ama zincir gevşedi."</i><br><br><i>"Erlik'in kapısını bulmak için önce yerin altına inmelisin. Kurganların en derin katlarında atalarımız kapının yerini taşlara kazıdı."</i>`,
+      choices: [{ label: "Derinlere ineceğim", run: (g) => g.storyAdvance() }],
+    },
+    goto: () => city("bukhara"),
+  },
+  {
+    title: "Dokuz Kat Aşağı",
+    goal: "Kurgan Derinliklerinde 10. kata in.",
+    img: "map/kurgan",
+    intro: "Ataların yazıtları derinlerde. Bir mezar kapısından in ve 10. kata kadar ilerle. Meşalelerini ve askerlerini iyi hazırla.",
+    auto: (g) => g.s.deepBest >= 10,
+    outro: {
+      img: "ruh",
+      title: "Taştaki yazıt",
+      text: () => "Onuncu katın duvarında, mor ışıkla parlayan Göktürk harfleri: <i>\"Doğuda, göğün dağa değdiği yerde, Erlik'in kapısı yedi bey ve bir kamın eliyle mühürlendi. Beyler dağılırsa mühür çözülür.\"</i><br><br>Korkut fısıldadı: <i>\"Beyleri yeniden birleştirmelisin. Kılıçla ya da sözle.\"</i>",
+    },
+    goto: (g) => g.nearest(g.s.kurgans.filter((k) => !k.alive && !k.delved)),
+  },
+  {
+    title: "Bozkırın Birliği",
+    goal: "En az 2 beyi müttefikin ya da tabin yap.",
+    img: "lord_bey",
+    intro: "Erlik'e karşı tek tuğ yetmez. Bozkırın beylerini hediyeyle, antla ya da kılıçla kendi bayrağın altında topla.",
+    auto: (g) => g.s.rivals.filter((r) => r.status === "ally" || r.status === "vassal").length >= 2,
+    outro: {
+      img: "lord_bey",
+      title: "Tuğlar bir arada",
+      text: (g) => `Beyler çadırında toplandı; kımız kâseleri elden ele dolaştı. <i>"${g.s.hero.name} nereye, biz oraya."</i><br><br>O gece Kaşgar'dan bir ulak geldi: Tanrı Dağları'nın eteğinde yaşayan yaşlı Umay Kam seni görmek istiyor.`,
+    },
+    goto: (g) => {
+      const r = g.s.rivals.find((x) => x.status === "peace" || x.status === "war");
+      return r ? { x: r.x, y: r.y } : null;
+    },
+  },
+  {
+    title: "Kamın Kehaneti",
+    goal: "Kaşgar'a git ve Umay Kam'ın ayinine katıl.",
+    img: "heroes/boss_kam",
+    intro: "Umay Kam, Erlik'in kapısını açabilecek tek kişi. Ama ayin bedel ister: ya ruhlar ya kan.",
+    city: "kashgar",
+    req: (g) => (g.s.hero.lv >= 18 ? null : "18. seviye gerekir"),
+    scene: {
+      img: "heroes/boss_kam",
+      text: () => `Ateşin başında kemik çanlı, kuş tüylü yaşlı bir kadın davulunu çalıyordu. Gözleri bembeyazdı.<br><br><i>"Erlik'in kapısı ancak iki yolla açılır, yiğit. Ya otuz esir ruhunu Umay'a geri verirsin, ya da Erlik'in gölgesiyle burada, ateşin içinde dövüşürsün."</i>`,
+      choices: [
+        { label: "Ruhları geri ver (30 Ruh Taşı, 3 Parşömen)", why: (g) => (g.s.mats.ruh >= 30 && g.s.mats.parsomen >= 3 ? null : "30 Ruh Taşı ve 3 Parşömen gerekir"), run: (g) => g.act2Ritual(false) },
+        { label: "Gölgeyle dövüş", run: (g) => g.act2Ritual(true) },
+      ],
+    },
+    goto: () => city("kashgar"),
+  },
+  {
+    title: "Erlik Han",
+    goal: "Erlik'in Kapısına git ve Yeraltı Hanı'nı yen.",
+    img: "boss_erlik",
+    intro: "Kapı açıldı. Yerin altından dokuz kat karanlık yükseliyor. Bozkırın bütün beyleri, kan kardeşlerin ve yoldaşların arkanda. Destanın son sayfası.",
+    goto: (g) => g.s.act2.gate,
+  },
+];

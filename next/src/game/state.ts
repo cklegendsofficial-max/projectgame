@@ -247,6 +247,7 @@ export interface GameState {
   rivalDay: number;
   seals: number;
   deepPerks: Record<string, number>;
+  act2: { ch: number; gate: { x: number; y: number } | null; done: boolean };
 }
 
 export interface MarketEvent {
@@ -467,6 +468,7 @@ export function newGame(w: World): GameState {
     rivalDay: 0,
     seals: 0,
     deepPerks: {},
+    act2: { ch: 0, gate: null, done: false },
   };
 }
 

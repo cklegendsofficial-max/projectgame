@@ -21,13 +21,14 @@ import { ENGINE_GOLD, FEAST_GOLD, SIEGE_LV, SIEGE_RENOWN, TAX, cityGarrison, cit
 import { DEEP_LORE, DEEP_PERKS, DOORS, DOOR_KEYS, RIDDLES, TOMBS, deepBoss, deepGuard, deepTier, tombOf, type DeepPerk, type DeepRun, type DoorKind } from "./deep";
 import { FACTIONS, FACTION_KEYS, HOSTILE, REP_RANKS, RANK_PERKS, factionOf, repRank, type FactionId } from "./factions";
 import { CLASS_BY_ID, CLASS_SKILLS, SKILL_MAX, WEAPON_NAME, WEAPON_STAT, skillPow, skillRank, type ClassDef, type ClassId, type ClassSkill, type WeaponKind } from "./classes";
-import { CHAPTERS, COMP_BY_ID, COMP_MAX, FORT_GUARD, KARA_HAN, KASIM, type Chapter, type CompId, type CompMods, type Companion } from "./story";
+import { ACT2, CHAPTERS, COMP_BY_ID, COMP_MAX, ERLIK, ERLIK_SHADE, FORT_GUARD, GATE_GUARD, KARA_HAN, KASIM, SHADE_GUARD, type Chapter, type CompId, type CompMods, type Companion } from "./story";
 import { CAPITAL, SLAVE_RADIUS, banditArmy, campGarrison, kurganBoss, kurganGuard, loadGame, saveGame as rawSave, wipeGame, type Bandit, type Bounty, type Caravan, type Contract, type GameState, type Storm } from "./state";
 
 export type Target =
   | { kind: "village" | "camp" | "node" | "ruin" | "city" | "bandit" | "kurgan" | "caravan" | "rival"; i: number }
   | { kind: "capital" }
   | { kind: "fort" }
+  | { kind: "gate" }
   | { kind: "point"; x: number; y: number };
 
 export interface Quest {
@@ -1690,6 +1691,8 @@ export class Game {
         return s.kurgans[t.i];
       case "fort":
         return s.story.fort;
+      case "gate":
+        return s.act2.gate;
       case "bandit":
         return s.bandits.find((b) => b.id === t.i) ?? null;
       case "caravan":
@@ -1767,6 +1770,7 @@ export class Game {
     s.ruins.forEach((n, i) => !n.looted && test({ kind: "ruin", i }, n.x, n.y));
     s.kurgans.forEach((k, i) => test({ kind: "kurgan", i }, k.x, k.y, 1.3));
     if (s.story.fort && !s.story.done) test({ kind: "fort" }, s.story.fort.x, s.story.fort.y, 2);
+    if (s.act2.gate && !s.act2.done) test({ kind: "gate" }, s.act2.gate.x, s.act2.gate.y, 2.2);
     return best;
   }
 
@@ -3593,7 +3597,82 @@ export class Game {
   // ---------- story & companions ----------
 
   chapter(): Chapter | null {
-    return this.s.story.done ? null : (CHAPTERS[this.s.story.ch] ?? null);
+    const s = this.s;
+    if (!s.story.done) return CHAPTERS[s.story.ch] ?? null;
+    return s.act2.done ? null : (ACT2[s.act2.ch] ?? null);
+  }
+
+  sagaLabel(): string {
+    const s = this.s;
+    return s.story.done ? `Erlik Destanı · Bölüm ${s.act2.ch + 1}/${ACT2.length}` : `Kara Tamga Destanı · Bölüm ${s.story.ch + 1}/${CHAPTERS.length}`;
+  }
+
+  act2Ritual(fight: boolean): void {
+    const s = this.s;
+    if (!s.story.done || s.act2.ch !== 3) return;
+    if (!fight) {
+      if (s.mats.ruh < 30 || s.mats.parsomen < 3) return;
+      s.mats.ruh -= 30;
+      s.mats.parsomen -= 3;
+      this.chron(`${s.hero.name} otuz esir ruhunu Umay'a geri verdi. Kaşgar'ın göğünde bir gece boyunca mor yıldızlar kaydı.`);
+      this.storyAdvance();
+      return;
+    }
+    this.battle("Umay Kam'ın ateşi", SHADE_GUARD, 0.15, (win) => {
+      if (!win) return "Gölge seni ateşten dışarı fırlattı. Güçlenip yeniden dene.";
+      this.chron(`${s.hero.name} Kaşgar'da, kamın ateşinin içinde Erlik'in gölgesini parçaladı.`);
+      this.storyAdvance();
+      return "Erlik'in gölgesi dumana döndü!";
+    }, ERLIK_SHADE, "Gölge ruhlar");
+  }
+
+  private placeGate(): void {
+    const s = this.s;
+    if (s.act2.gate) return;
+    const k = this.cityPos("kashgar");
+    let spot = { x: k.x, y: k.y + 260 };
+    for (let i = 0; i < 40; i++) {
+      const a = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 1.4;
+      const d = 380 + Math.random() * 320;
+      const x = k.x + Math.cos(a) * d;
+      const y = k.y + Math.sin(a) * d;
+      if (x > 80 && y > 80 && x < W - 80 && y < H - 80 && this.cellCost(x, y) < 3) {
+        spot = { x, y };
+        break;
+      }
+    }
+    s.act2.gate = spot;
+    this.reveal(spot.x, spot.y, 8);
+  }
+
+  gateOdds(): number {
+    return this.odds(GATE_GUARD, 0.35, ERLIK);
+  }
+
+  attackGate(): void {
+    const s = this.s;
+    if (!s.act2.gate || s.act2.done) return;
+    this.battle("Erlik'in Kapısı", GATE_GUARD, 0.35, (win) => {
+      if (!win) return "Erlik'in karanlığı seni yukarı kustu. Beylerini, kardeşlerini ve ordunu topla; yeniden in.";
+      s.act2.done = true;
+      s.act2.ch = ACT2.length;
+      s.renown += 300;
+      s.mats.ruh += 60;
+      s.mats.parsomen += 8;
+      this.gain({ gold: 15000 });
+      const u = UNIQUES[Math.floor(Math.random() * UNIQUES.length)];
+      const it = uniqueItem(s.nextId++, this.cls(), u, 5);
+      this.gainLegend(it);
+      for (const k of s.kurgans) k.respawnAt = Math.min(k.respawnAt, this.now + 1000);
+      this.chron(`Yerin dokuz kat altında ${s.hero.name}, Erlik Han'ı kendi tahtında yendi. Zincir yeniden kenetlendi; bozkırın üstünde gök bir kez daha mavi.`);
+      this.hud.story(
+        "Erlik Destanı tamamlandı",
+        this.face(),
+        `Erlik Han'ın kara tahtı çatırdayarak yarıldı. Dokuz kat karanlık bir çığlıkla yerin dibine çekildi; zincirler yeniden kenetlendi.<br><br>Yukarı çıktığında bütün beyler kapının önünde diz çökmüştü. Korkut kopuzunu aldı ve ilk kez senin destanını söyledi:<br><br><i>"Bir köle doğdu Semerkant'ta, demir halka boynunda… Erlik'i tahtından indirdi, bozkıra göğü geri verdi."</i><br><br><b>${s.hero.name}, Gök Tuğlu Han</b>.<br><br>Ama bozkır hiç uyumaz: beyler, reisler, kervanlar ve derinlikler seni bekliyor. Destanın bitti; efsanen sürüyor.`,
+        "Efsane sürüyor",
+      );
+      return `Erlik Han yenildi! +15000 altın, +300 şöhret, +60 Ruh Taşı, +8 Parşömen<br>Destan ganimeti: <b class="r4">${it.name}</b>`;
+    }, ERLIK, "Erlik'in ordusu");
   }
 
   chapterReady(): boolean {
@@ -3605,11 +3684,18 @@ export class Game {
     const ch = this.chapter();
     if (!ch) return;
     if (ch.outro) this.hud.story(ch.outro.title, ch.outro.img, ch.outro.text(this), "Devam");
-    this.s.story.ch++;
-    if (this.s.story.ch === 4) this.placeFort();
+    const act2 = this.s.story.done;
+    if (act2) {
+      this.s.act2.ch++;
+      if (this.s.act2.ch === 4) this.placeGate();
+    } else {
+      this.s.story.ch++;
+      if (this.s.story.ch === 4) this.placeFort();
+    }
+    const n = act2 ? this.s.act2.ch : this.s.story.ch;
     const next = this.chapter();
-    if (next) this.hud.story(`Bölüm ${this.s.story.ch + 1}: ${next.title}`, next.img, `${next.intro}<br><br><b>Hedef:</b> ${next.goal}`, "Yola çık");
-    this.addXp(40 * this.s.story.ch);
+    if (next) this.hud.story(`${act2 ? "Erlik Destanı · " : ""}Bölüm ${n + 1}: ${next.title}`, next.img, `${next.intro}<br><br><b>Hedef:</b> ${next.goal}`, "Yola çık");
+    this.addXp((act2 ? 120 : 40) * n);
     saveGame(this.s);
   }
 
@@ -3668,6 +3754,8 @@ export class Game {
         `Kara Han'ın kılıcı elinden düştü. Kalenin zindanlarında annenle küçük Ertuğrul'u buldun; zincirlerini kendi ellerinle kırdın. Esirlerin ruhları mor bir ışık selinde göğe yükseldi ve bozkırdaki bütün Kurgan Taşları bir an için sustu.<br><br>Ozanlar artık senin adını söylüyor: <b>${s.hero.name}, İpek Yolu'nun Kurtarıcısı</b>.<br><br>Ama Kara Han'ın kılıcını alan herkes bilir: bozkırda boşalan taht uzun süre boş kalmaz. Yolların, beyliğin ve ordun seni bekliyor.<br><br><b>Yeni hedef:</b> İpek Yolu'nun ${LORD_SERAIS} şehrinde kervansaray kurarak yolun efendisi ol.`,
         "Yola devam",
       );
+      const a0 = ACT2[0];
+      this.hud.story(`Erlik Destanı · Bölüm 1: ${a0.title}`, a0.img, `${a0.intro}<br><br><b>Hedef:</b> ${a0.goal}`, "Yola çık");
       return `Kara Han yenildi! +5000 altın, +100 şöhret, +25 Ruh Taşı, +3 Parşömen<br>Destan ganimeti: <b class="r4">${it.name}</b>`;
     }, KARA_HAN, "Kara Tamga ordusu");
   }
