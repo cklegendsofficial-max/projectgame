@@ -1,6 +1,7 @@
 import { ACHIEVEMENTS, achievementMult } from "./achievements";
 import { isPlatformMuted } from "./audio";
 import { isOpen } from "./unlocks";
+import { CITY_IDS, PROV_MAX, capacity, load, tripProgress } from "./journey";
 import { ARTIFACTS, ART_SLOTS, canForgeArt, weatherAt, weatherEnds, HAPPY_MOOD, REGIONS, REGION_MAX, REVOLT_MOOD, TAXES, TROPHY_IDS, TROPHY_RARITY, anyRegionAction, mercPower, monthWage, provinceMult, questDone, realmNam, regionConquered, regionCost, regionVisible, trophyMult } from "./province";
 import { COMPANION_IDS, COMPANION_MAX, compEffect, compLevel, compText, compUpgradeCost, type CompanionId } from "./companions";
 import { CHAPTERS, chronicleGlobalMult, currentChapter, goalDone, goalValue, story, travelerName, type Chapter, type TravelerId } from "./chronicle";
@@ -199,6 +200,7 @@ export interface GameApi {
   openIncursion(): void;
   openForge(): void;
   openMerchant(): void;
+  openJourney(): void;
   openRegion(k: number): void;
   buyMode: BuyMode;
   canWatchAd(): boolean;
@@ -607,9 +609,42 @@ export class UI {
     }
   }
 
+  private buildJourneyCard(): void {
+    const g = this.g;
+    const s = g.s;
+    const card = el("div", "jCard");
+    card.innerHTML = `${icon("j_caravan", "ico jcIco")}<div class="jcMid"><b>${tk("j_title")}</b><small class="jcLine"></small><div class="jBar"><span></span></div></div><button class="jcBtn"></button>`;
+    const line = card.querySelector<HTMLElement>(".jcLine")!;
+    const bar = card.querySelector<HTMLElement>(".jBar")!;
+    const fill = card.querySelector<HTMLElement>(".jBar span")!;
+    const btn = card.querySelector<HTMLButtonElement>(".jcBtn")!;
+    card.addEventListener("click", () => g.openJourney());
+    let last = "";
+    this.dynamic.push(() => {
+      const j = s.journey;
+      const t = j.trip;
+      const city = tk("city_" + CITY_IDS[j.city]);
+      const txt = t
+        ? tk("j_cardRoad", { city: tk("city_" + CITY_IDS[t.path[t.path.length - 1]]) })
+        : tk("j_cardIdle", { city, n: load(j), cap: capacity(j), p: j.prov, max: PROV_MAX });
+      const b = t ? tk("j_cardWatch") : load(j) > 0 ? tk("j_cardGo") : tk("j_cardMarket");
+      const key = txt + b;
+      if (key !== last) {
+        last = key;
+        line.textContent = txt;
+        btn.textContent = b;
+      }
+      bar.style.display = t ? "" : "none";
+      if (t) fill.style.width = `${Math.round(tripProgress(t).done * 100)}%`;
+      card.classList.toggle("ready", !t && j.prov > 0);
+    });
+    this.body.appendChild(card);
+  }
+
   private buildRoutes(): void {
     const g = this.g;
     const s = g.s;
+    if (isOpen(s, "journey")) this.buildJourneyCard();
     const head = el("div", "buyModes");
     head.appendChild(el("span", "lbl", t("buyMode")));
     const modes: [BuyMode, string][] = [[1, "x1"], [10, "x10"], [100, "x100"], ["next", t("buyNext")], ["max", t("buyMax")]];

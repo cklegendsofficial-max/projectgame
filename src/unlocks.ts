@@ -1,6 +1,6 @@
 import type { GameState } from "./state";
 
-export type Feature = "events" | "army" | "court" | "war" | "realm" | "dynasty" | "bazaar" | "arena" | "guild";
+export type Feature = "journey" | "events" | "army" | "court" | "war" | "realm" | "dynasty" | "bazaar" | "arena" | "guild";
 
 export interface FeatureDef {
   id: Feature;
@@ -11,6 +11,7 @@ export interface FeatureDef {
 }
 
 export const FEATURES: FeatureDef[] = [
+  { id: "journey", icon: "j_caravan", routes: 2, tab: "routes" },
   { id: "events", icon: "ev_storm", routes: 2, tab: "routes" },
   { id: "army", icon: "it_sword_1", routes: 3, tab: "army", sub: "hero" },
   { id: "court", icon: "crown", routes: 3, tab: "routes" },

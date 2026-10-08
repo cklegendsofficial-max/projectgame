@@ -57,6 +57,7 @@ import {
   type Ruler,
 } from "./empire";
 import { currentShock, marketPrices, marketTick, resetMarket, restoreMarket } from "./market";
+import { JourneyController } from "./journeyCtl";
 import {
   ALLY_MS,
   ALLY_MULT,
@@ -283,6 +284,7 @@ class Game implements GameApi {
   private saveTimer = 0;
   private tut4Since = 0;
   private trips: TripEvent[] = [];
+  journey: JourneyController;
 
   constructor(s: GameState) {
     this.s = s;
@@ -292,6 +294,19 @@ class Game implements GameApi {
     this.map = new MapView(document.getElementById("map") as HTMLCanvasElement);
     this.ui = new UI(this);
     this.events = new EventManager(Date.now());
+    const game = this;
+    this.journey = new JourneyController({
+      get s() {
+        return game.s;
+      },
+      toasts: this.toasts,
+      map: this.map,
+      income: () => this.income(),
+      save: () => this.save(),
+      dirty: () => (this.ui.dirty = true),
+      canAd: () => this.canWatchAd(),
+      runAd: () => this.runAd(),
+    });
     restoreMarket(s.marketPrices);
     this.map.onTap = (x, y) => this.onMapClick(x, y);
     this.map.onHold = (route) => this.holdRoute(route);
@@ -396,6 +411,7 @@ class Game implements GameApi {
       this.warTick(now, dt);
       this.tutorialTick(now);
       this.unlockTick();
+      if (isOpen(this.s, "journey")) this.journey.tick(dt, now);
       this.chronicleTick();
       this.cityTick(now);
       this.worldTick(now);
@@ -449,6 +465,7 @@ class Game implements GameApi {
     else if (hit.type === "node") this.tapNode(hit.k);
     else if (hit.type === "region") this.openRegion(hit.k);
     else if (hit.type === "merchant") this.openMerchant();
+    else if (hit.type === "journey") this.openJourney();
     else this.claimEvent(hit.id);
   }
 
@@ -2225,6 +2242,11 @@ class Game implements GameApi {
     this.save();
   }
 
+  openJourney(): void {
+    if (!isOpen(this.s, "journey")) return;
+    this.journey.open();
+  }
+
   forceMerchant(): void {
     this.s.nextMerchant = 0;
     this.s.merchant = null;
@@ -3512,7 +3534,7 @@ class Game implements GameApi {
       `<div class="unlockArt">${icon(f.icon, "ico big")}</div><h3 class="unlockName">${tk("feat_" + f.id)}</h3><p>${tk("featd_" + f.id)}</p>`,
       [
         { label: t("close"), cls: "secondary" },
-        { label: t("unlockGo"), cls: "primary", onClick: () => this.gotoFeature(f.tab, f.sub) },
+        { label: t("unlockGo"), cls: "primary", onClick: () => (f.id === "journey" ? window.setTimeout(() => this.openJourney(), 50) : this.gotoFeature(f.tab, f.sub)) },
       ],
       { icon: icon("chest"), dismissable: true },
     );

@@ -11,6 +11,7 @@ import { isPetition } from "./court";
 import { NODES, freshNodes, isCity } from "./frontier";
 import { cleanOffers, isMerchant, type Merchant } from "./merchant";
 import { migrateUnlocks, type Feature } from "./unlocks";
+import { freshJourney, resetJourneyRun, sanitizeJourney, type JourneyState } from "./journey";
 import { ARTIFACTS, ART_SLOTS, MONTH_MS, QUEST_STEPS, REGIONS, REGION_MAX, TAXES, TROPHY_IDS, freshRegion, type Incursion, type RegionState } from "./province";
 import { EXP_HP, EXP_ROWS, EXP_TICKETS, freshBazaar, type Expedition, type Relation, type Stock } from "./realm";
 import { AGES, CREST_COLORS, CREST_SYMBOLS, RIVALS, TRAITS, WONDERS, WONDER_STAGES, type Ruler, type TraitId } from "./empire";
@@ -110,6 +111,7 @@ export interface GameState {
   merchant: Merchant | null;
   nextMerchant: number;
   unlocked: Feature[];
+  journey: JourneyState;
   stats: {
     clicks: number;
     bandits: number;
@@ -138,6 +140,7 @@ export interface GameState {
     wars: number;
     alliances: number;
     expeditions: number;
+    journeys: number;
     bazaarGain: number;
     decrees: number;
     gathered: number;
@@ -262,6 +265,7 @@ export function newGame(): GameState {
     merchant: null,
     nextMerchant: now + 5 * 60_000,
     unlocked: [],
+    journey: freshJourney(now),
     stats: {
       clicks: 0,
       bandits: 0,
@@ -290,6 +294,7 @@ export function newGame(): GameState {
       wars: 0,
       alliances: 0,
       expeditions: 0,
+      journeys: 0,
       bazaarGain: 0,
       decrees: 0,
       gathered: 0,
@@ -331,6 +336,7 @@ export function resetForDynasty(s: GameState, newSeals: number): void {
   }
   const guards = s.escorts.reduce((a, b) => a + b, 0);
   s.escorts = ROUTES.map((_, i) => (i === 0 ? guards : 0));
+  resetJourneyRun(s.journey);
   onDynastyReset(s);
 }
 
@@ -612,6 +618,7 @@ export function sanitize(raw: unknown): GameState {
   s.merchant = isMerchant(r.merchant) && s.regions[r.merchant.k].open ? { k: r.merchant.k, until: r.merchant.until, offers: cleanOffers(r.merchant.offers) } : null;
   s.nextMerchant = num(r.nextMerchant, base.nextMerchant);
   s.unlocked = migrateUnlocks(s, r.unlocked);
+  s.journey = sanitizeJourney(r.journey, Date.now());
   s.governors = {};
   if (r.governors && typeof r.governors === "object") {
     const used = new Set<string>();

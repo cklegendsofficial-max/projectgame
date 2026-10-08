@@ -10,6 +10,7 @@ import { TW_BONUS, TW_PENALTY } from "./saga";
 import { HAN_T } from "./caravanserai";
 import { CAMP_BONUS, activeFestival, campWanted, type Camp } from "./perks";
 import { isOpen } from "./unlocks";
+import { CITY_IDS, tripProgress } from "./journey";
 import { REGIONS, duskAmount, nightAmount, regionConquered, regionVisible } from "./province";
 import { GATHER_MS, NODES, NODE_ICON, RUIN_MS, nodeOpen, nodeReady } from "./frontier";
 import type { MapEvent } from "./events";
@@ -141,6 +142,7 @@ export type MapHit =
   | { type: "node"; k: number }
   | { type: "region"; k: number }
   | { type: "merchant" }
+  | { type: "journey" }
   | null;
 
 const CAMP_POS: Record<Camp, Pt> = { yayla: { x: 0.6, y: 0.29 }, kislak: { x: 0.62, y: 0.86 } };
@@ -414,6 +416,106 @@ export class MapView {
       }
     }
     return [...ids];
+  }
+
+  flyToCities(ids: string[]): void {
+    this.fly = this.fitTarget(ids, 110);
+  }
+
+  private edgePoint(a: number, b: number, f: number): Pt & { dx: number } {
+    const ia = CITY_IDS[a];
+    const ib = CITY_IDS[b];
+    const r = ROUTES.findIndex((x) => (x.from === ia && x.to === ib) || (x.from === ib && x.to === ia));
+    if (r >= 0) {
+      const fwd = ROUTES[r].from === ia;
+      const p = this.routePoint(r, fwd ? f : 1 - f);
+      return { x: p.x, y: p.y, dx: fwd ? p.dx : -p.dx };
+    }
+    const pa = this.cityPt(ia);
+    const pb = this.cityPt(ib);
+    const bend = 0.22;
+    const cx = (pa.x + pb.x) / 2 - (pb.y - pa.y) * bend;
+    const cy = (pa.y + pb.y) / 2 + (pb.x - pa.x) * bend;
+    const u = 1 - f;
+    return {
+      x: u * u * pa.x + 2 * u * f * cx + f * f * pb.x,
+      y: u * u * pa.y + 2 * u * f * cy + f * f * pb.y,
+      dx: 2 * u * (cx - pa.x) + 2 * f * (pb.x - cx),
+    };
+  }
+
+  private journeyPos(s: GameState, u: number): (Pt & { dx: number }) | null {
+    const t = s.journey.trip;
+    if (t) {
+      const p = tripProgress(t);
+      return this.edgePoint(p.a, p.b, p.f);
+    }
+    const c = this.cityPt(CITY_IDS[s.journey.city]);
+    return { x: c.x - 30 * u, y: c.y + 16 * u, dx: 1 };
+  }
+
+  private drawJourney(g: CanvasRenderingContext2D, s: GameState, sc: number, u: number, time: number): void {
+    if (!isOpen(s, "journey")) return;
+    const t = s.journey.trip;
+    if (t) {
+      g.save();
+      g.setLineDash([6 * u, 6 * u]);
+      g.lineDashOffset = -time * 20 * u;
+      g.lineWidth = 3 * u;
+      g.strokeStyle = t.risky ? "rgba(255,110,80,0.85)" : "rgba(255,226,140,0.85)";
+      g.beginPath();
+      for (let e = t.edge; e < t.steps.length; e++) {
+        for (let k = 0; k <= 16; k++) {
+          const f = e === t.edge ? tripProgress(t).f + (1 - tripProgress(t).f) * (k / 16) : k / 16;
+          const p = this.edgePoint(t.path[e], t.path[e + 1], f);
+          if (e === t.edge && k === 0) g.moveTo(p.x, p.y);
+          else g.lineTo(p.x, p.y);
+        }
+      }
+      g.stroke();
+      g.setLineDash([]);
+      const dest = this.cityPt(CITY_IDS[t.path[t.path.length - 1]]);
+      const pulse = 1 + 0.15 * Math.sin(time * 4);
+      g.strokeStyle = "rgba(255,226,140,0.95)";
+      g.lineWidth = 3 * u;
+      g.beginPath();
+      g.arc(dest.x, dest.y, 26 * u * pulse, 0, Math.PI * 2);
+      g.stroke();
+      g.restore();
+      const prog = tripProgress(t);
+      for (let k = 2; k >= 0; k--) {
+        const f = Math.max(0, prog.f - k * 0.05);
+        const p = this.edgePoint(prog.a, prog.b, f);
+        this.drawCamel(g, p.x, p.y - 6 * sc, sc * 0.95, p.dx >= 0, time * 9 + k, k === 0 ? "rider" : CAMEL_LOAD[Math.min(7, k + 1)]);
+      }
+    }
+    const p = this.journeyPos(s, u);
+    if (!p) return;
+    const img = iconImages["j_caravan"];
+    if (!t && ready(img)) {
+      const h = 34 * u + Math.sin(time * 2.2) * 1.5 * u;
+      const w = (h * img.naturalWidth) / img.naturalHeight;
+      g.save();
+      g.shadowColor = "rgba(255,210,100,0.9)";
+      g.shadowBlur = 12 * u;
+      g.drawImage(img, p.x - w / 2, p.y - h / 2, w, h);
+      g.restore();
+    }
+    const flagY = t ? p.y - 50 * sc : p.y - 26 * u;
+    g.save();
+    g.fillStyle = "#ffd76a";
+    g.strokeStyle = "#5a2c08";
+    g.lineWidth = 2 * u;
+    g.beginPath();
+    g.arc(p.x, flagY, 9 * u, 0, Math.PI * 2);
+    g.fill();
+    g.stroke();
+    g.fillStyle = "#5a2c08";
+    g.font = `bold ${11 * u}px Georgia, serif`;
+    g.textAlign = "center";
+    g.textBaseline = "middle";
+    g.fillText("★", p.x, flagY + 0.5 * u);
+    g.restore();
   }
 
   flyToCity(id: string): void {
@@ -1690,6 +1792,7 @@ export class MapView {
 
     this.drawRival(g, sc, time);
     this.drawHeroRider(g, s, sc, time);
+    this.drawJourney(g, s, sc, u, time);
     this.drawShots(g, s, now);
     this.drawTitan(g, s, sc, u, time, now);
     if (!this.lite) this.drawFlocks(g, dt, time);
@@ -2757,6 +2860,10 @@ export class MapView {
     if (this.traveler) {
       const q = this.travelerPoint(u, performance.now() / 1000);
       if (Math.hypot(q.x - x, q.y - y) < 28 * u) return { type: "traveler" };
+    }
+    if (s && isOpen(s, "journey")) {
+      const p = this.journeyPos(s, u);
+      if (p && Math.hypot(p.x - x, p.y - (s.journey.trip ? 10 * u : 0) - y) < 30 * u) return { type: "journey" };
     }
     if (s && isOpen(s, "realm")) {
       if (this.merchant >= 0) {
