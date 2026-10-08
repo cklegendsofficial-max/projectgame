@@ -9,6 +9,9 @@ import {
   type TripEvent,
 } from "../src/economy";
 import { newGame, resetForDynasty, type GameState } from "../src/state";
+import { CITIES } from "../src/data";
+import { BUILD_SECONDS, MAX_CITY_LEVEL, cityCost, cityLevel, cityUnlocked, finishBuild, startBuild } from "../src/cities";
+import { AGES, RIVALS, WONDERS, ageCost, canAdvanceAge, canBuildWonder, nextAge, rivalBeaten, rivalWealth, wonderCost, wonderStage } from "../src/empire";
 
 function fmt(n: number): string {
   if (n < 1000) return n.toFixed(0);
@@ -31,6 +34,7 @@ function simulate(s: GameState, maxSec: number, label: string, clickEvery = 1.0,
     logged.add(k);
     console.log(`[${label}] ${mm(sec).padStart(7)}  ${msg}`);
   };
+  let buildDone = 0;
   let clickTimer = 0;
   let eventTimer = 0;
   for (let sec = 0; sec < maxSec; sec += dt) {
@@ -55,6 +59,38 @@ function simulate(s: GameState, maxSec: number, label: string, clickEvery = 1.0,
     out.length = 0;
     step(s, dt, now, out);
 
+    if (!process.env.NOAGE && canAdvanceAge(s)) {
+      s.gold -= ageCost(s, nextAge(s)!);
+      s.age++;
+      log("age" + s.age, `AGE UP -> ${AGES[s.age].id}`, sec);
+    }
+    if (buildDone > 0 && sec >= buildDone) {
+      finishBuild(s);
+      buildDone = 0;
+    }
+    for (const c of CITIES) {
+      const lv = cityLevel(s, c.id);
+      if (process.env.NOCITY || s.cityBuild || !cityUnlocked(s, c.id) || lv >= MAX_CITY_LEVEL) continue;
+      const cost = cityCost(c.id, lv);
+      if (cost < s.gold * 0.2 && startBuild(s, c.id, now)) {
+        buildDone = sec + BUILD_SECONDS[lv] + 20;
+        break;
+      }
+    }
+    for (const w of WONDERS) {
+      if (canBuildWonder(s, w) && wonderCost(s, w) < s.gold * 0.3) {
+        s.gold -= wonderCost(s, w);
+        s.wonders[w.id] = wonderStage(s, w.id) + 1;
+        log("w" + w.id + s.wonders[w.id], `wonder ${w.id} stage ${s.wonders[w.id]}`, sec);
+      }
+    }
+    for (const r of RIVALS) {
+      if (!process.env.NOAGE && !rivalBeaten(s, r.id) && s.runEarned >= rivalWealth(s, r)) {
+        s.rivalsBeaten.push(r.id);
+        log("rv" + r.id, `rival beaten: ${r.id}`, sec);
+      }
+    }
+    s.runSeconds += dt;
     for (let guard = 0; guard < 50; guard++) {
       let best: { kind: string; i: number; cost: number; score: number } | null = null;
       for (let i = 0; i < ROUTES.length; i++) {
@@ -99,7 +135,7 @@ function simulate(s: GameState, maxSec: number, label: string, clickEvery = 1.0,
       }
     }
     for (const n of [1e6, 1e9, 1e12, 1e15]) if (s.runEarned >= n) log("e" + n, `run earned ${fmt(n)}  income ${fmt(totalIncomePerSec(s, now))}/s  seals claimable ${claimableSeals(s)}`, sec);
-    if (claimableSeals(s) >= Math.max(10, s.seals)) {
+    if (!process.env.LONG && claimableSeals(s) >= Math.max(10, s.seals)) {
       log("seal", `seals worth resetting: ${claimableSeals(s)} (own ${s.seals})`, sec);
       return sec;
     }

@@ -23,6 +23,15 @@ export function unlockAudio(): void {
   ensure();
 }
 
+export function audioGraph(): { c: AudioContext; master: GainNode } | null {
+  const c = ensure();
+  return c && master ? { c, master } : null;
+}
+
+export function soundOn(): boolean {
+  return !muted && !platformMuted && !suspendedForAd;
+}
+
 export function setMuted(m: boolean): void {
   muted = m;
 }
@@ -60,6 +69,37 @@ function tone(freq: number, start: number, dur: number, type: OscillatorType, vo
   o.stop(c.currentTime + start + dur + 0.02);
 }
 
+function pluck(c: AudioContext, freq: number, at: number, dur: number): void {
+  const len = Math.floor(c.sampleRate * 0.03);
+  const buf = c.createBuffer(1, len, c.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+  const src = c.createBufferSource();
+  src.buffer = buf;
+  const delay = c.createDelay(0.05);
+  delay.delayTime.value = 1 / freq;
+  const fb = c.createGain();
+  fb.gain.value = 0.94;
+  const lp = c.createBiquadFilter();
+  lp.type = "lowpass";
+  lp.frequency.value = 2600;
+  const out = c.createGain();
+  out.gain.setValueAtTime(0.55, at);
+  out.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+  src.connect(delay);
+  delay.connect(lp);
+  lp.connect(fb);
+  fb.connect(delay);
+  lp.connect(out);
+  src.connect(out);
+  out.connect(master!);
+  src.start(at);
+  setTimeout(() => {
+    fb.disconnect();
+    out.disconnect();
+  }, (at - c.currentTime + dur) * 1000 + 100);
+}
+
 export const sfx = {
   coin(): void {
     const now = performance.now();
@@ -85,6 +125,13 @@ export const sfx = {
   event(): void {
     tone(988, 0, 0.12, "sine", 0.5);
     tone(1319, 0.1, 0.18, "sine", 0.45);
+  },
+  kopuz(): void {
+    const c = ensure();
+    if (!c || !master || !soundOn()) return;
+    const notes = [147, 175, 196, 220, 262, 294];
+    const seq = [0, 2, 4, 3, 5, 4];
+    seq.forEach((n, k) => pluck(c, notes[n], c.currentTime + k * 0.16, k === seq.length - 1 ? 1.6 : 0.7));
   },
   sword(): void {
     tone(2200, 0, 0.05, "sawtooth", 0.18);

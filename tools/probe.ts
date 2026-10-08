@@ -21,9 +21,20 @@ for (const [name, vp] of [["map-desktop", { width: 1366, height: 768 }], ["map-m
   await page.goto("http://localhost:5173/");
   await page.waitForTimeout(2500);
   const m = page.locator("#modal button").first();
-  if (await m.isVisible().catch(() => false)) await m.click();
+  if (await m.isVisible().catch(() => false)) {
+    if (name === "map-desktop") await page.screenshot({ path: "playtest/modal.png" });
+    await m.click();
+  }
   await page.waitForTimeout(500);
   await page.screenshot({ path: `playtest/${name}.png` });
+  if (name === "map-desktop") {
+    await page.screenshot({ path: "playtest/map-zoom.png", clip: { x: 500, y: 220, width: 300, height: 200 } });
+    for (const tab of ["upgrades", "masters", "dynasty"]) {
+      await page.click(`[data-tab=${tab}]`);
+      await page.waitForTimeout(400);
+      await page.screenshot({ path: `playtest/tab-${tab}.png`, clip: { x: 900, y: 40, width: 466, height: 728 } });
+    }
+  }
   await page.close();
 }
 await browser.close();

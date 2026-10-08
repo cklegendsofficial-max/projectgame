@@ -6,6 +6,20 @@ import {
   UPGRADE_BY_ID,
   type RouteDef,
 } from "./data";
+import { achievementMult } from "./achievements";
+import { chronicleGlobalMult, chronicleOfflineHours, chronicleRouteMult } from "./chronicle";
+import { cityRouteMult } from "./cities";
+import { compMult } from "./companions";
+import { armyBountyMult, armyProfitMult, armySpeedMult, relicBonus } from "./army";
+import { fortRouteMult } from "./warfare";
+import { ageMult, rivalRouteMult, traitMult, wonderMult } from "./empire";
+import { marketMult } from "./market";
+import { seasonRouteMult } from "./world";
+import { tradeWarMult } from "./saga";
+import { diploRouteMult } from "./realm";
+import { govMult } from "./frontier";
+import { artSpeedMult, provinceMult } from "./province";
+import { hanMult } from "./caravanserai";
 import type { GameState } from "./state";
 
 export function milestoneMults(owned: number): { speed: number; profit: number } {
@@ -49,7 +63,7 @@ export function boostActive(s: GameState, now: number): boolean {
 }
 
 export function globalMult(s: GameState, now: number, includeTemp = true): number {
-  let m = sealMult(s);
+  let m = sealMult(s) * chronicleGlobalMult(s) * achievementMult(s) * compMult.profit(s) * ageMult(s) * wonderMult(s) * traitMult.profit(s) * armyProfitMult(s) * provinceMult(s);
   for (const id of s.upgrades) {
     const u = UPGRADE_BY_ID[id];
     if (u && u.kind === "all" && u.mult) m *= u.mult;
@@ -62,7 +76,7 @@ export function globalMult(s: GameState, now: number, includeTemp = true): numbe
 }
 
 export function routeUpgradeMult(s: GameState, i: number): number {
-  let m = 1;
+  let m = chronicleRouteMult(s, i) * cityRouteMult(s, i) * rivalRouteMult(s, i) * fortRouteMult(s, i) * hanMult(s, i) * govMult(s, i);
   for (const id of s.upgrades) {
     const u = UPGRADE_BY_ID[id];
     if (u && u.kind === "route" && u.route === i && u.mult) m *= u.mult;
@@ -71,14 +85,15 @@ export function routeUpgradeMult(s: GameState, i: number): number {
 }
 
 export function tripTime(s: GameState, i: number): number {
-  return ROUTES[i].time / milestoneMults(s.routes[i].owned).speed;
+  return ROUTES[i].time / milestoneMults(s.routes[i].owned).speed / compMult.speed(s) / traitMult.speed(s) / armySpeedMult(s) / artSpeedMult(s);
 }
 
 export function profitPerTrip(s: GameState, i: number, now: number, includeTemp = true): number {
   const r = s.routes[i];
   if (r.owned <= 0) return 0;
   const def = ROUTES[i];
-  return def.profit * r.owned * milestoneMults(r.owned).profit * routeUpgradeMult(s, i) * globalMult(s, now, includeTemp);
+  const season = includeTemp ? seasonRouteMult(i, now) * marketMult(i, now) * tradeWarMult(s, i, now) * diploRouteMult(s, i, now) : 1;
+  return def.profit * r.owned * milestoneMults(r.owned).profit * routeUpgradeMult(s, i) * globalMult(s, now, includeTemp) * season;
 }
 
 export function routeIncomePerSec(s: GameState, i: number, now: number, includeTemp = true): number {
@@ -129,7 +144,7 @@ export function buyCount(s: GameState, i: number, mode: BuyMode): number {
 }
 
 export function offlineCapHours(s: GameState): number {
-  let h = BASE_OFFLINE_HOURS;
+  let h = BASE_OFFLINE_HOURS + chronicleOfflineHours(s) + compMult.offlineHours(s) + relicBonus(s, "offline");
   for (const id of s.upgrades) {
     const u = UPGRADE_BY_ID[id];
     if (u && u.kind === "offline" && u.hours) h += u.hours;
@@ -138,7 +153,7 @@ export function offlineCapHours(s: GameState): number {
 }
 
 export function bountyMult(s: GameState): number {
-  let m = 1;
+  let m = compMult.bounty(s) * traitMult.bounty(s) * armyBountyMult(s);
   for (const id of s.upgrades) {
     const u = UPGRADE_BY_ID[id];
     if (u && u.kind === "bounty" && u.mult) m *= u.mult;
@@ -147,7 +162,7 @@ export function bountyMult(s: GameState): number {
 }
 
 export function merchantMult(s: GameState): number {
-  let m = 1;
+  let m = compMult.trade(s) * traitMult.trade(s);
   for (const id of s.upgrades) {
     const u = UPGRADE_BY_ID[id];
     if (u && u.kind === "merchant" && u.mult) m *= u.mult;
@@ -177,16 +192,18 @@ export function earn(s: GameState, amount: number): void {
 export interface TripEvent {
   route: number;
   amount: number;
+  trips: number;
 }
 
-export function step(s: GameState, dt: number, now: number, out: TripEvent[]): void {
+export function step(s: GameState, dt: number, now: number, out: TripEvent[], pace = 1, whip = -1): void {
   for (let i = 0; i < ROUTES.length; i++) {
     const r = s.routes[i];
     if (r.owned <= 0) continue;
     const auto = s.masters[i];
     if (!auto && !r.running) continue;
     const t = tripTime(s, i);
-    r.progress += dt / t;
+    const burst = i === whip ? 3 : 1;
+    r.progress += (dt * pace * burst) / t;
     if (r.progress >= 1) {
       let trips: number;
       if (auto) {
@@ -200,7 +217,7 @@ export function step(s: GameState, dt: number, now: number, out: TripEvent[]): v
       const amount = profitPerTrip(s, i, now) * trips;
       earn(s, amount);
       r.trips += trips;
-      out.push({ route: i, amount });
+      out.push({ route: i, amount, trips });
     }
   }
 }

@@ -90,7 +90,12 @@ export function watchMuteAudio(cb: (muted: boolean) => void): void {
   }
 }
 
+let lastHappy = 0;
+
 export function happytime(): void {
+  const now = Date.now();
+  if (now - lastHappy < 1500) return;
+  lastHappy = now;
   if (sdkActive()) try { sdk.game.happytime(); } catch { /* ignore */ }
 }
 

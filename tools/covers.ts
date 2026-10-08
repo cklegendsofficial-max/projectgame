@@ -13,6 +13,11 @@ s.lifetimeEarned = 6e9;
 [200, 150, 120, 100, 75, 50, 25, 10].forEach((n, i) => (s.routes[i].owned = n));
 s.masters = s.masters.map(() => true);
 s.tutorial = 99;
+s.chronicle.done = 3;
+s.cityLevels = { samarkand: 3, bukhara: 3, kashgar: 2, merv: 3, nishapur: 2, rey: 2, tabriz: 1, konya: 1, constantinople: 2 };
+const today = new Date();
+s.daily = { last: `${today.getFullYear()}-${today.getMonth() + 1}-${today.getDate()}`, streak: 1 };
+s.achievements = ["firstTrip", "camels100", "camels500", "master1", "masterAll", "allRoutes", "build1", "goldenAge", "million", "billion"];
 s.settings.lang = "en";
 s.lastSave = Date.now();
 const save = Buffer.from(JSON.stringify(s), "utf8").toString("base64");
@@ -29,6 +34,10 @@ for (const L of layouts) {
   const page = await browser.newPage({ viewport: { width: L.w, height: L.h }, deviceScaleFactor: 1 });
   await page.addInitScript((data) => {
     localStorage.setItem("caravan_tycoon_save_v1", data);
+    const real = Date.now.bind(Date);
+    const S = 240_000;
+    const off = Math.floor(real() / S / 4) * S * 4 + 2 * S + S / 2 + 4 * S - real();
+    Date.now = () => real() + off;
     window.addEventListener("beforeunload", (e) => e.stopImmediatePropagation(), true);
     for (const fn of ["fillText", "strokeText"] as const) {
       const orig = CanvasRenderingContext2D.prototype[fn];
@@ -41,13 +50,13 @@ for (const L of layouts) {
   await page.goto(URL);
   await page.waitForTimeout(1500);
   await page.evaluate((L) => {
-    document.querySelectorAll<HTMLElement>("#modal, #topbar, #panel, #hint, #toasts, #buffs").forEach((e) => (e.style.display = "none"));
+    document.querySelectorAll<HTMLElement>("#modal, #topbar, #panel, #hint, #toasts, #buffs, #quest, #season, .mapctl").forEach((e) => (e.style.display = "none"));
     const wrap = document.getElementById("mapWrap")!;
     Object.assign(wrap.style, { position: "fixed", left: L.map[0] + "px", top: L.map[1] + "px", width: L.map[2] + "px", height: L.map[3] + "px", flex: "none" });
     document.body.style.background = "radial-gradient(circle at 50% 30%, #4a2e18, #1c110a)";
     window.dispatchEvent(new Event("resize"));
     const t = document.createElement("div");
-    t.innerHTML = `<div style="font-size:${L.titleSize * 0.7}px;line-height:1">🐪</div>
+    t.innerHTML = `<img src="/src/assets/camels/rider.webp" style="height:${L.titleSize * 0.95}px;filter:drop-shadow(0 6px 8px rgba(0,0,0,.7))">
       <div style="font:bold ${L.titleSize}px Georgia,serif;color:#ffd75e;line-height:1;text-shadow:0 6px 0 #6b3d0e,0 0 30px rgba(0,0,0,.8),0 0 4px #000;-webkit-text-stroke:3px #3a1f08;paint-order:stroke fill">Caravan Tycoon</div>
       <div style="margin-top:${L.titleSize * 0.12}px;font:bold ${L.titleSize * 0.32}px 'Trebuchet MS',sans-serif;letter-spacing:.18em;color:#fff3d6;text-shadow:0 3px 8px #000">SILK ROAD IDLE</div>`;
     Object.assign(t.style, { position: "fixed", left: "0", right: "0", top: L.titleTop + "px", textAlign: "center", zIndex: "50", pointerEvents: "none" });
