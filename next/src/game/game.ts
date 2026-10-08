@@ -15,7 +15,7 @@ import { DAILY_POOL, today, yesterday, type Daily, type DailyTask } from "./dail
 import { gen } from "./text";
 import { BREEDS, BREED_GOLD, BREED_TIME, SHOP_BREEDS, tulparChance, type Breed } from "./horse";
 import { BIRDS, BIRD_KEYS, BIRD_MAX, BIRD_NAMES, HUNTS, birdSight, birdXpNeed, type BirdFlight, type BirdKind } from "./falcon";
-import { LAST_WORDS, NEM_MAX, NEM_TRAITS, REVENGE, SCAR_EPITHETS, TAUNTS, makeNemesis, nemBoss, nemName, type Nemesis } from "./nemesis";
+import { BRO_BETRAY, BRO_MAX, BRO_MODS, LAST_WORDS, NEM_MAX, NEM_TRAITS, REVENGE, SCAR_EPITHETS, TAUNTS, makeNemesis, nemBoss, nemName, type Nemesis } from "./nemesis";
 import { RIVAL_DEFS, RIVAL_LINES, RIVAL_TRAITS, STATUS_NAME, giftCost, oneOf, rivalArmy, rivalBoss, rivalName, tribute, type Rival } from "./rivals";
 import { ENGINE_GOLD, FEAST_GOLD, SIEGE_LV, SIEGE_RENOWN, TAX, cityGarrison, cityTax, wallBonus } from "./conquest";
 import { DEEP_LORE, DEEP_PERKS, DOORS, DOOR_KEYS, RIDDLES, TOMBS, deepBoss, deepGuard, deepTier, tombOf, type DeepPerk, type DeepRun, type DoorKind } from "./deep";
@@ -146,6 +146,11 @@ export class Game {
     if (t) addMods(m, t.mods);
     const b = this.s.bird;
     if (b) addMods(m, BIRDS[b.kind].mods(b.lv));
+    for (const n of this.s.nemeses) {
+      if (!n.bro) continue;
+      const { text: _t, ...bm } = BRO_MODS[n.trait];
+      addMods(m, bm);
+    }
     return m;
   }
 
@@ -1965,7 +1970,7 @@ export class Game {
   private nemGang(b: Bandit, n: Nemesis): void {
     b.nem = n.id;
     const a = banditArmy(b.tier);
-    const m = 1.3 + n.lv * 0.3;
+    const m = (1.3 + n.lv * 0.3) * (n.han ? 1.8 : 1);
     let sp = Math.round(a.spear * m);
     let ar = Math.round(a.archer * m);
     let ho = Math.round(a.horse * m) + n.lv;
@@ -2029,18 +2034,51 @@ export class Game {
         return `<b class="dear">${n.name} son anda atına atlayıp kaçtı!</b> Yüzünde senin kılıcının izi kaldı; artık ona <b>${nemName(n)}</b> diyorlar.<br>+${Math.round(gold * 0.4)} altın · +${3 * n.lv} şöhret`;
       }
       n.alive = false;
-      s.c.slain++;
-      this.chron(`${n.wins ? `${n.wins} kez galip gelen ` : ""}${nemName(n)}, ${s.hero.name} karşısında son nefesini verdi. Kan davası kapandı.`);
       s.c.wins++;
       this.gain({ gold });
-      const renown = 10 + 8 * n.lv;
-      s.renown += renown;
       const it = rollItem(s.nextId++, Math.min(5, b.tier + 1), this.cls(), 0.2 + 0.03 * n.lv);
       s.hero.bag.push(it);
-      this.repNear(b.x, b.y, 15 + 5 * n.lv, `${nemName(n)} öldürüldü`);
-      const lg = this.legendDrop(0.08 + 0.04 * n.lv);
-      this.hud.story(`${nemName(n)} öldü`, "icons/trophy", `Can düşmanın dizlerinin üstüne çöktü. Son sözleri:<br><br><i>${pick(LAST_WORDS)}</i><br><br>Bozkırda adın bir kez daha duyuldu. <b>+${gold} altın · +${renown} şöhret</b><br>Ganimet: <b class="r${it.rar}">${it.name}</b>${lg ? `<br>Efsane: <b class="r4">${lg.name}</b>` : ""}`, "Kan davası bitti");
-      return `<b class="cheap">${nemName(n)} öldü!</b>`;
+      const loot = `<b>+${gold} altın</b> · Ganimet: <b class="r${it.rar}">${it.name}</b>`;
+      const bros = s.nemeses.filter((x) => x.bro).length;
+      const bm = BRO_MODS[n.trait];
+      const kill = () => {
+        s.c.slain++;
+        const wasHan = n.han;
+        this.chron(`${n.wins ? `${n.wins} kez galip gelen ` : ""}${nemName(n)}, ${s.hero.name} karşısında son nefesini verdi. Kan davası kapandı.`);
+        const renown = 10 + 8 * n.lv + (wasHan ? 60 : 0);
+        s.renown += renown;
+        this.repNear(b.x, b.y, 15 + 5 * n.lv, `${nemName(n)} öldürüldü`);
+        const lg = this.legendDrop(0.08 + 0.04 * n.lv + (wasHan ? 0.3 : 0));
+        let fled = "";
+        if (wasHan) {
+          for (const o of s.nemeses) {
+            if (!o.alive) continue;
+            o.lv = Math.max(1, o.lv - 2);
+            if (Math.random() < 0.3) {
+              o.alive = false;
+              fled += `<br>${nemName(o)} korkudan bozkırın ötesine kaçtı.`;
+            }
+          }
+          this.chron(`Harami Kurultayı ${nemName(n)} ile birlikte çöktü. Bozkır yolları bir süre nefes aldı.`);
+        }
+        this.hud.story(`${nemName(n)} öldü`, "icons/trophy", `Son sözleri:<br><br><i>${pick(LAST_WORDS)}</i><br><br>Bozkırda adın bir kez daha duyuldu. <b>+${renown} şöhret</b>${lg ? `<br>Efsane: <b class="r4">${lg.name}</b>` : ""}${wasHan ? `<br><br><b class="cheap">Kurultay dağıldı!</b> Diğer reisler zayıfladı.${fled}` : ""}`, "Kan davası bitti");
+      };
+      const brother = () => {
+        n.bro = true;
+        n.han = false;
+        const room = Math.max(0, this.heroCap() - armySize(s.hero.army));
+        const k = Math.min(room, 2 + n.lv * 2);
+        s.hero.army.horse += k;
+        this.chron(`${nemName(n)} ile ${s.hero.name} kılıçlarının üstünde kan karıştırdı. Dünün can düşmanı, bugünün kan kardeşi.`);
+        audio.play("quest");
+        this.hud.story("Kan kardeşliği", "icons/j_bandit", `Bıçağı avucunda gezdirdin; ${n.name} da aynısını yaptı. Kanlarınız toprağa birlikte damladı.<br><br><i>"Bundan sonra senin düşmanın benim düşmanım, ${s.hero.name}."</i><br><br><b class="cheap">${bm.text}</b>${k ? `<br>Çetesinden <b>${k} atlı</b> birliğine katıldı.` : ""}<br><span class="dim">Kurnaz ve yağmacı kardeşler bir gün ihanet edebilir.</span>`, "Kardeşim");
+      };
+      this.afterBattle = () =>
+        this.hud.choice(`${nemName(n)} dizlerinin üstünde`, "icons/j_bandit", `Can düşmanın kılıcını yere attı. Kanlar içinde sana bakıyor; gözlerinde korku yok.<br><br>${loot}<br><br>Onu öldürebilir ya da kılıcını kendi tuğunun altına alabilirsin.`, [
+          { label: "Kılıçtan geçir · şöhret ve efsane şansı", cls: "bad", fn: kill },
+          { label: bros < BRO_MAX ? `Kan kardeşi yap · ${bm.text}` : `Kan kardeşi yap · en fazla ${BRO_MAX} kardeş`, cls: bros < BRO_MAX ? "go" : "off", fn: bros < BRO_MAX ? brother : kill },
+        ]);
+      return `<b class="cheap">${nemName(n)} yere serildi!</b>`;
     }, boss, nemName(n));
   }
 
@@ -2062,6 +2100,30 @@ export class Game {
       }
     }
     if (rumor) this.hud.toast(`Söylenti: ${nemName(rumor)} yeni adamlar topladı (seviye ${rumor.lv}).`, "bad");
+    const alive = s.nemeses.filter((n) => n.alive);
+    for (const n of s.nemeses) {
+      if (!n.bro || Math.random() >= BRO_BETRAY[n.trait]) continue;
+      const camps = s.camps.map((c, i) => ({ c, i })).filter((x) => x.c.alive);
+      if (!camps.length || alive.length >= NEM_MAX) continue;
+      n.bro = false;
+      n.alive = true;
+      n.lv = Math.min(15, n.lv + 2);
+      n.camp = camps[Math.floor(Math.random() * camps.length)].i;
+      this.chron(`Kan kardeşi ${nemName(n)} bir gece ${gen(s.hero.name)} çadırından sessizce çıktı ve eski yoluna döndü. İhanet bozkırın en eski hikâyesidir.`);
+      this.hud.story("İhanet!", "icons/j_bandit", `Sabah uyandığında ${nemName(n)} yoktu. Yanında birkaç atın ve kesenin bir kısmı da gitmişti.<br><br>Bir kazığa çakılmış not: <i>"Kurt köpek olmaz, kardeşim."</i><br><br><b class="dear">${nemName(n)} yeniden can düşmanın</b> (seviye ${n.lv}).`, "Hain!");
+      s.res.gold = Math.round(s.res.gold * 0.92);
+      return;
+    }
+    if (alive.length >= 3 && s.hero.lv >= 10 && !alive.some((n) => n.han) && Math.random() < 0.25) {
+      const han = alive.reduce((a, b) => (b.lv > a.lv ? b : a));
+      han.han = true;
+      han.lv = Math.min(15, han.lv + 2);
+      for (const o of alive) if (o !== han) o.lv = Math.min(15, o.lv + 1);
+      for (const b of s.bandits) if (b.nem === han.id) this.nemGang(b, han);
+      this.chron(`Harami reisleri bir dağ başında kurultay topladı ve ${nemName(han)} adını haykırdı.`);
+      audio.play("story");
+      this.hud.story("Harami Kurultayı", "icons/j_bandit", `Bozkırda kara bir haber yayıldı: can düşmanların bir dağ başında toplandı, at kanı içip tek bir tuğ altında birleşti.<br><br>Yeni hanları <b class="dear">${nemName(han)}</b> (seviye ${han.lv}). Çetesi iki kat büyük, diğer reisler de güçlendi.<br><br>Hanı öldürürsen kurultay çöker: diğer reisler zayıflar, bazıları korkudan kaçar.`, "Kurultayı dağıtacağım");
+    }
   }
 
   // ---------- weather ----------

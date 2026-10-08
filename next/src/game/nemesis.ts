@@ -11,7 +11,22 @@ export interface Nemesis {
   camp: number;
   alive: boolean;
   why: string;
+  bro?: boolean;
+  han?: boolean;
 }
+
+export const BRO_MAX = 2;
+
+export const BRO_MODS: Record<NemTrait, { atk?: number; def?: number; spd?: number; crit?: number; army?: number; loot?: number; text: string }> = {
+  okcu: { atk: 0.06, text: "Okçularının ustalığı: saldırı +%6" },
+  akinci: { spd: 0.06, text: "Akıncı yolları: hız +%6" },
+  zirhli: { def: 0.06, text: "Demirci sırları: savunma +%6" },
+  kurnaz: { crit: 0.04, text: "Pusu bilgisi: kritik +%4" },
+  korkusuz: { army: 0.05, text: "Korkusuz yiğitler: ordu gücü +%5" },
+  yagmaci: { loot: 0.08, text: "Yağma tecrübesi: ganimet +%8" },
+};
+
+export const BRO_BETRAY: Record<NemTrait, number> = { okcu: 0.01, akinci: 0.015, zirhli: 0.01, kurnaz: 0.04, korkusuz: 0, yagmaci: 0.035 };
 
 export const NEM_TRAITS: Record<NemTrait, { name: string; desc: string; bonus: number }> = {
   okcu: { name: "Okçubaşı", desc: "Çetesi okçulardan oluşur; uzaktan vurur.", bonus: 0.04 },
@@ -50,7 +65,7 @@ export const LAST_WORDS = [
 ];
 
 export function nemName(n: Nemesis): string {
-  return `${n.epithet} ${n.name}`;
+  return `${n.epithet} ${n.name}${n.han ? " Han" : ""}`;
 }
 
 export function makeNemesis(id: number, camp: number, why: string, taken: string[], R: () => number = Math.random): Nemesis {

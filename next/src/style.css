@@ -257,6 +257,8 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #1c120a; col
 .res .wanted { color: #ff5a3c; font-weight: 900; letter-spacing: -1px; text-shadow: 0 0 6px #ff2a1a; animation: wantedblink 1s steps(2) infinite; }
 @keyframes wantedblink { 50% { opacity: .55; } }
 .bbox.choice .btn.big { width: 100%; margin-top: 8px; }
+.grow.nem.han { border-color: #c27bff; box-shadow: 0 0 12px #a64dff55 inset; }
+.grow.rival.dead, .grow.nem.dead { opacity: 0.55; }
 .chron { border-left: 2px solid #b8843e88; margin: 6px 0 8px 6px; padding-left: 12px; }
 .chron .cr { position: relative; margin-bottom: 8px; }
 .chron .cr::before { content: ""; position: absolute; left: -17px; top: 5px; width: 8px; height: 8px; border-radius: 50%; background: #e0b04a; box-shadow: 0 0 6px #e0b04a; }
