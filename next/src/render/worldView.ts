@@ -142,6 +142,9 @@ export class WorldView {
   private nodeM: Marker[] = [];
   private ruinM: Marker[] = [];
   private kurganM: Marker[] = [];
+  private fortM: Marker | null = null;
+  private compM = new Map<string, Container>();
+  private trail: number[] = [];
   private cityM: Marker[] = [];
   private hero!: Container;
   private heroCount!: Text;
@@ -362,6 +365,31 @@ export class WorldView {
     this.heroCount.text = n > 0 ? String(n) : "";
     const inv = Math.min(2.2, Math.max(0.7, 0.75 / cam.zoom));
     this.hero.scale.set(inv);
+    this.trail.push(h.x, h.y);
+    if (this.trail.length > 400) this.trail.splice(0, this.trail.length - 400);
+    s.comps.forEach((id, i) => {
+      let c = this.compM.get(id);
+      if (!c) {
+        c = this.portrait("companions/" + id, 12, 0x8fe07a);
+        this.units.addChildAt(c, 0);
+        this.compM.set(id, c);
+      }
+      const back = Math.max(0, this.trail.length - 2 - (i + 1) * 18 * 2);
+      const tx = this.trail[back] ?? h.x;
+      const ty = this.trail[back + 1] ?? h.y;
+      const fx = Math.hypot(tx - h.x, ty - h.y) < 8 ? h.x - 26 + i * 26 : tx;
+      const fy = Math.hypot(tx - h.x, ty - h.y) < 8 ? h.y + 30 : ty;
+      c.position.set(c.x + (fx - c.x) * Math.min(1, dt * 6), c.y + (fy - c.y) * Math.min(1, dt * 6) - (moving ? Math.abs(Math.sin(this.time * 9 + i)) * 2 : 0));
+      c.scale.set(inv);
+    });
+    if (s.story.fort && !this.fortM) {
+      this.fortM = this.place("map/castle", s.story.fort.x, s.story.fort.y, 140, "Kara Tamga Kalesi", 1);
+      if (this.fortM.label) this.fortM.label.style.fill = "#ff8a8a";
+    }
+    if (this.fortM) {
+      this.fortM.sp.visible = !s.story.done;
+      if (this.fortM.label) this.fortM.label.visible = !s.story.done;
+    }
     const hb = this.heroBars;
     hb.clear();
     const hpK = Math.max(0, Math.min(1, h.hp / game.maxHp()));
@@ -450,6 +478,10 @@ export class WorldView {
 
     this.fxG.clear();
     if (!s.free) this.fxG.circle(CAPITAL.x, CAPITAL.y, SLAVE_RADIUS).stroke({ color: 0xff6a4a, width: 4, alpha: 0.35 + Math.sin(this.time * 2) * 0.1 });
+    if (s.story.fort && !s.story.done) {
+      const pr = (this.time * 0.5) % 1;
+      this.fxG.circle(s.story.fort.x, s.story.fort.y - 20, 60 + pr * 50).stroke({ color: 0xff3a3a, width: 4, alpha: 0.6 * (1 - pr) });
+    }
     for (const k of s.kurgans) {
       if (!k.alive || !game.isExplored(k.x, k.y)) continue;
       const pr = (this.time * 0.6 + k.x * 0.001) % 1;

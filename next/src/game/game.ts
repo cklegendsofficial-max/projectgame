@@ -6,11 +6,13 @@ import { fight, odds, type BattleResult, type Boss, type Champion } from "./batt
 import { BUILDINGS, BUILDING_BY_ID, CITY_NAME, DAY_SEC, RES_KEYS, UNITS, UNIT_KEYS, army, armyPower, armySize, buildCost, buildTime, prodPerMin, storageCap, trainSpeed, unitUnlocked, xpNeed, type Army, type BuildingId, type Res, type Unit } from "./data";
 import { CITY_TRADE, GOODS, GOOD_KEYS, PLUS_CHANCE, STAT_INFO, canPlus, classItem, goodMult, itemPrice, makeItem, plusCost, rollItem, setPlus, skillLv, type Good, type Item, type Skill, type Slot, type Stat } from "./rpg";
 import { CLASS_BY_ID, CLASS_SKILLS, SKILL_MAX, WEAPON_NAME, WEAPON_STAT, skillPow, skillRank, type ClassDef, type ClassId, type ClassSkill, type WeaponKind } from "./classes";
+import { CHAPTERS, COMP_BY_ID, COMP_MAX, FORT_GUARD, KARA_HAN, KASIM, type Chapter, type CompId, type CompMods, type Companion } from "./story";
 import { CAPITAL, SLAVE_RADIUS, banditArmy, campGarrison, kurganBoss, kurganGuard, loadGame, saveGame, type Bandit, type Bounty, type GameState } from "./state";
 
 export type Target =
   | { kind: "village" | "camp" | "node" | "ruin" | "city" | "bandit" | "kurgan"; i: number }
   | { kind: "capital" }
+  | { kind: "fort" }
   | { kind: "point"; x: number; y: number };
 
 export interface Quest {
@@ -122,8 +124,8 @@ export class Game {
   heroAtk(): number {
     const w = this.eq("silah");
     const m = this.cls().mods.atk;
-    if (!w) return (2 + this.stat("guc") * 1.5) * m;
-    return (w.atk + this.stat(WEAPON_STAT[w.kind as WeaponKind] ?? "guc") * 1.5) * (1 + this.skill("silah") * 0.06) * m;
+    if (!w) return (2 + this.stat("guc") * 1.5) * m * (1 + this.compMods().atk);
+    return (w.atk + this.stat(WEAPON_STAT[w.kind as WeaponKind] ?? "guc") * 1.5) * (1 + this.skill("silah") * 0.06) * m * (1 + this.compMods().atk);
   }
 
   heroDef(): number {
@@ -140,7 +142,7 @@ export class Game {
       crit: m.crit + (this.eq("silah")?.crit ?? 0),
       critMult: m.critMult,
       dodge: m.dodge,
-      heal: m.heal,
+      heal: m.heal + this.compMods().heal,
       rage: m.rage,
       firstStrike: m.firstStrike,
       skills: this.classSkills()
@@ -179,7 +181,7 @@ export class Game {
   }
 
   heroBonus(): number {
-    return 0.025 * this.stat("lid") + 0.02 * (this.s.hero.lv - 1) + this.cls().mods.army;
+    return 0.025 * this.stat("lid") + 0.02 * (this.s.hero.lv - 1) + this.cls().mods.army + this.compMods().army;
   }
 
   heroCap(): number {
@@ -188,7 +190,7 @@ export class Game {
   }
 
   carryCap(): number {
-    return 10 + this.stat("guc") * 3 + (this.eq("at")?.carry ?? 0) + armySize(this.s.hero.army) * 2;
+    return 10 + this.stat("guc") * 3 + (this.eq("at")?.carry ?? 0) + armySize(this.s.hero.army) * 2 + this.compMods().carry;
   }
 
   cargoUsed(): number {
@@ -259,10 +261,11 @@ export class Game {
     this.fogT += dt;
     if (this.fogT > 0.25) {
       this.fogT = 0;
-      this.reveal(s.hero.x, s.hero.y, 11);
+      this.reveal(s.hero.x, s.hero.y, 11 + this.compMods().sight);
       for (const m of s.marches) this.reveal(m.x, m.y, 5);
     }
     this.quests();
+    this.storyTick();
     this.saveT += dt;
     if (this.saveT > 8) {
       this.saveT = 0;
@@ -512,6 +515,8 @@ export class Game {
       c.portrait,
       `Efendin akçeleri sayıp boynundaki demir halkayı çözdü. "Git bakalım ${s.hero.name}, yollar senin artık."<br><br>Sırtında eski bir ${armor.name.toLocaleLowerCase("tr")}, kalbinde bir <b>${c.name}</b> ateşi var. ${c.passive}<br><br>Demirciden ${c.weapons.map((w) => WEAPON_NAME[w].toLocaleLowerCase("tr")).join(" ya da ")} al, talim yap, köylerden yoldaş topla. Bir gün kendi beyliğini kuracaksın.`,
     );
+    const ch = CHAPTERS[0];
+    this.hud.story(`Kara Tamga Destanı · Bölüm 1: ${ch.title}`, ch.img, `${ch.intro}<br><br><b>Hedef:</b> ${ch.goal}`, "Yola çık");
   }
 
   beylikCost(): { gold: number; renown: number } {
@@ -554,11 +559,11 @@ export class Game {
   }
 
   buyFactor(): number {
-    return Math.max(1.02, 1.12 - this.skill("ticaret") * 0.006 - this.stat("kar") * 0.004 - this.cls().mods.trade);
+    return Math.max(1.02, 1.12 - this.skill("ticaret") * 0.006 - this.stat("kar") * 0.004 - this.cls().mods.trade - this.compMods().trade);
   }
 
   sellFactor(): number {
-    return Math.min(0.98, 0.88 + this.skill("ticaret") * 0.006 + this.stat("kar") * 0.004 + this.cls().mods.trade);
+    return Math.min(0.98, 0.88 + this.skill("ticaret") * 0.006 + this.stat("kar") * 0.004 + this.cls().mods.trade + this.compMods().trade);
   }
 
   buyPrice(city: string, g: Good): number {
@@ -877,6 +882,8 @@ export class Game {
         return s.ruins[t.i];
       case "kurgan":
         return s.kurgans[t.i];
+      case "fort":
+        return s.story.fort;
       case "bandit":
         return s.bandits.find((b) => b.id === t.i) ?? null;
     }
@@ -946,12 +953,13 @@ export class Game {
     s.nodes.forEach((n, i) => test({ kind: "node", i }, n.x, n.y));
     s.ruins.forEach((n, i) => !n.looted && test({ kind: "ruin", i }, n.x, n.y));
     s.kurgans.forEach((k, i) => k.alive && test({ kind: "kurgan", i }, k.x, k.y, 1.3));
+    if (s.story.fort && !s.story.done) test({ kind: "fort" }, s.story.fort.x, s.story.fort.y, 2);
     return best;
   }
 
   heroSpeed(): number {
     const n = armySize(this.s.hero.army);
-    return HERO_SPEED * (1 + this.stat("cev") * 0.02 + (this.eq("at")?.spd ?? 0)) * (1 - Math.min(0.35, n / 300));
+    return HERO_SPEED * (1 + this.stat("cev") * 0.02 + (this.eq("at")?.spd ?? 0) + this.compMods().speed) * (1 - Math.min(0.35, n / 300));
   }
 
   private moveHero(dt: number): void {
@@ -1141,6 +1149,7 @@ export class Game {
 
   addXp(xp: number): boolean {
     const h = this.s.hero;
+    xp = Math.round(xp * (1 + this.compMods().xp));
     h.xp += xp;
     let up = false;
     while (h.xp >= xpNeed(h.lv)) {
@@ -1213,6 +1222,128 @@ export class Game {
   kurganOdds(i: number): number {
     const k = this.s.kurgans[i];
     return this.odds(k.guard, 0.1 * k.tier, kurganBoss(k.tier));
+  }
+
+  // ---------- story & companions ----------
+
+  chapter(): Chapter | null {
+    return this.s.story.done ? null : (CHAPTERS[this.s.story.ch] ?? null);
+  }
+
+  chapterReady(): boolean {
+    const ch = this.chapter();
+    return !!ch && this.s.free && !ch.req?.(this);
+  }
+
+  storyAdvance(): void {
+    const ch = this.chapter();
+    if (!ch) return;
+    if (ch.outro) this.hud.story(ch.outro.title, ch.outro.img, ch.outro.text(this), "Devam");
+    this.s.story.ch++;
+    if (this.s.story.ch === 4) this.placeFort();
+    const next = this.chapter();
+    if (next) this.hud.story(`Bölüm ${this.s.story.ch + 1}: ${next.title}`, next.img, `${next.intro}<br><br><b>Hedef:</b> ${next.goal}`, "Yola çık");
+    this.addXp(40 * this.s.story.ch);
+    saveGame(this.s);
+  }
+
+  private storyTick(): void {
+    const ch = this.chapter();
+    if (ch?.auto && this.chapterReady() && !this.battleLock && ch.auto(this)) this.storyAdvance();
+  }
+
+  private placeFort(): void {
+    const s = this.s;
+    let best = 0;
+    s.camps.forEach((c, i) => {
+      if (Math.hypot(c.x - CAPITAL.x, c.y - CAPITAL.y) > Math.hypot(s.camps[best].x - CAPITAL.x, s.camps[best].y - CAPITAL.y)) best = i;
+    });
+    const c = s.camps[best];
+    c.alive = false;
+    c.respawnAt = 9e15;
+    s.bandits = s.bandits.filter((b) => b.camp !== best);
+    s.story.fort = { x: c.x, y: c.y };
+    this.reveal(c.x, c.y, 8);
+  }
+
+  fortOdds(): number {
+    return this.odds(FORT_GUARD, 0.3, KARA_HAN);
+  }
+
+  attackFort(): void {
+    if (!this.s.story.fort || this.s.story.done) return;
+    this.battle("Kara Tamga Kalesi", FORT_GUARD, 0.3, (win) => {
+      if (!win) return "Kara Han'ın ordusu seni püskürttü. Birliğini büyüt, eşyalarını güçlendir ve tekrar dene.";
+      const s = this.s;
+      s.story.done = true;
+      s.story.ch = CHAPTERS.length;
+      s.renown += 100;
+      s.mats.ruh += 25;
+      s.mats.parsomen += 3;
+      this.gain({ gold: 5000 });
+      const it = classItem(s.nextId++, this.cls(), "silah", 5, 3);
+      s.hero.bag.push(it);
+      this.hud.story(
+        "Destan tamamlandı: Kara Tamga yıkıldı",
+        this.face(),
+        `Kara Han'ın kılıcı elinden düştü. Kalenin zindanlarında annenle küçük Ertuğrul'u buldun; zincirlerini kendi ellerinle kırdın. Esirlerin ruhları mor bir ışık selinde göğe yükseldi ve bozkırdaki bütün Kurgan Taşları bir an için sustu.<br><br>Ozanlar artık senin adını söylüyor: <b>${s.hero.name}, İpek Yolu'nun Kurtarıcısı</b>.<br><br>Ama Kara Han'ın kılıcını alan herkes bilir: bozkırda boşalan taht uzun süre boş kalmaz. Yolların, beyliğin ve ordun seni bekliyor.`,
+        "Yola devam",
+      );
+      return `Kara Han yenildi! +5000 altın, +100 şöhret, +25 Ruh Taşı, +3 Parşömen<br>Efsanevi ganimet: <b class="r3">${it.name}</b>`;
+    }, KARA_HAN, "Kara Tamga ordusu");
+  }
+
+  fightKasim(): void {
+    this.battle("Merv esir pazarı", army(8, 4, 0), 0.1, (win) => {
+      if (!win) return "Kasım'ın adamları seni pazardan attı. Güçlenip geri dön.";
+      this.rescueAyse(true);
+      return "Kasım yere serildi, zincirler kırıldı!";
+    }, KASIM, "Kasım'ın adamları");
+  }
+
+  rescueAyse(fought: boolean): void {
+    this.addCompanion("ayse");
+    if (fought) this.s.renown += 10;
+    this.storyAdvance();
+  }
+
+  hasComp(id: CompId): boolean {
+    return this.s.comps.includes(id);
+  }
+
+  addCompanion(id: CompId): void {
+    if (this.hasComp(id)) return;
+    this.s.comps.push(id);
+    this.hud.toast(`${COMP_BY_ID[id].name} yoldaşın oldu!`, "good");
+  }
+
+  hiredCount(): number {
+    return this.s.comps.filter((c) => COMP_BY_ID[c as CompId]?.hire).length;
+  }
+
+  hireReason(c: Companion): string | null {
+    if (!c.hire) return "";
+    if (this.hasComp(c.id)) return "Zaten yanında";
+    if (this.hiredCount() >= COMP_MAX) return `En fazla ${COMP_MAX} paralı yoldaş`;
+    if (this.s.renown < c.hire.renown) return `${c.hire.renown} şöhret gerekir`;
+    if (this.s.res.gold < c.hire.gold) return "Altın yetersiz";
+    return null;
+  }
+
+  hireCompanion(id: CompId): void {
+    const c = COMP_BY_ID[id];
+    if (this.hireReason(c) || !c.hire || this.nearCity() < 0) return;
+    this.pay({ gold: c.hire.gold });
+    this.addCompanion(id);
+  }
+
+  compMods(): CompMods {
+    const m: CompMods = { atk: 0, army: 0, heal: 0, xp: 0, trade: 0, carry: 0, speed: 0, sight: 0 };
+    for (const id of this.s.comps) {
+      const c = COMP_BY_ID[id as CompId];
+      if (c) for (const k of Object.keys(c.mods) as (keyof CompMods)[]) m[k] += c.mods[k] ?? 0;
+    }
+    return m;
   }
 
   recruitCost(): number {

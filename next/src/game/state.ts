@@ -160,6 +160,8 @@ export interface GameState {
   bountyDay: number;
   wageDebt: number;
   mats: { ruh: number; parsomen: number };
+  story: { ch: number; fort: { x: number; y: number } | null; done: boolean };
+  comps: string[];
 }
 
 export const CAPITAL = CITIES.find((c) => c.id === "samarkand")!;
@@ -252,7 +254,7 @@ export const KURGAN_BOSS = [
 
 export function kurganBoss(tier: number) {
   const b = KURGAN_BOSS[tier >= 3 ? 1 : 0];
-  return { name: b.name, icon: b.icon, hp: Math.round(115 * Math.pow(tier, 1.55)), atk: Math.round(6 * Math.pow(tier, 1.45)), def: 2 + tier * 3 };
+  return { name: b.name, icon: b.icon, hp: Math.round(105 * Math.pow(tier, 1.45)), atk: Math.round(6 * Math.pow(tier, 1.3)), def: 2 + tier * 3 };
 }
 
 export function campGarrison(tier: number, R: () => number = Math.random): Army {
@@ -325,6 +327,8 @@ export function newGame(w: World): GameState {
     bountyDay: 0,
     wageDebt: 0,
     mats: { ruh: 0, parsomen: 0 },
+    story: { ch: 0, fort: null, done: false },
+    comps: [],
   };
 }
 
@@ -376,6 +380,7 @@ export function loadGame(w: World): GameState {
       hero: { ...fresh.hero, ...(r.hero ?? {}), path: null, pathI: 0 },
       c: { ...fresh.c, ...(r.c ?? {}) },
       mats: { ...fresh.mats, ...(r.mats ?? {}) },
+      story: { ...fresh.story, ...(r.story ?? {}) },
       explored: typeof r.explored === "string" ? decodeBits(r.explored, NW * NH) : fresh.explored,
       bandits: [],
       marches: Array.isArray(r.marches) ? r.marches : [],

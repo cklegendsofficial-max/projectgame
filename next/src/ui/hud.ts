@@ -4,6 +4,7 @@ import type { BattleResult, Boss } from "../game/battle";
 import { GOODS, GOOD_KEYS, PLUS_CHANCE, SKILL_INFO, SKILL_KEYS, SLOTS, SLOT_NAME, STAT_INFO, STAT_KEYS, canPlus, itemStats, kindName, plusCost, skillLv, skillNext, type Item } from "../game/rpg";
 import { ARMOR_NAME, CLASSES, SKILL_MAX, WEAPON_NAME, skillPow, skillRank, type ClassId } from "../game/classes";
 import { CAPITAL, kurganBoss } from "../game/state";
+import { COMPANIONS, COMP_BY_ID, COMP_MAX, FORT_GUARD, KARA_HAN, type CompId } from "../game/story";
 import { CITIES, H, NH, NW, W } from "../world/gen";
 import { assetUrl } from "../render/worldView";
 
@@ -43,6 +44,7 @@ export class Hud {
   private root = document.getElementById("hud")!;
   private top!: HTMLElement;
   private questEl!: HTMLElement;
+  private sagaEl!: HTMLElement;
   private actEl!: HTMLElement;
   private panel!: HTMLElement;
   private toasts!: HTMLElement;
@@ -63,7 +65,7 @@ export class Hud {
   constructor(private g: Game) {
     this.root.innerHTML = `
       <div class="top"></div>
-      <div class="quest"></div>
+      <div class="track"><div class="quest"></div><div class="quest saga hidden"></div></div>
       <div class="toasts"></div>
       <div class="actbar hidden"></div>
       <div class="bottom">
@@ -75,6 +77,11 @@ export class Hud {
       <div class="panel hidden"></div>`;
     this.top = this.root.querySelector(".top")!;
     this.questEl = this.root.querySelector(".quest")!;
+    this.sagaEl = this.root.querySelector(".saga")!;
+    this.sagaEl.addEventListener("click", () => {
+      const p = g.chapter()?.goto(g);
+      if (p) g.cam.flyTo(p.x, p.y, Math.max(g.cam.zoom, 0.65));
+    });
     this.actEl = this.root.querySelector(".actbar")!;
     this.panel = this.root.querySelector(".panel")!;
     this.toasts = this.root.querySelector(".toasts")!;
@@ -201,8 +208,15 @@ export class Hud {
     setTimeout(() => el.remove(), 3300);
   }
 
+  private storyQ: [string, string, string, string][] = [];
+
   story(title: string, img: string, html: string, btn = "Devam"): void {
+    if (this.storyOpen || this.battleOpen) {
+      this.storyQ.push([title, img, html, btn]);
+      return;
+    }
     this.storyOpen = true;
+    this.close();
     const el = document.createElement("div");
     el.className = "battle";
     el.innerHTML = `<div class="bbox story"><img class="simg" src="${assetUrl(img)}" alt=""><h2>${title}</h2><p>${html}</p><button class="btn go big">${btn}</button></div>`;
@@ -210,7 +224,13 @@ export class Hud {
     el.querySelector(".btn")!.addEventListener("click", () => {
       el.remove();
       this.storyOpen = false;
+      this.nextStory();
     });
+  }
+
+  private nextStory(): void {
+    const n = this.storyQ.shift();
+    if (n) this.story(...n);
   }
 
   questDone(q: Quest): void {
@@ -324,6 +344,21 @@ export class Hud {
       case "node":
         html = this.nodeHtml(t.i);
         break;
+      case "fort": {
+        const f = s.story.fort;
+        if (!f) return this.close();
+        const near = Math.hypot(f.x - s.hero.x, f.y - s.hero.y) < 100;
+        const p = Math.round(g.fortOdds() * 100);
+        html = this.frame("Kara Tamga Kalesi", "Kara Han'ın ini · Destanın sonu", assetUrl("map/castle"), s.story.done ? "<p>Kale yıkıldı. Zindanlar boş, esirler özgür.</p>" : `
+          <p>Kayalıkların arasında, kara bayraklarla donanmış bir kale. Surların ardından zincir sesleri ve davul gümbürtüsü geliyor. Kara Han burada, esirlerin ruhlarıyla son taşı uyandırmak üzere.</p>
+          <div class="brow">${ic(KARA_HAN.icon, "bimg round")}<div class="bi2"><b>${KARA_HAN.name}</b><small>Can ${KARA_HAN.hp} · Saldırı ${KARA_HAN.atk} · Savunma ${KARA_HAN.def}</small></div></div>
+          <h3>Kale muhafızları</h3>${armyHtml(FORT_GUARD, "enemy")}
+          <h3>Sen ve birliğin</h3>${armyHtml(s.hero.army)}
+          <div class="odds ${p >= 65 ? "good" : p >= 35 ? "mid" : "bad"}">Zafer şansı: <b>%${p}</b></div>
+          <p class="dim">Önerilen: 15+ seviye, 100+ asker, +5 ve üstü silah. Yoldaşların ve becerilerin büyük fark yaratır.</p>
+          ${near ? `<button class="btn red big" data-a="${this.act(() => { this.close(); g.attackFort(); })}">${ic("swords")} Kaleye saldır!</button>` : this.walkBtn(t, "Kaleye yürü")}`);
+        break;
+      }
       case "kurgan": {
         const k = s.kurgans[t.i];
         const b = kurganBoss(k.tier);
@@ -465,7 +500,11 @@ export class Hud {
           const cp = s.camps[b.camp];
           return `<div class="grow">${ic("j_bandit", "gimg")}<div class="bi2"><b>${cp.name} <em>Sv ${cp.tier}</em></b><small>Ödül: ${b.gold} altın · ${b.renown} şöhret</small></div>${b.taken ? `<button class="btn sm" data-a="${this.act(() => { this.close(); g.cam.flyTo(cp.x, cp.y, 0.8); })}">Göster</button>` : `<button class="btn sm ${!near || !s.free ? "off" : ""}" data-a="${this.act(() => g.takeBounty(i))}">İlanı al</button>`}</div>`;
         }).join("") || `<p class="dim">Şu an ilan yok.</p>`) +
-        `<h3>${ic("merc")} Paralı askerler</h3><p class="dim">Askerlerin günlük ücret ister. Altının biterse terk ederler.</p><div class="col">${hire("spear")}${hire("archer")}${hire("horse")}</div>`;
+        `<h3>${ic("merc")} Paralı askerler</h3><p class="dim">Askerlerin günlük ücret ister. Altının biterse terk ederler.</p><div class="col">${hire("spear")}${hire("archer")}${hire("horse")}</div>` +
+        COMPANIONS.filter((cp) => cp.hire?.city === c.id).map((cp) => {
+          const why = g.hireReason(cp);
+          return `<h3>${ic("tug")} Handaki yolcu</h3><div class="comp ${g.hasComp(cp.id) ? "on" : ""}"><img src="${assetUrl(cp.icon)}" alt=""><div class="bi2"><b>${cp.name} <em>${cp.role}</em></b><small>${cp.desc}</small><small class="cheap">${cp.perk}</small>${why ? `<small class="why">${why}</small>` : ""}</div>${g.hasComp(cp.id) ? "" : `<button class="btn sm ${why || !near ? "off" : ""}" data-a="${this.act(() => g.hireCompanion(cp.id))}">Yanına al<br>${ic("coins")}${cp.hire!.gold}</button>`}</div>`;
+        }).join("");
     } else if (this.tab === "beylik") {
       const bc = g.beylikCost();
       const ok = near && s.renown >= bc.renown && s.res.gold >= bc.gold;
@@ -475,7 +514,23 @@ export class Hud {
         <p class="dim">Şöhret; haramileri yenerek, kampları yıkarak ve ödül ilanlarını tamamlayarak kazanılır.</p>`;
     } else body = this.beylikTabs();
     const sub = isCap ? (s.beylik ? `Beyliğinin merkezi · Saray Sv ${g.bld("saray")}` : !s.free ? "Efendinin şehri" : "İpek Yolu şehri") : "İpek Yolu şehri";
-    return this.frame(g.cityName(ci), sub, assetUrl("cities/" + c.id), tabs + body);
+    return this.frame(g.cityName(ci), sub, assetUrl("cities/" + c.id), this.sagaBox(c.id, near) + tabs + body);
+  }
+
+  private sagaBox(cityId: string, near: boolean): string {
+    const g = this.g;
+    const ch = g.chapter();
+    if (!ch || ch.city !== cityId || !ch.scene || !g.s.free) return "";
+    const why = ch.req?.(g);
+    const btns = why
+      ? `<p class="why">${why}</p>`
+      : !near
+        ? `<p class="why">Şehre gitmelisin.</p>`
+        : `<div class="row">${ch.scene.choices.map((c) => {
+            const w = c.why?.(g);
+            return `<button class="btn ${w ? "off" : "go"}" title="${w ?? ""}" data-a="${this.act(() => c.run(g))}">${c.label}</button>`;
+          }).join("")}</div>`;
+    return `<div class="saga-box"><img src="${assetUrl(ch.scene.img)}" alt=""><div><h3>Destan · ${ch.title}</h3><p>${why ? ch.goal : ch.scene.text(g)}</p>${btns}</div></div>`;
   }
 
   private beylikTabs(): string {
@@ -573,6 +628,10 @@ export class Hud {
     } else {
       body = `<div class="stats"><div>${ic("tug")}Birlik: <b>${armySize(h.army)}/${g.heroCap()}</b></div><div>${ic("coins")}Ücret: <b>${g.wagePerMin().toFixed(1)}/dk</b></div><div>${ic("shield")}Toplam güç: <b>${Math.round(g.heroPower())}</b></div></div>
         ${armyHtml(h.army)}
+        <h3>${ic("tug")} Yoldaşlar (${s.comps.length})</h3>${s.comps.map((id) => {
+          const cp = COMP_BY_ID[id as CompId];
+          return cp ? `<div class="comp on"><img src="${assetUrl(cp.icon)}" alt=""><div class="bi2"><b>${cp.name} <em>${cp.role}</em></b><small class="cheap">${cp.perk}</small></div></div>` : "";
+        }).join("") || `<p class="dim">Henüz yoldaşın yok. Destan seni yeni dostlarla buluşturacak; bazı şehirlerin hanlarında da yolcular bekler (en fazla ${COMP_MAX} paralı yoldaş).</p>`}
         <p class="dim">${s.free ? "Köylerden gönüllü topla ya da şehir hanlarından paralı asker tut. Askerlerin ücretini altınla ödersin; altının biterse terk ederler. Liderlik birlik sınırını ve askerlerin gücünü artırır." : "Henüz bir kölesin. Hürriyetini kazanınca birlik kurabilirsin."}</p>
         <h3>Toplam</h3><div class="stats"><div>${ic("j_bandit")}Yenilen düşman: <b>${s.kills}</b></div><div>${ic("quest")}Görev: <b>${s.quest}/${g.QUESTS.length}</b></div><div>Ticaret kârı: <b>${s.c.profit}</b></div></div>`;
     }
@@ -648,6 +707,7 @@ export class Hud {
         el.remove();
         this.battleOpen = false;
         onClose();
+        this.nextStory();
       });
     };
     setTimeout(step, 600);
@@ -680,6 +740,14 @@ export class Hud {
     this.questEl.innerHTML = q
       ? `${ic("quest", "qi")}<div><small>Görev ${s.quest + 1}/${g.QUESTS.length}</small><b>${q.title}</b><span>${q.text}</span><em>${costHtml(q.reward, g)}</em></div>`
       : `${ic("crown", "qi")}<div><b>Tüm görevler bitti</b><span>Kampları temizle, beyliğini büyüt, batıya doğru keşfet.</span></div>`;
+    const ch = g.chapter();
+    this.questEl.classList.toggle("hidden", !q && !!ch && s.free);
+    this.sagaEl.classList.toggle("hidden", !ch || !s.free);
+    if (ch && s.free) {
+      const why = ch.req?.(g);
+      const html = `${ic(ch.img, "qi round")}<div><small>Kara Tamga Destanı · Bölüm ${s.story.ch + 1}/5</small><b>${ch.title}</b><span>${ch.goal}${why ? ` <i class="why">(${why})</i>` : ""}</span></div>`;
+      if (this.sagaEl.innerHTML !== html) this.sagaEl.innerHTML = html;
+    }
     const bld = g.building();
     this.root.querySelector('[data-b="capital"] span')!.textContent = bld ? `⏱ ${dur(s.buildings[bld].until - g.now)}` : "Semerkant";
     const hb = this.root.querySelector('[data-b="hero"]')!;
