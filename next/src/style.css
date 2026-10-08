@@ -151,7 +151,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #1c120a; col
 .bbox h2 { margin: 0 0 12px; text-align: center; font: bold 22px Georgia, serif; color: #ffe7a8; display: flex; justify-content: center; align-items: center; gap: 8px; }
 .bbox h2 .ic { width: 30px; height: 30px; }
 .sides { display: flex; align-items: center; gap: 10px; }
-.side { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.side { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .bp { width: 72px; height: 72px; border-radius: 50%; object-fit: cover; border: 3px solid #ffd56a; background: #1a0f06; }
 .foe .bp { border-color: #d2452c; }
 .side .bar { width: 100%; }
@@ -269,5 +269,15 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #1c120a; col
   .bottom { bottom: 6px; }
   .bottom button { width: 74px; }
   .bottom .bi { width: 34px; height: 34px; }
-  .panel { inset: auto 0 0 0; top: 20vh; width: auto; border-radius: 16px 16px 0 0; }
+  .panel { inset: auto 0 0 0; top: 20vh; width: auto; border-radius: 16px 16px 0 0; background: linear-gradient(#2e1d0f, #1a1008); }
+  body:has(.panel:not(.hidden)) .track { display: none; }
+  .toasts { top: 128px; left: 8px; right: 8px; transform: none; }
+  .toast { font-size: 13px; padding: 6px 12px; max-width: 100%; text-align: center; }
+  .qdone { top: 30vh; padding: 10px 16px; }
+  .bbox { padding: 12px; }
+  .sides { gap: 4px; }
+  .vs { font-size: 20px; }
+  .side .army { gap: 3px; flex-wrap: nowrap; }
+  .side .army .u { padding: 2px 3px; font-size: 12px; }
+  .side .army .u .ic { width: 16px; height: 16px; }
 }

@@ -49,7 +49,10 @@ await ev(`g.s.res.gold = Math.max(g.s.res.gold, 110); const c = g.targetPos({kin
 await shot(page, "06-master", 500);
 await ev(`g.buyFreedom();`);
 await shot(page, "07-freedom", 600);
-await page.locator(".battle .btn").click();
+for (let k = 0; k < 4 && (await page.locator(".battle .bbox.story .btn").count()); k++) {
+  await page.locator(".battle .bbox.story .btn").first().click();
+  await page.waitForTimeout(250);
+}
 await ev(`g.s.res.gold += 120; g.hud.openPlace({kind:"capital"});`);
 await page.locator(".tab", { hasText: "Demirci" }).click();
 await shot(page, "08-smith", 400);
