@@ -232,8 +232,17 @@ export class WorldView {
       s.blendMode = "add";
       this.lights.addChild(s);
     }
+    this.torch = new Sprite(glow);
+    this.torch.anchor.set(0.5);
+    this.torch.tint = 0xffa040;
+    this.torch.width = this.torch.height = 230;
+    this.torch.blendMode = "add";
+    this.lights.addChild(this.torch);
     this.layer.addChild(this.lights);
   }
+
+  private torch!: Sprite;
+  private campFires: Sprite[] = [];
 
   private drawStorms(game: Game, dt: number): void {
     const live = new Set<number>();
@@ -375,6 +384,16 @@ export class WorldView {
     const s = game.s;
     this.villageM = s.villages.map((v) => this.place(v.yurt ? "map/yurts" : "map/village", v.x, v.y, 74, v.name, 0.62));
     this.campM = s.camps.map((c) => this.place("map/camp", c.x, c.y, 84, c.name, 0.62));
+    this.campFires = s.camps.map((c) => {
+      const f = new Sprite(this.glow);
+      f.anchor.set(0.5);
+      f.tint = 0xff6a2a;
+      f.width = f.height = 150;
+      f.position.set(c.x, c.y);
+      f.blendMode = "add";
+      this.lights.addChild(f);
+      return f;
+    });
     this.nodeM = s.nodes.map((n) => this.place("map/" + NODE_SPRITE[n.kind], n.x, n.y, 70));
     this.ruinM = s.ruins.map((r) => this.place("map/ruins", r.x, r.y, 72));
     this.kurganM = s.kurgans.map((k) => this.place("map/kurgan", k.x, k.y, 62, `Kurgan Taşı Sv ${k.tier}`, 0.62));
@@ -806,6 +825,16 @@ export class WorldView {
     if (dark > 0.01) this.night.rect(0, 0, W, H).fill({ color: 0x0c1430, alpha: dark });
     this.lights.visible = dark > 0.03;
     this.lights.alpha = Math.min(0.85, dark * 2.4) * (0.92 + Math.sin(this.time * 3) * 0.08);
+    if (this.lights.visible) {
+      const h = game.s.hero;
+      this.torch.position.set(h.x, h.y - 6);
+      this.torch.width = this.torch.height = 220 + Math.sin(this.time * 9) * 8 + Math.sin(this.time * 23) * 4;
+      this.campFires.forEach((f, i) => {
+        const c = game.s.camps[i];
+        f.visible = c.alive && game.isExplored(c.x, c.y);
+        f.width = f.height = 140 + Math.sin(this.time * 7 + i) * 10;
+      });
+    }
     for (const c of this.clouds.children) {
       c.x += dt * 9;
       c.y += dt * 2;

@@ -75,6 +75,7 @@ export class Game {
   deep: DeepRun | null = null;
   birdFly: BirdFlight | null = null;
   birdAim = false;
+  private wasNight = false;
   private deepBest0 = 0;
   private afterBattle: (() => void) | null = null;
 
@@ -633,6 +634,11 @@ export class Game {
       this.nemTick();
       this.birdTick(dt);
       this.studTick();
+      const night = this.isNight();
+      if (night !== this.wasNight) {
+        this.wasNight = night;
+        if (s.free) this.hud.toast(night ? `Gece çöktü. Haramiler cesurlaştı; Kurgan Taşları güçlendi ama daha çok Ruh Taşı verir.${this.nightEyes() ? " Gözlerin karanlığa alışkın." : ""}` : "Şafak söktü. Yollar yeniden canlanıyor.", "info");
+      }
       this.stormTick(dt);
       this.marches(dt, now);
     }
@@ -640,7 +646,7 @@ export class Game {
     if (this.fogT > 0.25) {
       this.fogT = 0;
       const hs = this.heroStorm();
-      this.reveal(s.hero.x, s.hero.y, 11 + this.compMods().sight + 2 * this.tal("kartal") + (s.bird ? birdSight(s.bird) : 0) - (hs ? (hs.kind === "kum" ? 6 : 3) : 0));
+      this.reveal(s.hero.x, s.hero.y, 11 + this.compMods().sight + 2 * this.tal("kartal") + (s.bird ? birdSight(s.bird) : 0) - (this.isNight() && !this.nightEyes() ? 2 : 0) - (hs ? (hs.kind === "kum" ? 6 : 3) : 0));
       for (const m of s.marches) this.reveal(m.x, m.y, 5);
     }
     this.quests();
@@ -1831,7 +1837,7 @@ export class Game {
     for (const b of s.bandits) {
       const dh = Math.hypot(h.x - b.x, h.y - b.y);
       if (b.posse) {
-        b.chase = s.wanted > 0 && this.nearCity() < 0 && dh < 900 && this.heroStorm()?.kind !== "kum";
+        b.chase = s.wanted > 0 && this.nearCity() < 0 && dh < (this.isNight() ? 420 : 900) && this.heroStorm()?.kind !== "kum";
         if (!s.wanted || dh > 1400) b.army = { spear: 0, archer: 0, horse: 0 };
         const d = Math.hypot(h.x - b.x, h.y - b.y);
         if (b.chase && d > 1) {
@@ -1853,7 +1859,7 @@ export class Game {
       const pow = armyPower(b.army);
       const raiding = s.caravans.some((cv) => cv.raid === b.id);
       const nm = b.nem ? s.nemeses.find((n) => n.id === b.nem) : undefined;
-      b.chase = b.amb ? !safe && dh < 450 : nm ? !raiding && !safe && dh < (nm.trait === "kurnaz" ? 440 : 320) && Math.hypot(h.x - c.x, h.y - c.y) < 1100 : !raiding && !safe && !this.act && dh < 230 && pow > heroPow * 0.75 && Math.hypot(h.x - c.x, h.y - c.y) < 700;
+      b.chase = b.amb ? !safe && dh < 450 : nm ? !raiding && !safe && dh < (nm.trait === "kurnaz" ? 440 : 320) && Math.hypot(h.x - c.x, h.y - c.y) < 1100 : !raiding && !safe && !this.act && dh < (this.isNight() ? (s.cls === "hirsiz" ? 170 : 300) : 230) && pow > heroPow * (this.isNight() ? 0.6 : 0.75) && Math.hypot(h.x - c.x, h.y - c.y) < 700;
       if (b.amb && dh > 600) b.army = { spear: 0, archer: 0, horse: 0 };
       const flee = !nm && !raiding && dh < 200 && pow < heroPow * 0.45;
       let tx = b.tx;
@@ -2116,7 +2122,7 @@ export class Game {
         }
         continue;
       }
-      let move = HERO_SPEED * 0.62 * dt * this.stormSlow(cv.x, cv.y);
+      let move = HERO_SPEED * 0.62 * dt * this.stormSlow(cv.x, cv.y) * (this.isNight() ? 0.4 : 1);
       while (move > 0 && cv.pathI < cv.path.length) {
         const tx = cv.path[cv.pathI];
         const ty = cv.path[cv.pathI + 1];
@@ -2459,14 +2465,15 @@ export class Game {
     const k = this.s.kurgans[i];
     if (!k.alive) return;
     const boss = kurganBoss(k.tier);
-    this.battle(`Kurgan Taşı · ${boss.name}`, k.guard, 0.1 * k.tier, (win) => {
+    const night = this.isNight();
+    this.battle(`Kurgan Taşı · ${boss.name}${night ? " (gece)" : ""}`, k.guard, 0.1 * k.tier + (night ? 0.1 : 0), (win) => {
       if (!win) return "Lanetli taş seni geri püskürttü. Daha güçlü dön.";
       k.alive = false;
       k.respawnAt = this.now + 20 * 60000;
       this.s.c.kurgans++;
       if (this.s.c.kurgans === 1) this.chron(`İlk Kurgan Taşı çatladı; mor ışık içinde ruhlar göğe yükseldi. ${this.s.hero.name} ataların sesini duydu.`);
       this.repNear(k.x, k.y, 3 * k.tier, "ruhları özgür bıraktın");
-      const ruh = 2 * k.tier + Math.floor(Math.random() * 3);
+      const ruh = Math.round((2 * k.tier + Math.floor(Math.random() * 3)) * (night ? 1.5 : 1));
       const gold = Math.round((50 * k.tier * k.tier + 30) * this.stealMult());
       this.s.mats.ruh += ruh;
       this.gain({ gold });
@@ -2487,7 +2494,7 @@ export class Game {
 
   kurganOdds(i: number): number {
     const k = this.s.kurgans[i];
-    return this.odds(k.guard, 0.1 * k.tier, kurganBoss(k.tier));
+    return this.odds(k.guard, 0.1 * k.tier + (this.isNight() ? 0.1 : 0), kurganBoss(k.tier));
   }
 
   chron(t: string): void {
@@ -3216,6 +3223,15 @@ export class Game {
   dayOf(): { day: number; t: number } {
     const t = this.s.time / DAY_SEC;
     return { day: Math.floor(t) + 1, t: t % 1 };
+  }
+
+  isNight(): boolean {
+    const { t } = this.dayOf();
+    return t > 0.32 && t < 0.68;
+  }
+
+  nightEyes(): boolean {
+    return this.s.cls === "hirsiz" || this.s.cls === "kam" || (this.s.bird?.kind === "sungur" && this.s.bird.lv >= 5);
   }
 
   readonly QUESTS: Quest[] = [

@@ -1182,7 +1182,7 @@ export class Hud {
     if (now - this.liveT < 250) return;
     this.liveT = now;
     const day = g.dayOf();
-    const night = Math.cos(day.t * Math.PI * 2) < -0.3;
+    const night = g.isNight();
     const h = s.hero;
     const showRes = RES_KEYS.filter((k) => k === "gold" || s.res[k] >= 1 || s.beylik);
     this.top.innerHTML =
@@ -1193,7 +1193,7 @@ export class Hud {
       `<div class="res vit"><div class="mbar hp"><i style="width:${(h.hp / g.maxHp()) * 100}%"></i><span>❤ ${Math.floor(h.hp)}</span></div><div class="mbar en"><i style="width:${(h.energy / g.maxEnergy()) * 100}%"></i><span>⚡ ${Math.floor(h.energy)}</span></div></div>
        <div class="res hero">${ic(g.face(), "ic round")}<b>Sv ${h.lv}</b>${h.points + h.spts + h.tpts ? `<small class="pts">+${h.points + h.spts + h.tpts}</small>` : ""}${s.wanted ? `<small class="wanted" title="Aranıyorsun">${"★".repeat(s.wanted)}</small>` : ""}</div>
        ${s.free ? `<div class="res">${ic("crown")}<b>${s.renown}</b></div>` : ""}
-       <div class="res day">${night ? "🌙" : "☀️"}<b>Gün ${day.day}</b></div>`;
+       <div class="res day" title="${night ? "Gece: görüş azalır, haramiler cesurlaşır, muhafızlar seni zor bulur, Kurgan Taşları güçlenir ama daha çok Ruh Taşı verir" : "Gündüz"}">${night ? "🌙" : "☀️"}<b>Gün ${day.day}</b></div>`;
     const q = g.quest();
     this.questEl.innerHTML = q
       ? `${ic("quest", "qi")}<div><small>Görev ${s.quest + 1}/${g.QUESTS.length}</small><b>${q.title}</b><span>${q.text}</span><em>${costHtml(q.reward, g)}</em></div>`
