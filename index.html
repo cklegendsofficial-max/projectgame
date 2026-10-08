@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="description" content="Caravan Tycoon: an idle trading game on the Silk Road. Send caravans, hire caravan masters and build a trading dynasty from Samarkand to Constantinople." />
+    <meta name="theme-color" content="#2a1a10" />
+    <title>Caravan Tycoon: Silk Road Idle</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐪</text></svg>" />
+  </head>
+  <body>
+    <div id="loading"><div class="spinner">🐪</div></div>
+    <div id="app">
+      <header id="topbar">
+        <div class="brand">
+          <span class="logo">🐪</span>
+          <div class="titles"><h1 data-t="title"></h1><small data-t="subtitle"></small></div>
+        </div>
+        <div class="goldBox">
+          <div class="coin">$</div>
+          <div><div id="gold">0</div><div id="income"></div></div>
+        </div>
+        <div class="actions">
+          <button id="favorBtn" class="favor" style="display: none"></button>
+          <button id="muteBtn" class="icon-btn" aria-label="Sound">🔊</button>
+          <button id="settingsBtn" class="icon-btn" aria-label="Settings">⚙️</button>
+        </div>
+      </header>
+      <div id="buffs"></div>
+      <main>
+        <section id="mapWrap">
+          <canvas id="map"></canvas>
+          <div id="hint"></div>
+        </section>
+        <aside id="panel">
+          <nav id="tabs"></nav>
+          <div id="tabBody"></div>
+        </aside>
+      </main>
+      <div id="toasts"></div>
+      <div id="modal" class="hidden"></div>
+      <div id="adBlocker" class="hidden"><div class="spinner">▶</div></div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
