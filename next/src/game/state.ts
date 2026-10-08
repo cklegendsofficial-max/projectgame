@@ -4,6 +4,7 @@ import { BANDIT_NAMES, BUILDINGS, VILLAGE_NAMES, army, type Army, type BuildingI
 import type { Good, Item, Skill, Slot, Stat } from "./rpg";
 import type { ClassId } from "./classes";
 import type { SideQuest } from "./sidequests";
+import type { Daily } from "./daily";
 
 export interface Village {
   name: string;
@@ -219,6 +220,7 @@ export interface GameState {
   storms: Storm[];
   titles: string[];
   title: string;
+  daily: Daily | null;
   wanted: number;
   wantedT: number;
 }
@@ -424,6 +426,7 @@ export function newGame(w: World): GameState {
     storms: [],
     titles: [],
     title: "",
+    daily: null,
     wanted: 0,
     wantedT: 0,
   };

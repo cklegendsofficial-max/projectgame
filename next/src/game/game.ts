@@ -11,6 +11,7 @@ import { BUILDINGS, BUILDING_BY_ID, CITY_NAME, DAY_SEC, RES_KEYS, UNITS, UNIT_KE
 import { CITY_TRADE, GOODS, GOOD_KEYS, PLUS_CHANCE, SLOTS, STAT_INFO, canPlus, classItem, goodMult, itemPrice, makeItem, plusCost, rollItem, setPiece, setPlus, skillLv, uniqueItem, type Good, type Item, type Skill, type Slot, type Stat } from "./rpg";
 import { SETS, SET_FORGE, SET_KEYS, SET_SLOTS, UNIQUES, addMods, type GearMods, type SetId } from "./legend";
 import { TITLE_CATS, titleKey, titleOf, titleReward } from "./titles";
+import { DAILY_POOL, today, yesterday, type Daily, type DailyTask } from "./daily";
 import { FACTIONS, FACTION_KEYS, HOSTILE, REP_RANKS, RANK_PERKS, factionOf, repRank, type FactionId } from "./factions";
 import { CLASS_BY_ID, CLASS_SKILLS, SKILL_MAX, WEAPON_NAME, WEAPON_STAT, skillPow, skillRank, type ClassDef, type ClassId, type ClassSkill, type WeaponKind } from "./classes";
 import { CHAPTERS, COMP_BY_ID, COMP_MAX, FORT_GUARD, KARA_HAN, KASIM, type Chapter, type CompId, type CompMods, type Companion } from "./story";
@@ -130,6 +131,64 @@ export class Game {
     const t = this.s.title ? titleOf(this.s.title) : null;
     if (t) addMods(m, t.mods);
     return m;
+  }
+
+  daily(): Daily | null {
+    const s = this.s;
+    if (!s.free) return null;
+    const d = today();
+    if (!s.daily || s.daily.date !== d) {
+      const pool = [...DAILY_POOL].sort(() => Math.random() - 0.5).slice(0, 3);
+      s.daily = { date: d, tasks: pool.map((p) => ({ key: p.key, need: p.need(s.hero.lv), base: s.c[p.key], done: false })), chest: false, streak: s.daily?.streak ?? 0, last: s.daily?.last ?? "" };
+    }
+    return s.daily;
+  }
+
+  dailyProg(t: DailyTask): number {
+    return Math.max(0, Math.min(t.need, this.s.c[t.key] - t.base));
+  }
+
+  dailyGold(): number {
+    return 80 + this.s.hero.lv * 25;
+  }
+
+  claimDaily(i: number): void {
+    const d = this.daily();
+    const t = d?.tasks[i];
+    if (!d || !t || t.done || this.dailyProg(t) < t.need) return;
+    t.done = true;
+    const s = this.s;
+    const gold = this.dailyGold();
+    s.res.gold += gold;
+    const bonus = [() => ((s.mats.ruh += 2), "+2 Ruh Taşı"), () => ((s.mats.parsomen += 1), "+1 Parşömen"), () => ((s.cons.merhem = (s.cons.merhem ?? 0) + 2), "+2 Şifa Merhemi")][i % 3]();
+    this.addXp(30 + s.hero.lv * 8);
+    this.hud.toast(`Ferman tamamlandı: +${gold} altın, ${bonus}`, "good");
+  }
+
+  dailyClaimable(): boolean {
+    const d = this.daily();
+    return !!d && (this.chestReady() || d.tasks.some((t) => !t.done && this.dailyProg(t) >= t.need));
+  }
+
+  chestReady(): boolean {
+    const d = this.daily();
+    return !!d && !d.chest && d.tasks.every((t) => t.done);
+  }
+
+  openChest(): void {
+    const d = this.daily();
+    if (!d || !this.chestReady()) return;
+    const s = this.s;
+    d.chest = true;
+    d.streak = d.last === yesterday() ? d.streak + 1 : 1;
+    d.last = d.date;
+    const gold = 300 + s.hero.lv * 40 + d.streak * 150;
+    s.res.gold += gold;
+    s.mats.ruh += 3 + d.streak;
+    const lg = this.legendDrop(Math.min(0.4, 0.12 + d.streak * 0.04));
+    const it = lg ?? rollItem(s.nextId++, this.legendTier(), this.cls(), 0.2);
+    if (!lg) s.hero.bag.push(it);
+    this.hud.story("Hakan'ın Fermanı", "icons/chest", `Bugünün bütün fermanlarını yerine getirdin. Ulaklar mühürlü bir sandık getirdi.<br><br><b>+${gold} altın · +${3 + d.streak} Ruh Taşı</b><br>Sandıktan çıkan: <b class="r${it.rar}">${it.name}</b><br><br>Seri: <b>${d.streak} gün</b> ${d.streak > 1 ? "— her gün sandık daha cömert!" : "— yarın da gel, seri bonusu birikir."}`, "Teşekkürler");
   }
 
   setTitle(key: string): void {

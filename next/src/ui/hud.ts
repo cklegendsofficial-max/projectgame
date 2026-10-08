@@ -15,6 +15,7 @@ import { audio } from "../audio";
 import { SETS, SET_FORGE, SET_KEYS, SET_SLOTS, UNIQUES, modsText, type SetId } from "../game/legend";
 import { FACTIONS, FACTION_KEYS, HOSTILE, REP_RANKS, RANK_PERKS, factionOf } from "../game/factions";
 import { TITLE_CATS, titleKey, titleOf } from "../game/titles";
+import { DAILY_POOL } from "../game/daily";
 
 const WEAPON_ICON: Record<string, string> = { kilic: "it_sword_", balta: "it_axe_", hancer: "it_dagger_", ok: "it_bow_", asa: "it_staff_" };
 
@@ -274,6 +275,25 @@ export class Hud {
         const got = g.s.codex.includes(`set:${this.forgePick}:${sl}`);
         return `<div class="grow leg">${ic(icon, "gimg")}<div class="bi2"><b class="r4">${st.pieces[sl]}</b><small>${SLOT_NAME[sl]}${got ? " · koleksiyonda" : ""}</small></div><button class="btn sm ${why ? "off" : ""}" data-a="${this.act(() => g.forgeSet(this.forgePick, sl))}">Döv</button></div>`;
       }).join("")
+    );
+  }
+
+  private dailyHtml(): string {
+    const g = this.g;
+    const d = g.daily();
+    if (!d) return "";
+    return (
+      `<h3>${ic("seal")} Günlük Fermanlar <em class="dim">· seri ${d.streak} gün</em></h3><p class="dim">Her gün yeni üç ferman. Hepsini bitirip sandığı aç; üst üste gelirsen sandık daha cömert olur.</p>` +
+      d.tasks
+        .map((t, i) => {
+          const p = DAILY_POOL.find((x) => x.key === t.key)!;
+          const v = g.dailyProg(t);
+          const ok = v >= t.need;
+          return `<div class="grow ${t.done ? "dim" : ""}">${ic(p.icon, "gimg")}<div class="bi2"><b>${t.need} ${p.what}</b><div class="fbar" style="--fc:${ok ? "#7fd36a" : "#e0b04a"}"><i style="width:${(v / t.need) * 100}%"></i></div><small>${v}/${t.need} · ${ic("coins")}${g.dailyGold()}</small></div>${t.done ? `<em class="cheap">✓</em>` : `<button class="btn sm ${ok ? "go" : "off"}" data-a="${this.act(() => g.claimDaily(i))}">Al</button>`}</div>`;
+        })
+        .join("") +
+      (d.chest ? `<div class="odds good">Bugünün sandığı açıldı. Yarın yeni fermanlar gelecek.</div>` : `<button class="btn big ${g.chestReady() ? "go" : "off"}" style="width:100%" data-a="${this.act(() => g.openChest())}">${ic("chest")} Ferman sandığını aç</button>`) +
+      `<h3>${ic("trophy")} Unvanlar</h3>`
     );
   }
 
@@ -851,7 +871,7 @@ export class Hud {
     const s = g.s;
     const h = s.hero;
     const need = xpNeed(h.lv);
-    const tabs = this.tabs([["karakter", "Karakter"], ["beceri", `Beceriler${h.spts ? ` (${h.spts})` : ""}`], ["yetenek", `Yetenekler${h.tpts ? ` (${h.tpts})` : ""}`], ["techizat", `Teçhizat${h.bag.length ? ` (${h.bag.length})` : ""}`], ["ordu", "Birlik"], ...(s.free ? ([["unvan", "Unvanlar"]] as [string, string][]) : [])]);
+    const tabs = this.tabs([["karakter", "Karakter"], ["beceri", `Beceriler${h.spts ? ` (${h.spts})` : ""}`], ["yetenek", `Yetenekler${h.tpts ? ` (${h.tpts})` : ""}`], ["techizat", `Teçhizat${h.bag.length ? ` (${h.bag.length})` : ""}`], ["ordu", "Birlik"], ...(s.free ? ([["unvan", `Hedefler${g.dailyClaimable() ? " ●" : ""}`]] as [string, string][]) : [])]);
     let body = "";
     if (this.tab === "karakter") {
       const cl = g.cls();
@@ -914,7 +934,7 @@ export class Hud {
           return `<div class="brow skill ${lv ? "" : "locked"}">${ic(sk.icon, "bimg")}<div class="bi2"><b>${sk.name} <em>${skillRank(lv)}</em></b><small>${cur}</small>${next}${why && why !== "Beceri puanın yok" ? `<small class="why">${why}</small>` : ""}</div><button class="btn sm plus ${why ? "off" : ""}" data-a="${this.act(() => g.learn(sk.id))}">+</button></div>`;
         }).join("");
     } else if (this.tab === "unvan") {
-      body = this.titlesHtml();
+      body = this.dailyHtml() + this.titlesHtml();
     } else if (this.tab === "techizat") {
       const inCity = g.nearCity() >= 0;
       body = `<div class="slots">` + SLOTS.map((sl) => {
@@ -1086,7 +1106,7 @@ export class Hud {
     this.root.querySelector('[data-b="capital"] span')!.textContent = bld ? `⏱ ${dur(s.buildings[bld].until - g.now)}` : "Semerkant";
     const hb = this.root.querySelector('[data-b="hero"]')!;
     (hb.querySelector("img") as HTMLImageElement).src = assetUrl(g.face());
-    hb.classList.toggle("pulse", h.points > 0);
+    hb.classList.toggle("pulse", h.points > 0 || g.dailyClaimable());
     if (this.place && !this.holding && now - this.panelT > 1000) {
       this.panelT = now;
       this.render();
