@@ -18,6 +18,7 @@ export function assetUrl(key: string): string {
 }
 
 const FOG_UP = 4;
+const RIVAL_COL: Record<string, number> = { peace: 0xe8d39a, ally: 0x6fe07a, war: 0xff4a3a, vassal: 0xffc94a, dead: 0x888888 };
 const LABEL_STYLE = { fontFamily: "Georgia, serif", fontSize: 26, fill: "#fff3d6", stroke: { color: "#2a1606", width: 6 }, fontWeight: "bold" as const };
 
 function makeAtlas(): { tex: Texture; trees: Texture[]; peaks: Texture[] } {
@@ -150,6 +151,7 @@ export class WorldView {
   private fortM: Marker | null = null;
   private seraiF = new Map<string, Sprite>();
   private ownF = new Map<string, Sprite>();
+  private rivalsM = new Map<string, { c: Container; st: string }>();
   private compM = new Map<string, Container>();
   private trail: number[] = [];
   private cityM: Marker[] = [];
@@ -711,6 +713,43 @@ export class WorldView {
       c.destroy({ children: true });
       this.caravansM.delete(id);
     }
+    s.rivals.forEach((r) => {
+      let e = this.rivalsM.get(r.id);
+      if (e && e.st !== r.status) {
+        e.c.destroy({ children: true });
+        this.rivalsM.delete(r.id);
+        e = undefined;
+      }
+      if (r.status === "dead") return;
+      if (!e) {
+        const col = RIVAL_COL[r.status];
+        const c = new Container();
+        const sh = new Graphics().ellipse(0, 26, 22, 7).fill({ color: 0x000000, alpha: 0.35 });
+        const glow = new Graphics().circle(0, 0, 32).fill({ color: col, alpha: 0.18 });
+        glow.label = "glow";
+        const p = this.portrait(r.icon, 24, col);
+        const nl = new Text({ text: `${r.name} ${r.title}`, style: { ...LABEL_STYLE, fontSize: 14, fill: "#" + col.toString(16).padStart(6, "0") } });
+        nl.anchor.set(0.5, 0);
+        nl.position.set(0, 30);
+        nl.resolution = 2;
+        const tg = new Sprite(this.t("tug"));
+        tg.anchor.set(0.5, 1);
+        tg.scale.set(34 / tg.texture.height);
+        tg.tint = col;
+        tg.position.set(20, -14);
+        c.addChild(sh, glow, tg, p, nl);
+        this.units.addChild(c);
+        e = { c, st: r.status };
+        this.rivalsM.set(r.id, e);
+      }
+      const c = e.c;
+      c.visible = game.isExplored(r.x, r.y);
+      c.position.set(r.x, r.y);
+      c.scale.set(inv);
+      c.zIndex = r.y;
+      const glow = c.getChildByLabel("glow");
+      if (glow) glow.scale.set(1 + Math.sin(this.time * (r.status === "war" ? 6 : 2)) * 0.12);
+    });
     const liveM = new Set<number>();
     for (const m of s.marches) {
       liveM.add(m.id);

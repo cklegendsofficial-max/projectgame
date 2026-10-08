@@ -8,6 +8,7 @@ import type { Daily } from "./daily";
 import type { Nemesis } from "./nemesis";
 import type { Bird } from "./falcon";
 import type { Owned } from "./conquest";
+import type { Rival } from "./rivals";
 
 export interface Village {
   name: string;
@@ -242,6 +243,8 @@ export interface GameState {
   engines: number;
   sieged: Record<string, number>;
   counterAt: number;
+  rivals: Rival[];
+  rivalDay: number;
 }
 
 export interface MarketEvent {
@@ -458,6 +461,8 @@ export function newGame(w: World): GameState {
     engines: 0,
     sieged: {},
     counterAt: 0,
+    rivals: [],
+    rivalDay: 0,
   };
 }
 

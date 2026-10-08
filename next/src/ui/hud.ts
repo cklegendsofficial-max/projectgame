@@ -19,12 +19,14 @@ import { BIRDS, birdSight, birdXpNeed } from "../game/falcon";
 import { BREEDS, BREED_GOLD, BREED_TIME } from "../game/horse";
 import { TITLE_CATS, titleKey, titleOf } from "../game/titles";
 import { DAILY_POOL } from "../game/daily";
+import { RIVAL_TRAITS, STATUS_NAME } from "../game/rivals";
 import { ENGINE_GOLD as ENGINE_GOLD_UI, FEAST_GOLD as FEAST_GOLD_UI, TAX as TAX_UI } from "../game/conquest";
 
 const WEAPON_ICON: Record<string, string> = { kilic: "it_sword_", balta: "it_axe_", hancer: "it_dagger_", ok: "it_bow_", asa: "it_staff_" };
 
 const ic = (k: string, cls = "ic") => `<img class="${cls}" src="${assetUrl(k)}" alt="">`;
 const CAP_I = CITIES.findIndex((c) => c.id === "samarkand");
+const RIVAL_CSS: Record<string, string> = { peace: "#e8d39a", ally: "#6fe07a", war: "#ff4a3a", vassal: "#ffc94a", dead: "#888" };
 
 function fmt(n: number): string {
   n = Math.floor(n);
@@ -411,6 +413,25 @@ export class Hud {
           const where = n.alive ? (out ? `<b class="dear">Bozkırda seni arıyor</b>` : `${s.camps[n.camp]?.name ?? "?"} çevresinde`) : "Öldürüldü";
           const btn = n.alive ? `<button class="btn sm" data-a="${this.act(() => { this.close(); const p = out ?? s.camps[n.camp]; g.cam.flyTo(p.x, p.y, 0.8); })}">Bul</button>` : `<em class="cheap">✓</em>`;
           return `<div class="grow nem ${n.alive ? "" : "dim dead"}">${ic("j_bandit", "gimg")}<div class="bi2"><b>${nemName(n)}</b> <small>Sv ${n.lv}</small><small>${t.name} · ${t.desc}</small><small>${where}${n.wins ? ` · seni ${n.wins} kez yendi` : ""}${n.scars ? ` · ${n.scars} yara izi` : ""}</small></div>${btn}</div>`;
+        })
+        .join("")
+    );
+  }
+
+  private rivalsHtml(): string {
+    const g = this.g;
+    const s = g.s;
+    if (!s.rivals.length) return "";
+    const own = Object.keys(s.owned);
+    return (
+      `<h3>${ic("lord_bey")} Beyler <em class="dim">· müttefik gücü +%${Math.round(g.allyBonus() * 100)}</em></h3>` +
+      (own.length ? `<div class="odds good">${ic("siege")} Fethettiğin şehirler: <b>${own.map((c) => CITY_NAME[c]).join(", ")}</b></div>` : "") +
+      s.rivals
+        .map((r) => {
+          const t = RIVAL_TRAITS[r.trait];
+          const dead = r.status === "dead";
+          const btn = dead ? `<em class="dim">✝</em>` : `<button class="btn sm" data-a="${this.act(() => { this.close(); g.cam.flyTo(r.x, r.y, 0.8); })}">Bul</button>`;
+          return `<div class="grow rival ${dead ? "dim dead" : ""}">${ic(r.icon, "gimg")}<div class="bi2"><b>${r.name} ${r.title}</b> <small style="color:${RIVAL_CSS[r.status]}">${STATUS_NAME[r.status]}</small><small>${t.name} · Sv ${r.lv} · ${armySize(r.army)} asker · ${CITY_NAME[r.home]} yöresi</small>${dead ? "" : bar(r.rel + 100, 200, r.rel < 0 ? "hp" : "", `Dostluk ${Math.round(r.rel)}`)}</div>${btn}</div>`;
         })
         .join("")
     );
@@ -1093,7 +1114,7 @@ export class Hud {
           return `<div class="brow skill ${lv ? "" : "locked"}">${ic(sk.icon, "bimg")}<div class="bi2"><b>${sk.name} <em>${skillRank(lv)}</em></b><small>${cur}</small>${next}${why && why !== "Beceri puanın yok" ? `<small class="why">${why}</small>` : ""}</div><button class="btn sm plus ${why ? "off" : ""}" data-a="${this.act(() => g.learn(sk.id))}">+</button></div>`;
         }).join("");
     } else if (this.tab === "unvan") {
-      body = this.dailyHtml() + this.nemesisHtml() + this.titlesHtml();
+      body = this.dailyHtml() + this.rivalsHtml() + this.nemesisHtml() + this.titlesHtml();
     } else if (this.tab === "techizat") {
       const inCity = g.nearCity() >= 0;
       body = `<div class="slots">` + SLOTS.map((sl) => {
@@ -1337,6 +1358,13 @@ export class Hud {
       if (!b.posse && !b.nem) continue;
       c.fillStyle = b.posse ? "#6aa8ff" : "#c27bff";
       c.fillRect(b.x * sx - 2, b.y * sy - 2, b.posse ? 3 : 4, b.posse ? 3 : 4);
+    }
+    for (const r of g.s.rivals) {
+      if (r.status === "dead" || !g.isExplored(r.x, r.y)) continue;
+      c.fillStyle = RIVAL_CSS[r.status];
+      c.beginPath();
+      c.arc(r.x * sx, r.y * sy, 3, 0, Math.PI * 2);
+      c.fill();
     }
     c.fillStyle = "#fff";
     c.beginPath();

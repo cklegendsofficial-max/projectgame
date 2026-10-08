@@ -16,6 +16,7 @@ import { gen } from "./text";
 import { BREEDS, BREED_GOLD, BREED_TIME, SHOP_BREEDS, tulparChance, type Breed } from "./horse";
 import { BIRDS, BIRD_KEYS, BIRD_MAX, BIRD_NAMES, HUNTS, birdSight, birdXpNeed, type BirdFlight, type BirdKind } from "./falcon";
 import { LAST_WORDS, NEM_MAX, NEM_TRAITS, REVENGE, SCAR_EPITHETS, TAUNTS, makeNemesis, nemBoss, nemName, type Nemesis } from "./nemesis";
+import { RIVAL_DEFS, RIVAL_LINES, RIVAL_TRAITS, STATUS_NAME, giftCost, oneOf, rivalArmy, rivalBoss, rivalName, tribute, type Rival } from "./rivals";
 import { ENGINE_GOLD, FEAST_GOLD, SIEGE_LV, SIEGE_RENOWN, TAX, cityGarrison, cityTax, wallBonus } from "./conquest";
 import { DEEP_LORE, DOORS, DOOR_KEYS, RIDDLES, deepBoss, deepGuard, deepTier, type DeepRun, type DoorKind } from "./deep";
 import { FACTIONS, FACTION_KEYS, HOSTILE, REP_RANKS, RANK_PERKS, factionOf, repRank, type FactionId } from "./factions";
@@ -24,7 +25,7 @@ import { CHAPTERS, COMP_BY_ID, COMP_MAX, FORT_GUARD, KARA_HAN, KASIM, type Chapt
 import { CAPITAL, SLAVE_RADIUS, banditArmy, campGarrison, kurganBoss, kurganGuard, loadGame, saveGame as rawSave, wipeGame, type Bandit, type Bounty, type Caravan, type Contract, type GameState, type Storm } from "./state";
 
 export type Target =
-  | { kind: "village" | "camp" | "node" | "ruin" | "city" | "bandit" | "kurgan" | "caravan"; i: number }
+  | { kind: "village" | "camp" | "node" | "ruin" | "city" | "bandit" | "kurgan" | "caravan" | "rival"; i: number }
   | { kind: "capital" }
   | { kind: "fort" }
   | { kind: "point"; x: number; y: number };
@@ -556,7 +557,11 @@ export class Game {
   }
 
   heroBonus(): number {
-    return 0.025 * this.stat("lid") + 0.02 * (this.s.hero.lv - 1) + this.cls().mods.army + this.compMods().army + 0.03 * this.tal("nara") + (this.buff("davul") ? 0.15 : 0) + (this.gearMods().army ?? 0) + this.heroRankBonus();
+    return 0.025 * this.stat("lid") + 0.02 * (this.s.hero.lv - 1) + this.cls().mods.army + this.compMods().army + 0.03 * this.tal("nara") + (this.buff("davul") ? 0.15 : 0) + (this.gearMods().army ?? 0) + this.heroRankBonus() + this.allyBonus();
+  }
+
+  allyBonus(): number {
+    return Math.min(0.2, this.s.rivals.filter((r) => r.status === "ally").length * 0.07 + this.s.rivals.filter((r) => r.status === "vassal").length * 0.04);
   }
 
   heroCap(): number {
@@ -634,6 +639,7 @@ export class Game {
       this.caravanTick(dt);
       this.wantedTick(dt);
       this.nemTick();
+      this.rivalTick(dt);
       this.birdTick(dt);
       this.studTick();
       const night = this.isNight();
@@ -1683,6 +1689,8 @@ export class Game {
         return s.bandits.find((b) => b.id === t.i) ?? null;
       case "caravan":
         return s.caravans.find((b) => b.id === t.i) ?? null;
+      case "rival":
+        return s.rivals[t.i] ?? null;
     }
   }
 
@@ -1715,7 +1723,7 @@ export class Game {
     const hit = this.pick(x, y);
     if (hit) {
       const p = this.targetPos(hit)!;
-      if (hit.kind !== "bandit" && hit.kind !== "caravan" && Math.hypot(p.x - this.s.hero.x, p.y - this.s.hero.y) < 60) {
+      if (hit.kind !== "bandit" && hit.kind !== "caravan" && hit.kind !== "rival" && Math.hypot(p.x - this.s.hero.x, p.y - this.s.hero.y) < 60) {
         this.s.hero.path = null;
         this.target = null;
         this.hud.openPlace(hit);
@@ -1745,6 +1753,7 @@ export class Game {
     };
     for (const b of s.bandits) test({ kind: "bandit", i: b.id }, b.x, b.y, 1.3);
     for (const cv of s.caravans) test({ kind: "caravan", i: cv.id }, cv.x, cv.y, 1.3);
+    s.rivals.forEach((r, i) => r.status !== "dead" && test({ kind: "rival", i }, r.x, r.y, 1.5));
     if (Math.hypot(CAPITAL.x - x, CAPITAL.y - y) < r * 2.2) return { kind: "capital" };
     CITIES.forEach((c, i) => i !== CAP_I && test({ kind: "city", i }, c.x, c.y, 2));
     s.villages.forEach((v, i) => test({ kind: "village", i }, v.x, v.y, 1.3));
@@ -1769,16 +1778,17 @@ export class Game {
   private moveHero(dt: number): void {
     const h = this.s.hero;
     const t = this.target;
-    if (t?.kind === "bandit" || t?.kind === "caravan") {
+    if (t?.kind === "bandit" || t?.kind === "caravan" || t?.kind === "rival") {
       this.repath -= dt;
-      const b = t.kind === "bandit" ? this.s.bandits.find((x) => x.id === t.i) : this.s.caravans.find((x) => x.id === t.i);
-      if (!b) {
+      const b = t.kind === "bandit" ? this.s.bandits.find((x) => x.id === t.i) : t.kind === "rival" ? this.s.rivals[t.i] : this.s.caravans.find((x) => x.id === t.i);
+      if (!b || (t.kind === "rival" && (b as Rival).status === "dead")) {
         this.target = null;
         h.path = null;
       } else if (Math.hypot(b.x - h.x, b.y - h.y) < 30) {
         h.path = null;
         this.target = null;
         if (t.kind === "bandit") this.engageBandit(b as Bandit, false);
+        else if (t.kind === "rival") this.meetRival(t.i);
         else this.meetCaravan(b as Caravan);
         return;
       } else if (this.repath <= 0) {
@@ -1812,7 +1822,7 @@ export class Game {
       h.path = null;
       const tg = this.target;
       this.target = null;
-      if (tg && tg.kind !== "point" && tg.kind !== "bandit" && tg.kind !== "caravan") this.hud.openPlace(tg);
+      if (tg && tg.kind !== "point" && tg.kind !== "bandit" && tg.kind !== "caravan" && tg.kind !== "rival") this.hud.openPlace(tg);
     }
   }
 
@@ -2656,6 +2666,316 @@ export class Game {
     this.chron(t);
     this.hud.story(`${name} kaybedildi`, "icons/siege", `${t}<br><br>Şehri yeniden almak için tekrar kuşatman gerekecek.`, "Acı haber");
     saveGame(this.s);
+  }
+
+  // ---------- rival lords ----------
+
+  private cityPos(id: string): { x: number; y: number } {
+    const c = CITIES.find((x) => x.id === id) ?? CAPITAL;
+    return { x: c.x, y: c.y };
+  }
+
+  private rivalSpot(r: Rival, rad: number): { x: number; y: number } {
+    const home = this.cityPos(r.home);
+    for (let k = 0; k < 12; k++) {
+      const a = Math.random() * Math.PI * 2;
+      const d = 160 + Math.random() * rad;
+      const x = home.x + Math.cos(a) * d;
+      const y = home.y + Math.sin(a) * d;
+      if (x > 40 && y > 40 && x < W - 40 && y < H - 40 && this.cellCost(x, y) < 3) return { x, y };
+    }
+    return { x: home.x, y: home.y + 140 };
+  }
+
+  private rivalInit(): void {
+    const s = this.s;
+    for (const d of RIVAL_DEFS) {
+      const lv = 3 + Math.floor(Math.random() * 3);
+      const r: Rival = { ...d, x: 0, y: 0, tx: 0, ty: 0, army: rivalArmy(lv), lv, rel: d.trait === "comert" ? 15 : d.trait === "hirsli" ? -10 : 0, status: "peace", defeats: 0, wait: 0 };
+      const p = this.rivalSpot(r, 300);
+      r.x = r.tx = p.x;
+      r.y = r.ty = p.y;
+      s.rivals.push(r);
+    }
+    s.rivalDay = this.dayOf().day;
+  }
+
+  rivalPower(r: Rival): number {
+    const b = rivalBoss(r);
+    return armyPower(r.army, 0.05 + r.lv * 0.005) + b.atk * Math.sqrt(b.hp) * 0.8;
+  }
+
+  private rivalTick(dt: number): void {
+    const s = this.s;
+    if (!s.free) return;
+    if (!s.rivals.length) this.rivalInit();
+    const day = this.dayOf().day;
+    if (day > s.rivalDay) {
+      s.rivalDay = day;
+      this.rivalDaily();
+    }
+    const h = s.hero;
+    const heroPow = this.heroPower();
+    const safe = this.nearCity() >= 0 || Math.hypot(h.x - CAPITAL.x, h.y - CAPITAL.y) < 450;
+    s.rivals.forEach((r, i) => {
+      if (r.status === "dead") return;
+      const dh = Math.hypot(h.x - r.x, h.y - r.y);
+      const hunt = r.status === "war" && !safe && dh < (this.isNight() ? 260 : 520) && this.rivalPower(r) > heroPow * 0.7 && armySize(r.army) > 0;
+      if (hunt) {
+        r.tx = h.x;
+        r.ty = h.y;
+        r.wait = 0;
+        if (dh < 26 && !this.battleLock) {
+          this.hud.toast(`${rivalName(r)} sana saldırdı!`, "bad");
+          this.fightRival(i, true);
+          return;
+        }
+      }
+      if (r.wait > 0) {
+        r.wait -= dt;
+        return;
+      }
+      const d = Math.hypot(r.tx - r.x, r.ty - r.y);
+      if (d < 6) {
+        if (r.status === "war") this.rivalRaid(r);
+        const p = this.rivalSpot(r, r.status === "war" ? 700 : 420);
+        r.tx = p.x;
+        r.ty = p.y;
+        r.wait = 4 + Math.random() * 8;
+        return;
+      }
+      const sp = ((hunt ? 24 : 15) * dt) / Math.max(0.6, Math.min(3, this.cellCost(r.x, r.y)));
+      const nx = r.x + ((r.tx - r.x) / d) * Math.min(sp, d);
+      const ny = r.y + ((r.ty - r.y) / d) * Math.min(sp, d);
+      if (this.cellCost(nx, ny) === Infinity) {
+        const p = this.rivalSpot(r, 420);
+        r.tx = p.x;
+        r.ty = p.y;
+      } else {
+        r.x = nx;
+        r.y = ny;
+      }
+    });
+  }
+
+  private rivalRaid(r: Rival): void {
+    const s = this.s;
+    if (armySize(r.army) < 5) return;
+    for (const [city, o] of Object.entries(s.owned)) {
+      const p = this.cityPos(city);
+      if (Math.hypot(p.x - r.x, p.y - r.y) > 260) continue;
+      const res = fight(o.gar, wallBonus(o.from, 0) + 0.1, r.army, 0.05);
+      r.army = { ...res.rounds[res.rounds.length - 1].b };
+      if (res.win) {
+        o.gar = { ...res.rounds[res.rounds.length - 1].a };
+        this.hud.toast(`${rivalName(r)} ${CITY_NAME[city]} surlarına saldırdı, garnizonun püskürttü!`, "good");
+      } else this.loseCity(city, "kuşatma");
+      return;
+    }
+    for (const [city, sr] of Object.entries(s.serais)) {
+      const p = this.cityPos(city);
+      if (Math.hypot(p.x - r.x, p.y - r.y) > 300 || sr.coffer < 5) continue;
+      this.hud.toast(`${rivalName(r)} ${CITY_NAME[city]} kervansarayının kasasını yağmaladı (−${Math.floor(sr.coffer)} altın)!`, "bad");
+      sr.coffer = 0;
+      return;
+    }
+  }
+
+  private rivalDaily(): void {
+    const s = this.s;
+    const live = s.rivals.filter((r) => r.status !== "dead");
+    for (const r of live) {
+      if (r.lv < 30 && Math.random() < 0.3) r.lv++;
+      const full = rivalArmy(r.lv);
+      for (const u of UNIT_KEYS) r.army[u] = Math.min(full[u], r.army[u] + Math.ceil((full[u] - r.army[u]) * 0.3));
+      const tr = RIVAL_TRAITS[r.trait];
+      if (r.status === "peace") {
+        r.rel += r.rel > 0 ? -1 : r.rel < 0 ? 1 : 0;
+        const owns = Object.keys(s.owned).some((c) => Math.hypot(this.cityPos(c).x - this.cityPos(r.home).x, this.cityPos(c).y - this.cityPos(r.home).y) < 1400);
+        if ((r.rel <= -40 || (owns && r.trait === "hirsli" && r.rel < 10)) && Math.random() < 0.2 * tr.war) this.rivalWar(r, false);
+      } else if (r.status === "war") {
+        if (r.defeats > 0 && Math.random() < 0.15 / tr.war) {
+          r.status = "peace";
+          r.rel = -20;
+          this.hud.toast(`${rivalName(r)} barış elçisi yolladı; tuğlar indirildi.`, "good");
+        }
+      } else if (r.status === "ally") {
+        if (r.rel < 0 && r.trait !== "onurlu") {
+          r.status = "peace";
+          this.hud.toast(`${rivalName(r)} ittifakı bozdu; artık sana güvenmiyor.`, "bad");
+          continue;
+        }
+        if (r.trait === "comert" ? Math.random() < 0.35 : Math.random() < 0.12) {
+          const g = 60 + r.lv * 12;
+          s.res.gold += g;
+          this.hud.toast(`Müttefikin ${rivalName(r)} armağan yolladı: +${g} altın`, "good");
+        }
+      } else if (r.status === "vassal") {
+        const g = tribute(r);
+        s.res.gold += g;
+        this.hud.toast(`${rivalName(r)} haracını gönderdi: +${g} altın`, "good");
+        if (r.trait !== "onurlu" && r.lv > s.hero.lv + 4 && Math.random() < 0.1) {
+          r.status = "war";
+          r.rel = -50;
+          this.chron(`${rivalName(r)} biat zincirini kırdı ve ${gen(s.hero.name)} tuğuna kılıç çekti.`);
+          this.hud.toast(`${rivalName(r)} isyan etti! Haraç kesildi.`, "bad");
+        }
+      }
+    }
+    const fight2 = live.filter((r) => r.status === "peace" || r.status === "war");
+    if (fight2.length >= 2 && Math.random() < 0.3) {
+      const a = fight2[Math.floor(Math.random() * fight2.length)];
+      const b = fight2.filter((x) => x !== a)[Math.floor(Math.random() * (fight2.length - 1))];
+      const win = this.rivalPower(a) * (0.7 + Math.random() * 0.6) > this.rivalPower(b) ? a : b;
+      const lose = win === a ? b : a;
+      for (const u of UNIT_KEYS) lose.army[u] = Math.floor(lose.army[u] * 0.6);
+      this.hud.toast(`Söylenti: ${rivalName(win)} ile ${rivalName(lose)} çarpıştı; ${win.name} galip geldi.`, "info");
+    }
+  }
+
+  private rivalWar(r: Rival, mine: boolean): void {
+    r.status = "war";
+    r.rel = Math.min(r.rel, -50);
+    this.chron(mine ? `${gen(this.s.hero.name)} tuğu ${rivalName(r)} üzerine kalktı.` : `${rivalName(r)} ${gen(this.s.hero.name)} topraklarına savaş ilan etti.`);
+    if (!mine) this.hud.story(`${rivalName(r)} savaş açtı!`, `icons/${r.icon}`, `Bir ulak çadırına kanlı bir ok bıraktı: <i>"${oneOf(RIVAL_LINES.war)}"</i><br><br>${rivalName(r)} artık haritada senin peşinde; şehirlerine ve kervansaraylarına akın edecek. Ordusunu yen, ya biat ettir ya kılıçtan geçir.`, "Kılıcını kuşan");
+    for (const o of this.s.rivals) if (o !== r && o.trait === "onurlu" && mine) o.rel -= 8;
+  }
+
+  meetRival(i: number): void {
+    const s = this.s;
+    const r = s.rivals[i];
+    if (!r || r.status === "dead") return;
+    const tr = RIVAL_TRAITS[r.trait];
+    const ratio = this.heroPower() / Math.max(1, this.rivalPower(r));
+    const cost = giftCost(r);
+    this.battleLock = true;
+    const done = (f: () => void) => () => {
+      this.battleLock = false;
+      f();
+    };
+    const opts: { label: string; cls: string; fn: () => void }[] = [];
+    if (r.status === "peace" || r.status === "ally")
+      opts.push({ label: `Hediye gönder · ${cost} altın`, cls: s.res.gold >= cost ? "go" : "off", fn: done(() => this.rivalGift(i)) });
+    if (r.status === "peace") {
+      opts.push({ label: `İttifak öner${r.rel < 50 ? ` · dostluk ${Math.round(r.rel)}/50` : ""}`, cls: r.rel >= 50 ? "go" : "", fn: done(() => this.rivalAlly(i)) });
+      opts.push({ label: `Biat iste · güç oranı ×${ratio.toFixed(1)}`, cls: ratio >= 2 ? "go" : "", fn: done(() => this.rivalDemand(i)) });
+      opts.push({ label: "Savaş aç ve saldır", cls: "bad", fn: done(() => { this.rivalWar(r, true); this.fightRival(i, false); }) });
+    } else if (r.status === "ally") {
+      opts.push({ label: "İttifakı boz", cls: "bad", fn: done(() => { r.status = "peace"; r.rel = 0; this.hud.toast(`${rivalName(r)} ile ittifak bozuldu.`, "bad"); }) });
+    } else if (r.status === "war") {
+      opts.push({ label: "Saldır!", cls: "bad", fn: done(() => this.fightRival(i, false)) });
+      opts.push({ label: `Barış öner · ${cost * 3} altın`, cls: s.res.gold >= cost * 3 ? "" : "off", fn: done(() => this.rivalPeace(i)) });
+    } else if (r.status === "vassal") {
+      opts.push({ label: "Biatından azat et (dostluk kazanırsın)", cls: "", fn: done(() => { r.status = "peace"; r.rel = 40; this.hud.toast(`${rivalName(r)} azat edildi; sana minnettar.`, "good"); }) });
+    }
+    opts.push({ label: "Yoluna devam et", cls: "", fn: done(() => {}) });
+    const line = r.status === "war" ? oneOf(RIVAL_LINES.war) : r.status === "vassal" ? "Haracın her gün yolda, beyim." : r.status === "ally" ? "Kardeşim! Tuğlarımız yan yana dalgalansın." : oneOf(RIVAL_LINES.hello);
+    this.hud.choice(
+      rivalName(r),
+      `icons/${r.icon}`,
+      `<i>"${line}"</i><br><br><b>${tr.name}</b> · ${tr.desc}<br>Durum: <b>${STATUS_NAME[r.status]}</b> · Dostluk: <b>${Math.round(r.rel)}</b> · Seviye ${r.lv} · ${armySize(r.army)} asker`,
+      opts,
+    );
+  }
+
+  private rivalGift(i: number): void {
+    const r = this.s.rivals[i];
+    const cost = giftCost(r);
+    if (!this.pay({ gold: cost })) return;
+    r.rel = Math.min(100, r.rel + 15 * RIVAL_TRAITS[r.trait].gift);
+    this.hud.toast(`${rivalName(r)}: "${oneOf(RIVAL_LINES.gift)}" (dostluk ${Math.round(r.rel)})`, "good");
+  }
+
+  private rivalAlly(i: number): void {
+    const r = this.s.rivals[i];
+    if (r.rel < 50) {
+      this.hud.toast(`${rivalName(r)}: "${oneOf(RIVAL_LINES.refuse)}"`, "bad");
+      return;
+    }
+    r.status = "ally";
+    audio.play("quest");
+    this.chron(`${gen(this.s.hero.name)} ve ${rivalName(r)} kımız içip ant içti; tuğları artık yan yana.`);
+    this.hud.story("Ant içildi", `icons/${r.icon}`, `${rivalName(r)} ile kanınızı bir kâseye damlatıp içtiniz. Artık müttefiksiniz.<br><br><b>Savaşlarda +%7 ordu gücü</b>${r.trait === "comert" ? ", sık sık armağan" : ""}. Müttefiklerin düşmanlarına karşı yanında durur.`, "Kardeşim");
+  }
+
+  private rivalDemand(i: number): void {
+    const r = this.s.rivals[i];
+    const ratio = this.heroPower() / Math.max(1, this.rivalPower(r));
+    if (ratio >= 2 && (r.trait !== "onurlu" || ratio >= 3)) {
+      r.status = "vassal";
+      audio.play("quest");
+      this.chron(`${rivalName(r)} kılıç çekmeden ${gen(this.s.hero.name)} tuğuna eğildi.`);
+      this.hud.toast(`${rivalName(r)} biat etti! Her gün ${tribute(r)} altın haraç.`, "good");
+      return;
+    }
+    r.rel -= 25;
+    this.hud.toast(`${rivalName(r)} öfkeyle güldü: "Önce beni yen!" (dostluk ${Math.round(r.rel)})`, "bad");
+  }
+
+  private rivalPeace(i: number): void {
+    const r = this.s.rivals[i];
+    const cost = giftCost(r) * 3;
+    const ok = r.defeats > 0 || r.trait === "kurnaz" || Math.random() < 0.5 / RIVAL_TRAITS[r.trait].war;
+    if (!ok) {
+      this.hud.toast(`${rivalName(r)} altınını geri yolladı: "Kan kanla yıkanır!"`, "bad");
+      return;
+    }
+    if (!this.pay({ gold: cost })) return;
+    r.status = "peace";
+    r.rel = -10;
+    this.hud.toast(`${rivalName(r)} ile barış yapıldı.`, "good");
+  }
+
+  fightRival(i: number, ambush: boolean): void {
+    const s = this.s;
+    const r = s.rivals[i];
+    if (armySize(r.army) === 0) r.army = { spear: 2, archer: 2, horse: 2 };
+    const boss = rivalBoss(r);
+    this.battle(`${rivalName(r)} ordusu`, r.army, 0.05 + r.lv * 0.005 + (ambush ? 0.05 : 0), (win) => {
+      if (!win) {
+        r.rel -= 5;
+        for (const u of UNIT_KEYS) r.army[u] = Math.max(1, Math.floor(r.army[u] * 0.7));
+        return `<p class="warn">${rivalName(r)} meydanı tuttu.</p>`;
+      }
+      r.army = army();
+      r.defeats++;
+      s.renown += 15;
+      const loot = 120 + r.lv * 30;
+      s.res.gold += loot;
+      this.afterBattle = () => this.rivalFate(i);
+      return `<p class="good">${rivalName(r)} yere serildi! +${loot} altın, +15 şöhret</p>`;
+    }, boss, rivalName(r));
+  }
+
+  private rivalFate(i: number): void {
+    const s = this.s;
+    const r = s.rivals[i];
+    this.hud.choice(
+      `${rivalName(r)} dizlerinin üstünde`,
+      `icons/${r.icon}`,
+      `<i>"${oneOf(RIVAL_LINES.yield)}"</i><br><br>Kaderini sen belirle. Biat ettirirsen her gün haraç öder ve savaşlarda yanında olur. Öldürürsen adın korkuyla anılır ama diğer beyler sana kin besler.`,
+      [
+        { label: `Biat ettir · günde ${tribute(r)} altın`, cls: "go", fn: () => {
+          r.status = "vassal";
+          r.rel = 10;
+          this.chron(`${rivalName(r)} savaş meydanında ${gen(s.hero.name)} tuğuna biat etti.`);
+          this.hud.toast(`${rivalName(r)} artık tabin.`, "good");
+        } },
+        { label: "Kılıçtan geçir", cls: "bad", fn: () => {
+          r.status = "dead";
+          s.renown += 80;
+          s.mats.ruh += 3;
+          for (const o of s.rivals) if (o !== r && o.status !== "dead") o.rel -= o.trait === "onurlu" ? 25 : 12;
+          this.chron(`${rivalName(r)} ${gen(s.hero.name)} kılıcıyla can verdi. Bozkırda bir tuğ daha devrildi.`);
+          this.hud.toast(`${rivalName(r)} öldü. +80 şöhret, +3 Ruh Taşı. Diğer beyler tedirgin.`, "bad");
+        } },
+        { label: "Serbest bırak (dostluk +30)", cls: "", fn: () => {
+          r.status = "peace";
+          r.rel = Math.max(r.rel, 0) + 30;
+          this.hud.toast(`${rivalName(r)} cömertliğini unutmayacak.`, "good");
+        } },
+      ],
+    );
   }
 
   collectCity(city: string): void {
