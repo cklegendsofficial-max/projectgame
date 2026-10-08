@@ -177,6 +177,29 @@ export function fight(a0: Army, aBonus0: number, b0: Army, bBonus = 0, champ: Ch
   return { rounds, win, lostA, lostB, heroHp: Math.round(c?.hp ?? 0), heroDown, bossDown: !!boss && boss.hp <= 0 };
 }
 
+export type Tactic = "hucum" | "duvar" | "pusu";
+export const TACTIC_KEYS: Tactic[] = ["hucum", "duvar", "pusu"];
+export const TACTICS: Record<Tactic, { name: string; icon: string; unit: Unit; beats: Tactic; text: string; foe: string }> = {
+  hucum: { name: "Hücum", icon: "u_cavalry", unit: "horse", beats: "pusu", text: "Atlılar önde, düşmanı ezip geç.", foe: "hücuma kalkacak" },
+  duvar: { name: "Kalkan Duvarı", icon: "u_spear", unit: "spear", beats: "hucum", text: "Mızraklılar saf tutar, okçular arkadan vurur.", foe: "kalkan duvarı kuruyor" },
+  pusu: { name: "Pusu", icon: "u_archer", unit: "archer", beats: "duvar", text: "Yandan dolaş, ilk oku sen at.", foe: "pusu kuruyor" },
+};
+
+export function tacticDelta(t: Tactic, foe: Tactic, a: Army, cev: number): number {
+  const n = Math.max(1, armySize(a));
+  let d = TACTICS[t].beats === foe ? 0.25 : TACTICS[foe].beats === t ? -0.2 : 0;
+  d += (a[TACTICS[t].unit] / n) * 0.15;
+  if (t === "pusu") d += Math.min(0.1, cev * 0.008);
+  return d;
+}
+
+export function stanceWeights(b: Army, boss: Boss | null): Record<Tactic, number> {
+  const n = Math.max(1, armySize(b));
+  const w = { hucum: b.horse / n + 0.2, duvar: b.spear / n + 0.2 + (boss ? 0.4 : 0), pusu: b.archer / n + 0.2 };
+  const t = w.hucum + w.duvar + w.pusu;
+  return { hucum: w.hucum / t, duvar: w.duvar / t, pusu: w.pusu / t };
+}
+
 export function odds(a: Army, aBonus: number, b: Army, bBonus = 0, champ: Champion | null = null, boss: Boss | null = null): number {
   let w = 0;
   for (let k = 0; k < 40; k++) if (fight(a, aBonus, b, bBonus, champ, boss).win) w++;

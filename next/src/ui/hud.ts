@@ -1,6 +1,6 @@
 import type { Game, Quest, Target } from "../game/game";
 import { BUILDINGS, NODE_NAME, RES_ICON, RES_KEYS, RES_NAME, UNITS, UNIT_KEYS, armySize, buildCost, buildTime, prodPerMin, unitUnlocked, xpNeed, type Army, type Res, type Unit } from "../game/data";
-import type { BattleResult, Boss } from "../game/battle";
+import { TACTICS, TACTIC_KEYS, type BattleResult, type Boss, type Tactic } from "../game/battle";
 import { GOODS, GOOD_KEYS, PLUS_CHANCE, SKILL_INFO, SKILL_KEYS, SLOTS, SLOT_NAME, STAT_INFO, STAT_KEYS, canPlus, itemStats, kindName, plusCost, skillLv, skillNext, type Item } from "../game/rpg";
 import { ARMOR_NAME, CLASSES, SKILL_MAX, WEAPON_NAME, skillPow, skillRank, type ClassId } from "../game/classes";
 import { CAPITAL, kurganBoss } from "../game/state";
@@ -236,6 +236,39 @@ export class Hud {
       this.storyOpen = false;
       this.nextStory();
     });
+  }
+
+  tactics(title: string, enemy: Army, boss: Boss | null, foe: string, stance: Tactic | null, w: Record<Tactic, number>, opts: { t: Tactic; odds: number }[], last: Tactic, pick: (t: Tactic) => void, flee: string, onFlee: () => void): void {
+    this.battleOpen = true;
+    this.close();
+    const el = document.createElement("div");
+    el.className = "battle";
+    const intel = stance
+      ? `<div class="intel known">${ic("scroll")}<div>Gözcülerin haber getirdi: düşman <b>${TACTICS[stance].foe}</b>.</div></div>`
+      : `<div class="intel">${ic("scroll")}<div>Düşmanın niyeti belirsiz. Saflarına bakılırsa: ${TACTIC_KEYS.map((t) => `${TACTICS[t].name} %${Math.round(w[t] * 100)}`).join(" · ")}<small>Çeviklik 6, Ferhat ya da Hırsız sınıfı gözcülük sağlar.</small></div></div>`;
+    el.innerHTML = `<div class="bbox tbox"><h2>${ic("swords")} ${title}</h2>
+      <div class="tfoe">${ic(boss?.icon ?? "j_bandit", "bp" + (boss ? " boss" : ""))}<div><b>${boss?.name ?? foe}</b>${armySize(enemy) ? armyHtml(enemy) : ""}</div></div>
+      ${intel}
+      <div class="tacts">${opts
+        .map((o) => {
+          const T = TACTICS[o.t];
+          return `<button class="tact ${o.t === last ? "last" : ""}" data-t="${o.t}">${ic(T.icon, "ti")}<b>${T.name}</b><small>${T.text}</small><small class="tbeat">${TACTICS[T.beats].name} karşısında güçlü</small><span class="odds ${o.odds >= 0.7 ? "good" : o.odds >= 0.4 ? "mid" : "bad"}">%${Math.round(o.odds * 100)}</span></button>`;
+        })
+        .join("")}</div><button class="btn flee">${flee}</button></div>`;
+    this.root.appendChild(el);
+    el.querySelector(".flee")!.addEventListener("click", () => {
+      el.remove();
+      this.battleOpen = false;
+      onFlee();
+      this.nextStory();
+    });
+    el.querySelectorAll<HTMLButtonElement>(".tact").forEach((b) =>
+      b.addEventListener("click", () => {
+        el.remove();
+        this.battleOpen = false;
+        pick(b.dataset.t as Tactic);
+      }),
+    );
   }
 
   private nextStory(): void {

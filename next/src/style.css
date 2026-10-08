@@ -40,6 +40,23 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #1c120a; col
 .saga-box img { width: 84px; height: 84px; flex: none; border-radius: 12px; object-fit: cover; border: 2px solid #b46aff; }
 .saga-box h3 { margin: 0 0 4px; color: #e0c0ff; }
 .saga-box p { margin: 0 0 8px; font-size: 13px; line-height: 1.45; }
+.tbox .tfoe { display: flex; gap: 12px; align-items: center; justify-content: center; margin-bottom: 10px; }
+.tbox .tfoe b { display: block; margin-bottom: 4px; font-size: 16px; }
+.tbox .bp { border-color: #d2452c; }
+.intel { display: flex; gap: 8px; align-items: flex-start; padding: 8px 10px; border-radius: 10px; background: #0005; font-size: 13px; line-height: 1.4; margin-bottom: 10px; }
+.intel .ic { width: 22px; height: 22px; flex: none; }
+.intel small { display: block; opacity: .65; margin-top: 2px; }
+.intel.known { border: 1px solid #7fd36a; color: #dfffd2; }
+.tacts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.tact { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 10px 6px; border-radius: 12px; background: linear-gradient(#4a2f16, #2a1a0c); border: 2px solid #8a5d2a; color: #f4e4c4; cursor: pointer; font: inherit; transition: transform .1s, border-color .1s; }
+.tact:hover { transform: translateY(-2px); border-color: #ffd56a; }
+.tact.last { border-color: #ffd56a88; }
+.tact .ti { width: 46px; height: 46px; }
+.tact b { font-size: 15px; color: #ffe7a8; }
+.tact small { font-size: 11px; opacity: .8; text-align: center; line-height: 1.3; }
+.tact .tbeat { color: #a5e88a; opacity: 1; }
+.tbox .flee { display: block; width: 100%; margin-top: 10px; background: linear-gradient(#5a3a2a, #3a2418); color: #ffd8cc; border-color: #8a4a3a; }
+.tact .odds { margin: 4px 0 0; padding: 3px 10px; font-weight: 700; font-size: 16px; }
 .saga-box .row { display: flex; gap: 6px; flex-wrap: wrap; }
 .saga-box:not(.open) p.st { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .saga-box .more { background: none; border: none; color: #c58cff; font-size: 12px; padding: 0; margin: -4px 0 8px; cursor: pointer; text-decoration: underline; }

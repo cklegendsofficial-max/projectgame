@@ -12,6 +12,7 @@ const page = await browser.newPage({ viewport: vp, deviceScaleFactor: mode === "
 const errs: string[] = [];
 page.on("pageerror", (e) => errs.push(e.message));
 page.on("console", (m) => m.type() === "error" && errs.push(m.text()));
+await page.addInitScript(() => { setInterval(() => (document.querySelector(".tact.last") as HTMLElement | null)?.click(), 300); });
 await page.goto("http://localhost:5174/");
 await page.evaluate(() => localStorage.clear());
 await page.reload();
