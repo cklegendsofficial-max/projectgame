@@ -16,6 +16,7 @@ import { gen } from "./text";
 import { BREEDS, BREED_GOLD, BREED_TIME, SHOP_BREEDS, tulparChance, type Breed } from "./horse";
 import { BIRDS, BIRD_KEYS, BIRD_MAX, BIRD_NAMES, HUNTS, birdSight, birdXpNeed, type BirdFlight, type BirdKind } from "./falcon";
 import { LAST_WORDS, NEM_MAX, NEM_TRAITS, REVENGE, SCAR_EPITHETS, TAUNTS, makeNemesis, nemBoss, nemName, type Nemesis } from "./nemesis";
+import { ENGINE_GOLD, FEAST_GOLD, SIEGE_LV, SIEGE_RENOWN, TAX, cityGarrison, cityTax, wallBonus } from "./conquest";
 import { DEEP_LORE, DOORS, DOOR_KEYS, RIDDLES, deepBoss, deepGuard, deepTier, type DeepRun, type DoorKind } from "./deep";
 import { FACTIONS, FACTION_KEYS, HOSTILE, REP_RANKS, RANK_PERKS, factionOf, repRank, type FactionId } from "./factions";
 import { CLASS_BY_ID, CLASS_SKILLS, SKILL_MAX, WEAPON_NAME, WEAPON_STAT, skillPow, skillRank, type ClassDef, type ClassId, type ClassSkill, type WeaponKind } from "./classes";
@@ -78,6 +79,7 @@ export class Game {
   private wasNight = false;
   private deepBest0 = 0;
   private afterBattle: (() => void) | null = null;
+  private retreatHook: (() => void) | null = null;
 
   constructor(public world: World, public view: WorldView, public cam: Camera) {
     this.s = loadGame(world);
@@ -169,7 +171,7 @@ export class Game {
   }
 
   canStud(city: string): boolean {
-    return city === CAPITAL.id || !!this.s.serais[city];
+    return city === CAPITAL.id || !!this.s.serais[city] || !!this.s.owned[city];
   }
 
   studHorses(): Item[] {
@@ -710,6 +712,7 @@ export class Game {
     }
     for (const n of s.nodes) if (n.left < n.max && now >= n.regenAt) n.left = n.max;
     for (const [id, sr] of Object.entries(s.serais)) sr.coffer = Math.min(this.seraiCap(id), sr.coffer + this.seraiRate(id) * el);
+    this.ownTick(el);
     for (const k of s.kurgans)
       if (!k.alive && now >= k.respawnAt) {
         k.alive = true;
@@ -876,7 +879,7 @@ export class Game {
 
   restCost(): number {
     const ci = this.nearCity();
-    if (ci >= 0 && this.s.serais[CITIES[ci].id]) return 0;
+    if (ci >= 0 && (this.s.serais[CITIES[ci].id] || this.s.owned[CITIES[ci].id])) return 0;
     return 2 + this.s.hero.lv * 2;
   }
 
@@ -980,14 +983,17 @@ export class Game {
   }
 
   cityRank(city: string): number {
+    if (this.s.owned[city]) return 4;
     return this.rank(factionOf(city));
   }
 
   hostile(city: string): boolean {
+    if (this.s.owned[city]) return false;
     return this.rep(factionOf(city)) <= HOSTILE;
   }
 
   repTrade(city: string): number {
+    if (this.s.owned[city]) return 0.1;
     if (this.hostile(city)) return -0.08;
     return [0, 0.03, 0.03, 0.06, 0.06][this.cityRank(city)];
   }
@@ -2332,6 +2338,9 @@ export class Game {
     const s = this.s;
     const h = s.hero;
     this.battleLock = false;
+    const rh = this.retreatHook;
+    this.retreatHook = null;
+    if (rh) return rh();
     if (this.deep) return this.deepFlee();
     const near = s.bandits.filter((b) => Math.hypot(b.x - h.x, b.y - h.y) < 80);
     if (!near.length) return;
@@ -2501,6 +2510,193 @@ export class Game {
     const s = this.s;
     s.chron.push({ d: this.dayOf().day, t });
     if (s.chron.length > 80) s.chron.splice(1, s.chron.length - 80);
+  }
+
+  // ---------- conquest ----------
+
+  siegeReason(city: string): string {
+    const s = this.s;
+    if (city === CAPITAL.id) return "Semerkant senin yurdun.";
+    if (s.owned[city]) return "Bu şehir zaten senin.";
+    if (!s.beylik) return "Şehir kuşatmak için önce beyliğini kur.";
+    if (s.hero.lv < SIEGE_LV) return `Kuşatma için en az ${SIEGE_LV}. seviye ol.`;
+    if (s.renown < SIEGE_RENOWN) return `Ordular senin ardından yürümez: en az ${SIEGE_RENOWN} şöhret gerek.`;
+    if (armySize(this.siegeArmy()) < 25) return "Surlara en az 25 askerle yürünür (birliğin + beylik garnizonu).";
+    return "";
+  }
+
+  siegeArmy(): Army {
+    const h = this.s.hero.army;
+    const g = this.s.garrison;
+    return { spear: h.spear + g.spear, archer: h.archer + g.archer, horse: h.horse + g.horse };
+  }
+
+  cityGar(city: string): Army {
+    return cityGarrison(factionOf(city), this.s.sieged[city] ?? 0);
+  }
+
+  siegeWall(city: string): number {
+    return wallBonus(factionOf(city), this.s.engines);
+  }
+
+  siegeOdds(city: string): number {
+    return odds(this.siegeArmy(), this.heroBonus(), this.cityGar(city), this.siegeWall(city), this.champion(), null);
+  }
+
+  buyEngine(): void {
+    const s = this.s;
+    if (s.res.gold < ENGINE_GOLD || s.engines >= 3) return;
+    s.res.gold -= ENGINE_GOLD;
+    s.engines++;
+    audio.play("quest");
+    this.hud.toast(`Mancınık kuruldu (${s.engines}/3). Surların koruması zayıflayacak.`, "good");
+    saveGame(this.s);
+  }
+
+  besiege(city: string): void {
+    if (this.siegeReason(city)) return;
+    const s = this.s;
+    const f = factionOf(city);
+    const fac = FACTIONS[f];
+    const name = CITY_NAME[city];
+    const gar = this.cityGar(city);
+    const wall = this.siegeWall(city);
+    const used = s.engines;
+    s.engines = 0;
+    const g0 = { ...s.garrison };
+    const tot = this.siegeArmy();
+    s.hero.army = { ...tot };
+    s.garrison = army();
+    this.retreatHook = () => {
+      for (const u of UNIT_KEYS) s.hero.army[u] -= g0[u];
+      s.garrison = g0;
+      s.engines = used;
+      this.hud.toast("Kuşatmadan vazgeçtin; ordu kışlaya döndü.");
+    };
+    this.battle(`${name} kuşatması`, gar, wall, (win) => {
+      this.retreatHook = null;
+      for (const u of UNIT_KEYS) {
+        const back = tot[u] ? Math.min(s.hero.army[u], Math.round((g0[u] * s.hero.army[u]) / tot[u])) : 0;
+        s.hero.army[u] -= back;
+        s.garrison[u] += back;
+      }
+      s.rep[f] = Math.max(-500, this.rep(f) - (win ? 400 : 150));
+      if (!win) {
+        s.sieged[city] = (s.sieged[city] ?? 0) + 1;
+        return `<p class="warn">${name} surları dayandı. ${used ? "Mancınıkların yakıldı. " : ""}Garnizon kayıp verdi; bir dahaki kuşatmada daha zayıf olacak.</p>`;
+      }
+      delete s.sieged[city];
+      s.owned[city] = { loy: 35, gar: army(10, 6, 4), coffer: 0, tax: 1, since: this.dayOf().day, from: f };
+      s.c.conquests = (s.c.conquests ?? 0) + 1;
+      s.renown += 60;
+      if (!s.counterAt) s.counterAt = this.now + 8 * DAY_SEC * 1000;
+      this.chron(`${name} surlarına ${gen(s.hero.name)} tuğu dikildi. ${fac.ruler} bu hakareti unutmayacak.`);
+      this.hud.story(
+        `${name} düştü!`,
+        "icons/siege",
+        `Kapılar kırıldı, ${fac.name} sancağı burçlardan indirildi. Şehrin ileri gelenleri anahtarları önüne koydu.<br><br>Artık <b>${name}</b> senin. Vergi toplar, garnizon kurar, halkı hoşnut tutarsın. Ama ${fac.ruler} şehri geri almak için ordu gönderecek; halk da ağır vergiye isyanla karşılık verir.<br><br><b>Kale</b> sekmesinden şehri yönet.`,
+        "Şehre gir",
+      );
+      return `<p class="good">${name} fethedildi! +60 şöhret</p>`;
+    }, null, `${fac.short} garnizonu`);
+  }
+
+  ownedList(): string[] {
+    return Object.keys(this.s.owned);
+  }
+
+  ownRate(city: string): number {
+    const o = this.s.owned[city];
+    if (!o) return 0;
+    return cityTax(city) * TAX[o.tax].mult * (0.4 + o.loy / 100);
+  }
+
+  ownCap(city: string): number {
+    return cityTax(city) * 25;
+  }
+
+  private ownTick(el: number): void {
+    const s = this.s;
+    for (const [city, o] of Object.entries(s.owned)) {
+      o.coffer = Math.min(this.ownCap(city), o.coffer + this.ownRate(city) * el);
+      const garLoy = Math.min(3, armySize(o.gar) / 20);
+      o.loy = Math.max(0, Math.min(100, o.loy + (TAX[o.tax].loy + garLoy - 1) * el));
+      if (o.loy < 15 && Math.random() < 0.12 * el) this.loseCity(city, "isyan");
+    }
+    if (this.battleLock || !s.counterAt || this.now < s.counterAt) return;
+    const list = this.ownedList();
+    if (!list.length) {
+      s.counterAt = 0;
+      return;
+    }
+    s.counterAt = this.now + (6 + Math.random() * 5) * DAY_SEC * 1000;
+    const city = list[Math.floor(Math.random() * list.length)];
+    const o = s.owned[city];
+    const days = this.dayOf().day - o.since;
+    const base = cityGarrison(o.from, 0);
+    const k = Math.min(1.3, 0.55 + days * 0.03);
+    const foe: Army = { spear: Math.round(base.spear * k), archer: Math.round(base.archer * k), horse: Math.round(base.horse * k) };
+    const res = fight(o.gar, wallBonus(o.from, 0) + 0.1, foe, 0);
+    if (res.win) {
+      o.gar = { ...res.rounds[res.rounds.length - 1].a };
+      o.loy = Math.min(100, o.loy + 8);
+      audio.play("quest");
+      this.hud.toast(`${FACTIONS[o.from].name} ${CITY_NAME[city]} surlarına saldırdı ama garnizonun püskürttü!`, "good");
+    } else this.loseCity(city, "kuşatma");
+  }
+
+  private loseCity(city: string, why: "isyan" | "kuşatma"): void {
+    const s = this.s;
+    const o = s.owned[city];
+    if (!o) return;
+    delete s.owned[city];
+    const name = CITY_NAME[city];
+    audio.play("lose");
+    const t = why === "isyan" ? `${name} halkı ağır yüke dayanamadı ve ayaklandı. Valin kaçtı, garnizonun dağıldı.` : `${FACTIONS[o.from].name} ordusu ${name} surlarını aştı. Garnizonun kılıçtan geçirildi.`;
+    this.chron(t);
+    this.hud.story(`${name} kaybedildi`, "icons/siege", `${t}<br><br>Şehri yeniden almak için tekrar kuşatman gerekecek.`, "Acı haber");
+    saveGame(this.s);
+  }
+
+  collectCity(city: string): void {
+    const o = this.s.owned[city];
+    if (!o || o.coffer < 1 || this.nearCity() < 0 || CITIES[this.nearCity()].id !== city) return;
+    const g = Math.floor(o.coffer);
+    o.coffer -= g;
+    this.s.res.gold += g;
+    audio.play("coin");
+    this.hud.toast(`${CITY_NAME[city]} vergisi: +${g} altın`, "good");
+    saveGame(this.s);
+  }
+
+  setTax(city: string, t: 0 | 1 | 2): void {
+    const o = this.s.owned[city];
+    if (o) o.tax = t;
+  }
+
+  feast(city: string): void {
+    const o = this.s.owned[city];
+    if (!o || this.s.res.gold < FEAST_GOLD) return;
+    this.s.res.gold -= FEAST_GOLD;
+    o.loy = Math.min(100, o.loy + 25);
+    audio.play("quest");
+    this.hud.toast(`${CITY_NAME[city]} meydanında şölen! Halk adını anıyor (+25 bağlılık).`, "good");
+    saveGame(this.s);
+  }
+
+  garMove(city: string, u: Unit, n: number): void {
+    const o = this.s.owned[city];
+    const h = this.s.hero;
+    if (!o) return;
+    if (n > 0) {
+      const k = Math.min(n, h.army[u]);
+      h.army[u] -= k;
+      o.gar[u] += k;
+    } else {
+      const k = Math.min(-n, o.gar[u], Math.max(0, this.heroCap() - armySize(h.army)));
+      o.gar[u] -= k;
+      h.army[u] += k;
+    }
   }
 
   // ---------- kurgan depths ----------

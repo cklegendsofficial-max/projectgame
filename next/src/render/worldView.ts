@@ -149,6 +149,7 @@ export class WorldView {
   private kurganM: Marker[] = [];
   private fortM: Marker | null = null;
   private seraiF = new Map<string, Sprite>();
+  private ownF = new Map<string, Sprite>();
   private compM = new Map<string, Container>();
   private trail: number[] = [];
   private cityM: Marker[] = [];
@@ -756,6 +757,20 @@ export class WorldView {
         f.position.set(c.x + 62, c.y - 20);
         this.places.addChild(f);
         this.seraiF.set(id, f);
+      }
+      for (const c of CITIES) {
+        const own = !!s.owned[c.id];
+        let f = this.ownF.get(c.id);
+        if (own && !f) {
+          f = new Sprite(this.t("tug"));
+          f.anchor.set(0.5, 1);
+          f.scale.set(84 / f.texture.height);
+          f.tint = 0xffd36a;
+          f.position.set(c.x - 66, c.y - 16);
+          this.places.addChild(f);
+          this.ownF.set(c.id, f);
+        }
+        if (f) f.visible = own;
       }
       const ls = Math.min(2.4, Math.max(0.9, 0.7 / cam.zoom));
       for (const m of [...this.villageM, ...this.campM, ...this.kurganM, ...this.cityM]) if (m.label) m.label.scale.set(ls);

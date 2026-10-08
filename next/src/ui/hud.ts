@@ -19,6 +19,7 @@ import { BIRDS, birdSight, birdXpNeed } from "../game/falcon";
 import { BREEDS, BREED_GOLD, BREED_TIME } from "../game/horse";
 import { TITLE_CATS, titleKey, titleOf } from "../game/titles";
 import { DAILY_POOL } from "../game/daily";
+import { ENGINE_GOLD as ENGINE_GOLD_UI, FEAST_GOLD as FEAST_GOLD_UI, TAX as TAX_UI } from "../game/conquest";
 
 const WEAPON_ICON: Record<string, string> = { kilic: "it_sword_", balta: "it_axe_", hancer: "it_dagger_", ok: "it_bow_", asa: "it_staff_" };
 
@@ -788,6 +789,7 @@ export class Hud {
     if (isCap && s.beylik) list.push(["bina", "Binalar"], ["kisla", "Kışla"], ["ordu", "Ordu"], ["sefer", "Seferler"]);
     list.push(["pazar", "Pazar"], ["demirci", "Demirci"], ["atolye", "Atölye"], ["ors", "Örs"], ["talim", "Talim"], ["han", "Han"]);
     if (isCap && s.free && !s.beylik) list.push(["beylik", "Beylik"]);
+    if (!isCap && s.free) list.push(["kale", s.owned[c.id] ? "Kale ★" : "Kale"]);
     const tabs = this.tabs(list);
     let body = "";
     const off = !near ? "off" : "";
@@ -921,11 +923,46 @@ export class Hud {
         ${bar(s.renown, bc.renown, "", `Şöhret ${s.renown}/${bc.renown}`)}${bar(s.res.gold, bc.gold, "", `Altın ${fmt(s.res.gold)}/${bc.gold}`)}
         <button class="btn go big ${ok ? "" : "off"}" data-a="${this.act(() => g.foundBeylik())}">${ic("crown")} Beyliği kur</button>
         <p class="dim">Şöhret; haramileri yenerek, kampları yıkarak ve ödül ilanlarını tamamlayarak kazanılır.</p>`;
+    } else if (this.tab === "kale") {
+      body = nearNote + this.kaleHtml(c.id, near);
     } else body = this.beylikTabs();
     const fac = FACTIONS[factionOf(c.id)];
-    const facTag = `<span class="ftag" style="--fc:${g.hostile(c.id) ? "#ff6a5a" : fac.color}">${fac.name} · ${g.hostile(c.id) ? "Düşman" : REP_RANKS[g.cityRank(c.id)].name}</span>`;
+    const facTag = s.owned[c.id]
+      ? `<span class="ftag" style="--fc:#ffd36a">Senin şehrin · ${fac.name} sınırında</span>`
+      : `<span class="ftag" style="--fc:${g.hostile(c.id) ? "#ff6a5a" : fac.color}">${fac.name} · ${g.hostile(c.id) ? "Düşman" : REP_RANKS[g.cityRank(c.id)].name}</span>`;
     const sub = (isCap && s.beylik ? `Beyliğinin merkezi · Saray Sv ${g.bld("saray")} · ` : isCap && !s.free ? "Efendinin şehri · " : "") + facTag;
     return this.frame(g.cityName(ci), sub, assetUrl("cities/" + c.id), this.sagaBox(c.id, near) + tabs + body);
+  }
+
+  private kaleHtml(city: string, near: boolean): string {
+    const g = this.g;
+    const s = g.s;
+    const o = s.owned[city];
+    const fac = FACTIONS[factionOf(city)];
+    if (!o) {
+      const why = g.siegeReason(city);
+      const gar = g.cityGar(city);
+      const wall = g.siegeWall(city);
+      const od = g.siegeOdds(city);
+      const ocls = od > 0.7 ? "good" : od > 0.4 ? "mid" : "bad";
+      return `<div class="brow">${ic("siege", "bimg")}<div class="bi2"><b>${CITY_NAME[city]} surları</b><small>${fac.name} garnizonu şehri korur. Surlar savunmaya güç katar; mancınıklar bu üstünlüğü kırar. Kuşatma ${fac.name} ile aranı derinden bozar.</small></div></div>
+        <div class="stats">${UNIT_KEYS.map((u) => `<div>${ic(UNITS[u].icon)}${UNITS[u].name}: <b>${gar[u]}</b></div>`).join("")}<div>${ic("fortress")}Sur: <b>+%${Math.round(wall * 100)}</b></div></div>
+        <div class="grow">${ic("siege", "gimg")}<div class="bi2"><b>Mancınık <em>${s.engines}/3</em></b><small>Her biri sur bonusunu %10 düşürür. Bir kuşatmada harcanır.</small></div><button class="btn sm ${s.engines >= 3 || s.res.gold < ENGINE_GOLD_UI ? "off" : ""}" data-a="${this.act(() => g.buyEngine())}">Kur<br>${ic("coins")}${ENGINE_GOLD_UI}</button></div>
+        <p class="dim">Kuşatmaya birliğinle birlikte beyliğinin kışla garnizonu da katılır: <b>${armySize(s.hero.army)}</b> + <b>${armySize(s.garrison)}</b> asker. Sağ kalanlar kışlaya döner.</p>
+        <div class="odds ${ocls}">Zafer ihtimali: <b>%${Math.round(od * 100)}</b></div>
+        ${why ? `<p class="why">${why}</p>` : ""}
+        <button class="btn go big ${why || !near ? "off" : ""}" data-a="${this.act(() => { this.close(); g.besiege(city); })}">${ic("swords")} Kuşat</button>`;
+    }
+    const loyCls = o.loy < 25 ? "hp" : "";
+    const garRow = (u: Unit) => `<div class="grow">${ic(UNITS[u].icon, "gimg")}<div class="bi2"><b>${UNITS[u].name}</b><small>Garnizon ${o.gar[u]} · Yanında ${s.hero.army[u]}</small></div><button class="btn sm ${!near || s.hero.army[u] <= 0 ? "off" : ""}" data-a="${this.act(() => g.garMove(city, u, 10))}">+10</button><button class="btn sm ${!near || o.gar[u] <= 0 ? "off" : ""}" data-a="${this.act(() => g.garMove(city, u, -10))}">−10</button></div>`;
+    return `<div class="brow">${ic("crown", "bimg")}<div class="bi2"><b>${CITY_NAME[city]} senin</b><small>${o.since}. günden beri tuğun burçlarda dalgalanıyor. Vergi kasası dolar, uğradığında toplarsın. Bağlılık düşerse halk ayaklanır; ${FACTIONS[o.from].name} şehri geri almak için ordu gönderir.</small></div></div>
+      ${bar(o.loy, 100, loyCls, `Bağlılık ${Math.floor(o.loy)}/100`)}
+      ${bar(o.coffer, g.ownCap(city), "", `Kasa ${Math.floor(o.coffer)}/${Math.round(g.ownCap(city))} · dakikada ${g.ownRate(city).toFixed(1)}`)}
+      <button class="btn go ${!near || o.coffer < 1 ? "off" : ""}" data-a="${this.act(() => g.collectCity(city))}">${ic("coins")} Vergiyi topla</button>
+      <h3>${ic("scroll")} Vergi oranı</h3><div class="row">${TAX_UI.map((t, i) => `<button class="btn sm ${o.tax === i ? "go" : ""}" data-a="${this.act(() => g.setTax(city, i as 0 | 1 | 2))}">${t.name} ×${t.mult}</button>`).join("")}</div>
+      <p class="dim">Hafif vergi bağlılığı artırır, ağır vergi kasayı hızla doldurur ama halkı kızdırır. Garnizon da bağlılığı destekler.</p>
+      <button class="btn ${s.res.gold < FEAST_GOLD_UI ? "off" : ""}" data-a="${this.act(() => g.feast(city))}">${ic("food")} Şölen ver (+25 bağlılık) · ${ic("coins")}${FEAST_GOLD_UI}</button>
+      <h3>${ic("tug")} Garnizon <em>${armySize(o.gar)}</em></h3>${UNIT_KEYS.map(garRow).join("")}`;
   }
 
   private sagaBox(cityId: string, near: boolean): string {
@@ -1268,8 +1305,9 @@ export class Hud {
     const sx = w / W;
     const sy = h / H;
     for (const ci of CITIES) {
-      c.fillStyle = ci.id === CAPITAL.id ? "#ffd56a" : "#f2e6c8";
-      c.fillRect(ci.x * sx - 2, ci.y * sy - 2, 4, 4);
+      const own = ci.id === CAPITAL.id || !!g.s.owned[ci.id];
+      c.fillStyle = own ? "#ffd56a" : "#f2e6c8";
+      c.fillRect(ci.x * sx - (own ? 3 : 2), ci.y * sy - (own ? 3 : 2), own ? 6 : 4, own ? 6 : 4);
     }
     const wanted = new Set(g.s.bounties.filter((b) => b.taken).map((b) => b.camp));
     g.s.camps.forEach((cp, i) => {
