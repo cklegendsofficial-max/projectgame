@@ -45,5 +45,7 @@ await page.locator(".tbox .flee").click();
 await page.waitForTimeout(500);
 console.log("after flee", JSON.stringify(await ev(`return { army: g.s.hero.army, lock: g.battleLock, amb: g.s.bandits.filter(b => b.amb).length };`)));
 await page.waitForTimeout(1500);
+console.log("audio", await page.evaluate(`import("/src/audio.ts").then(m => ({ state: m.audio.ctx?.state, muted: m.audio.muted }))`));
+await page.screenshot({ path: `${out}-04-map.png` });
 console.log("errors:", errs);
 await browser.close();

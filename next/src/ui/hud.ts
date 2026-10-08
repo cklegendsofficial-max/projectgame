@@ -8,6 +8,7 @@ import { CITY_NAME } from "../game/data";
 import { COMPANIONS, COMP_BY_ID, COMP_MAX, FORT_GUARD, KARA_HAN, type CompId } from "../game/story";
 import { CITIES, H, NH, NW, W } from "../world/gen";
 import { assetUrl } from "../render/worldView";
+import { audio } from "../audio";
 
 const ic = (k: string, cls = "ic") => `<img class="${cls}" src="${assetUrl(k)}" alt="">`;
 const CAP_I = CITIES.findIndex((c) => c.id === "samarkand");
@@ -75,6 +76,7 @@ export class Hud {
         <button data-b="capital"><img class="bi" src="${assetUrl("cities/samarkand")}" alt=""><span>Semerkant</span></button>
         <button data-b="hero"><img class="bi round" src="${assetUrl("heroes/slave")}" alt=""><span>Kahraman</span></button>
         <button data-b="find">${ic("tug", "bi")}<span>Birliğim</span></button>
+        <button data-b="snd" class="snd ${audio.muted ? "off" : ""}"><b class="bi">♪</b><span>Ses</span></button>
       </div>
       <canvas class="mini" width="220" height="128"></canvas>
       <div class="panel hidden"></div>`;
@@ -104,8 +106,11 @@ export class Hud {
         this.close();
         g.cam.flyTo(g.s.hero.x, g.s.hero.y, Math.max(g.cam.zoom, 0.7));
       }
+      if (b === "snd") this.root.querySelector(".snd")!.classList.toggle("off", audio.toggle());
     });
+    window.addEventListener("pointerdown", () => audio.unlock());
     this.root.addEventListener("click", (e) => {
+      if ((e.target as HTMLElement).closest("button")) audio.play("click");
       const el = (e.target as HTMLElement).closest("[data-a]") as HTMLElement | null;
       if (!el || el.classList.contains("off")) return;
       this.acts.get(el.dataset.a!)?.();
@@ -209,6 +214,8 @@ export class Hud {
 
   toast(text: string, kind: "good" | "bad" | "info" = "info"): void {
     if ([...this.toasts.children].some((c) => c.textContent === text)) return;
+    if (kind === "bad") audio.play("bad");
+    else if (kind === "good" && /altın|\+/.test(text)) audio.play("coin");
     const el = document.createElement("div");
     el.className = "toast " + kind;
     el.textContent = text;
@@ -227,6 +234,7 @@ export class Hud {
     }
     this.storyOpen = true;
     this.close();
+    audio.play("story");
     const el = document.createElement("div");
     el.className = "battle";
     el.innerHTML = `<div class="bbox story"><img class="simg" src="${assetUrl(img)}" alt=""><h2>${title}</h2><p>${html}</p><button class="btn go big">${btn}</button></div>`;
@@ -277,6 +285,7 @@ export class Hud {
   }
 
   questDone(q: Quest): void {
+    audio.play("quest");
     const el = document.createElement("div");
     el.className = "qdone";
     el.innerHTML = `${ic("quest", "qi")}<div><small>Görev tamamlandı</small><b>${q.title}</b><span>${costHtml(q.reward, this.g)}</span></div>`;
@@ -752,6 +761,7 @@ export class Hud {
         box.classList.remove("shake");
         void box.offsetWidth;
         box.classList.add("shake");
+        audio.play("hit");
         log.textContent = `${r.ev.length ? r.ev.join(" · ") + " — " : ""}${i}. tur: ${p.hp >= r.hp ? `${Math.round(p.hp - r.hp)} hasar aldın` : `${Math.round(r.hp - p.hp)} can yeniledin`}${n0a ? `, ${armySize(p.a) - armySize(r.a)} asker kaybın` : ""} · düşman kaybı ${armySize(p.b) - armySize(r.b)}`;
         i++;
         setTimeout(step, 480);
@@ -761,6 +771,8 @@ export class Hud {
       setSide(".me", last.a, n0a, last.hp);
       setSide(".foe", last.b, n0b);
       setBoss(last.bhp);
+      audio.play(res.win ? "win" : "lose");
+      if (lvUp) setTimeout(() => audio.play("level"), 900);
       log.textContent = res.win ? (boss ? `${boss.name} yıkıldı!` : "Düşman kaçıyor!") : res.heroDown ? "Yere düştün…" : "Geri çekilmek zorunda kaldın.";
       el.querySelector(".result")!.innerHTML = `
         <div class="rt ${res.win ? "win" : "lose"}">${res.win ? "ZAFER" : "YENİLGİ"}</div>
