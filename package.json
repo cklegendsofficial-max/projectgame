@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "sim": "tsx tools/simulate.ts"
+    "sim": "tsx tools/simulate.ts",
+    "pack": "npm run build && powershell -NoProfile -ExecutionPolicy Bypass -File tools/pack.ps1"
   },
   "devDependencies": {
     "@types/node": "^26.6.4",
