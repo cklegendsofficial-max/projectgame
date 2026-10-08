@@ -95,7 +95,7 @@ class Game implements GameApi {
   private async collectOfflineAd(amount: number): Promise<void> {
     const ok = await this.runAd();
     this.collectOffline(amount, ok ? 2 : 1);
-    if (!ok) this.toasts.show(t("adFailed"), "bad");
+    if (!ok) this.toasts.show(t(adsAvailable() ? "adFailed" : "adOff"), "bad");
   }
 
   private frame(nowPerf: number): void {
@@ -376,7 +376,7 @@ class Game implements GameApi {
               sfx.fanfare();
               this.save();
             } else {
-              this.toasts.show(t("adFailed"), "bad");
+              this.toasts.show(t(adsAvailable() ? "adFailed" : "adOff"), "bad");
             }
           },
         };

@@ -58,8 +58,10 @@ export function sdkActive(): boolean {
   return !!sdk && env !== "disabled";
 }
 
+let adsDisabled = false;
+
 export function adsAvailable(): boolean {
-  return sdkActive();
+  return sdkActive() && !adsDisabled;
 }
 
 export function loadingStart(): void {
@@ -89,7 +91,11 @@ export function requestRewarded(onStart: () => void): Promise<boolean> {
       sdk.ad.requestAd("rewarded", {
         adStarted: () => onStart(),
         adFinished: () => resolve(true),
-        adError: () => resolve(false),
+        adError: (err: any) => {
+          console.warn("Rewarded ad error", err);
+          if (err?.code === "adsDisabledBasicLaunch" || err?.code === "adblock") adsDisabled = true;
+          resolve(false);
+        },
       });
     } catch {
       resolve(false);
