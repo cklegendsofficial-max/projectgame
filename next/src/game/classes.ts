@@ -115,7 +115,7 @@ export const CLASSES: ClassDef[] = [
   },
 ];
 
-export type SkillKind = "burst" | "poison" | "evade" | "shield" | "aura" | "fury" | "steal";
+export type SkillKind = "burst" | "poison" | "evade" | "shield" | "aura" | "fury" | "steal" | "drain" | "stun" | "slayer" | "rally";
 
 export interface ClassSkill {
   id: string;
@@ -131,26 +131,36 @@ export interface ClassSkill {
 export const SKILL_MAX = 10;
 const pct = (p: number) => `%${Math.round(p * 100)}`;
 
-export const CLASS_SKILLS: Record<ClassId, [ClassSkill, ClassSkill]> = {
+export const CLASS_SKILLS: Record<ClassId, ClassSkill[]> = {
   alp: [
     { id: "hucum", name: "Kalkan Hücumu", icon: "sk_hucum", kind: "burst", unlock: 3, base: 1.1, per: 0.15, text: (p) => `Her 3 turda bir kalkanınla düşman safına dalarsın: saldırının ${pct(p)} kadar alan hasarı.` },
     { id: "duvar", name: "Demir Duvar", icon: "sk_duvar", kind: "shield", unlock: 6, base: 0.2, per: 0.035, text: (p) => `İlk 3 tur sen ve birliğin ${pct(p)} daha az hasar alırsınız.` },
+    { id: "sancak", name: "Hakan Sancağı", icon: "tug", kind: "rally", unlock: 10, base: 0.12, per: 0.03, text: (p) => `Sancağın dalgalandıkça askerlerin coşar: 4 turda birlik saldırısı ${pct(p)} artar.` },
+    { id: "ulukalkan", name: "Ulu Kalkan", icon: "it_shield_5", kind: "stun", unlock: 15, base: 0.4, per: 0.04, text: (p) => `Her 4 turda bir kalkanınla düşmanı sersemletirsin: o tur ${pct(p)} daha az hasar alırsınız.` },
   ],
   bahadir: [
     { id: "girdap", name: "Kan Girdabı", icon: "sk_girdap", kind: "burst", unlock: 3, base: 1.5, per: 0.2, text: (p) => `Her 3 turda baltanı döndürürsün: saldırının ${pct(p)} kadar alan hasarı.` },
     { id: "ciglik", name: "Savaş Çığlığı", icon: "sk_ciglik", kind: "fury", unlock: 6, base: 0.1, per: 0.03, text: (p) => `Savaş boyunca saldırın ${pct(p)} artar.` },
+    { id: "kanasusamis", name: "Kana Susamış", icon: "tr_mane", kind: "drain", unlock: 10, base: 0.3, per: 0.06, text: (p) => `Verdiğin hasarın ${pct(p * 0.4)} kadarı canına döner.` },
+    { id: "ejder", name: "Ejder Kesiği", icon: "it_axe_5", kind: "slayer", unlock: 15, base: 0.35, per: 0.07, text: (p) => `Boss'lara ${pct(p)}, ordulara ${pct(p / 2)} fazla hasar.` },
   ],
   suikastci: [
     { id: "zehir", name: "Zehirli Hançer", icon: "sk_zehir", kind: "poison", unlock: 3, base: 0.25, per: 0.06, text: (p) => `Zehir her tur düşmana saldırının ${pct(p)} kadar hasar verir.` },
     { id: "golge", name: "Gölge Adımı", icon: "sk_golge", kind: "evade", unlock: 6, base: 0.08, per: 0.02, text: (p) => `Kaçınma şansın ${pct(p)} artar.` },
+    { id: "basavcisi", name: "Baş Avcısı", icon: "wanted", kind: "slayer", unlock: 10, base: 0.4, per: 0.08, text: (p) => `Liderleri hedef alırsın: boss'lara ${pct(p)}, ordulara ${pct(p / 2)} fazla hasar.` },
+    { id: "olumdansi", name: "Ölüm Dansı", icon: "it_dagger_5", kind: "burst", unlock: 15, base: 2, per: 0.25, text: (p) => `Her 3 turda gölgeler arasında dans edersin: saldırının ${pct(p)} kadar hasar.` },
   ],
   hirsiz: [
     { id: "kese", name: "Kese Kesme", icon: "sk_kese", kind: "steal", unlock: 3, base: 0.2, per: 0.08, text: (p) => `Zaferlerden ${pct(p)} fazla altın çalarsın.` },
     { id: "duman", name: "Duman Bombası", icon: "sk_duman", kind: "shield", unlock: 6, base: 0.25, per: 0.04, text: (p) => `İlk 3 tur duman içinde düşman ${pct(p)} daha az isabet ettirir.` },
+    { id: "gozboyama", name: "Göz Boyama", icon: "spices", kind: "stun", unlock: 10, base: 0.35, per: 0.05, text: (p) => `Her 4 turda düşmanın gözüne baharat savurursun: o tur ${pct(p)} daha az hasar alırsınız.` },
+    { id: "kalles", name: "Kalleş Bıçak", icon: "it_dagger_4", kind: "poison", unlock: 15, base: 0.35, per: 0.07, text: (p) => `Sırttan saplanan bıçak her tur saldırının ${pct(p)} kadar hasar verir.` },
   ],
   kam: [
     { id: "gazap", name: "Tengri'nin Gazabı", icon: "sk_gazap", kind: "burst", unlock: 3, base: 1.3, per: 0.18, text: (p) => `Her 3 turda gökten yıldırım indirirsin: saldırının ${pct(p)} kadar alan hasarı.` },
     { id: "kurt", name: "Kurt Ruhu", icon: "sk_kurt", kind: "aura", unlock: 6, base: 0.06, per: 0.025, text: (p) => `Atalarının kurt ruhu birliğinin gücünü ${pct(p)} artırır.` },
+    { id: "atalar", name: "Atalar Çağrısı", icon: "tr_star", kind: "rally", unlock: 10, base: 0.1, per: 0.03, text: (p) => `Ataların ruhları savaşa katılır: 4 turda birlik saldırısı ${pct(p)} artar.` },
+    { id: "gokgurultu", name: "Gök Gürültüsü", icon: "tr_crystal", kind: "stun", unlock: 15, base: 0.4, per: 0.05, text: (p) => `Her 4 turda gök gürler, düşman korkuyla siner: o tur ${pct(p)} daha az hasar alırsınız.` },
   ],
 };
 

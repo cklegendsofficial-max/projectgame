@@ -98,6 +98,10 @@ export function fight(a0: Army, aBonus0: number, b0: Army, bBonus = 0, champ: Ch
   const shield = sk("shield");
   const burst = sk("burst");
   const poison = sk("poison");
+  const drain = sk("drain");
+  const stun = sk("stun");
+  const slay = sk("slayer").reduce((t, s) => t + s.pow, 0);
+  const rally = sk("rally").reduce((t, s) => t + s.pow, 0);
   const rounds: Round[] = [{ a: { ...a }, b: { ...b }, hp: c?.hp ?? 0, bhp: boss?.hp ?? 0, ev: [] }];
   const aAlive = () => armySize(a) > 0 || (!!c && c.hp > 0);
   const bAlive = () => (boss ? boss.hp > 0 : armySize(b) > 0);
@@ -138,10 +142,24 @@ export function fight(a0: Army, aBonus0: number, b0: Army, bBonus = 0, champ: Ch
         extra += c.atk * s.pow;
         if (r === 0) ev.push(s.name);
       }
+      if (slay) {
+        extra *= 1 + (boss ? slay : slay / 2);
+        if (r === 0 && boss) for (const s of sk("slayer")) ev.push(s.name);
+      }
+      for (const s of drain) {
+        c.hp = Math.min(c.maxHp, c.hp + extra * s.pow * 0.4);
+        if (r === 0) ev.push(s.name);
+      }
     }
-    const inMul = r < 3 ? shield.reduce((m, s) => m * (1 - s.pow), 1) : 1;
+    let inMul = r < 3 ? shield.reduce((m, s) => m * (1 - s.pow), 1) : 1;
     if (inMul < 1 && r === 0) for (const s of shield) ev.push(s.name);
-    const atkB = hit(a, b, aBonus, hpB, extra, boss, BOSS_WEIGHT);
+    if (c && c.hp > 0 && r % 4 === 1)
+      for (const s of stun) {
+        inMul *= 1 - Math.min(0.8, s.pow);
+        ev.push(s.name);
+      }
+    if (rally && r === 1) for (const s of sk("rally")) ev.push(s.name);
+    const atkB = hit(a, b, aBonus + rally * Math.min(1, r / 4), hpB, extra, boss, BOSS_WEIGHT);
     const bossDmg = boss && boss.hp > 0 ? boss.atk * inMul : 0;
     const atkA = hit(b, a, (1 + bBonus) * inMul - 1, hpA, bossDmg, c, CHAMP_WEIGHT);
     hurtBoss(atkB.toChamp);

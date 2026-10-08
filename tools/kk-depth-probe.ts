@@ -45,5 +45,12 @@ console.log("talents", JSON.stringify(await ev(`return { lv: g.s.hero.lv, tpts: 
 await ev(`g.respecTalents();`);
 console.log("respec", JSON.stringify(await ev(`return { tpts: g.s.hero.tpts, tal: g.s.hero.tal, gold: g.s.res.gold };`)));
 
+// class skills
+await ev(`for (const sk of g.classSkills()) for (let i = 0; i < 4; i++) g.learn(sk.id);`);
+console.log("skills", JSON.stringify(await ev(`return g.champion().skills;`)));
+const evs = await page.evaluate(`import("/src/game/battle.ts").then(m => { const g = window.game; const r = m.fight({spear: 20, archer: 10, horse: 5}, g.heroBonus(), {spear: 30, archer: 20, horse: 10}, 0, g.champion(), {name: "Test", icon: "x", atk: 30, def: 10, hp: 600}); return [...new Set(r.rounds.flatMap(x => x.ev))]; })`);
+console.log("events", JSON.stringify(evs));
+await ev(`g.hud["openHero"](); g.hud.tab = "beceri"; g.hud.render();`);
+await shot("03-skills");
 console.log("errors:", errs);
 await browser.close();
