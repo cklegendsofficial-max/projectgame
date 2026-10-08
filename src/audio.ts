@@ -27,6 +27,16 @@ export function setMuted(m: boolean): void {
   muted = m;
 }
 
+let platformMuted = false;
+
+export function setPlatformMuted(m: boolean): void {
+  platformMuted = m;
+}
+
+export function isPlatformMuted(): boolean {
+  return platformMuted;
+}
+
 export function pauseForAd(p: boolean): void {
   suspendedForAd = p;
   if (!ctx) return;
@@ -36,7 +46,7 @@ export function pauseForAd(p: boolean): void {
 
 function tone(freq: number, start: number, dur: number, type: OscillatorType, vol: number): void {
   const c = ensure();
-  if (!c || !master || muted || suspendedForAd) return;
+  if (!c || !master || muted || platformMuted || suspendedForAd) return;
   const o = c.createOscillator();
   const g = c.createGain();
   o.type = type;

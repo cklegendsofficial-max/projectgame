@@ -1,5 +1,5 @@
 import "./style.css";
-import { pauseForAd, setMuted, sfx, unlockAudio } from "./audio";
+import { pauseForAd, setMuted, setPlatformMuted, sfx, unlockAudio } from "./audio";
 import { AD_COOLDOWN_MS, FAVOR_DURATION_MS, FAVOR_MAX_MS, ROUTES, UPGRADE_BY_ID } from "./data";
 import {
   bountyMult,
@@ -21,7 +21,7 @@ import { fmt, fmtTime, setNotation } from "./format";
 import { setLang, t, tk } from "./i18n";
 import { MapView } from "./map";
 import { exportSave, importSave, loadGame, saveGame, wipeSave } from "./save";
-import { adsAvailable, gameplayStart, gameplayStop, happytime, initSdk, loadingStart, loadingStop, requestRewarded } from "./sdk";
+import { adsAvailable, gameplayStart, gameplayStop, happytime, initSdk, loadingStart, loadingStop, requestRewarded, watchMuteAudio } from "./sdk";
 import { newGame, resetForDynasty, type GameState } from "./state";
 import { goodsName, milestoneText, modalOpen, offlineSummary, routeLabel, showModal, Toasts, UI, type GameApi } from "./ui";
 
@@ -476,6 +476,7 @@ class Game implements GameApi {
 
 async function boot(): Promise<void> {
   await initSdk();
+  watchMuteAudio(setPlatformMuted);
   loadingStart();
   const state = loadGame();
   const game = new Game(state);

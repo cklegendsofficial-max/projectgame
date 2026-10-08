@@ -80,6 +80,16 @@ export function gameplayStop(): void {
   if (sdkActive()) try { sdk.game.gameplayStop(); } catch { /* ignore */ }
 }
 
+export function watchMuteAudio(cb: (muted: boolean) => void): void {
+  if (!sdkActive()) return;
+  try {
+    cb(!!sdk.game.settings?.muteAudio);
+    sdk.game.addSettingsChangeListener((s: any) => cb(!!s?.muteAudio));
+  } catch {
+    /* ignore */
+  }
+}
+
 export function happytime(): void {
   if (sdkActive()) try { sdk.game.happytime(); } catch { /* ignore */ }
 }

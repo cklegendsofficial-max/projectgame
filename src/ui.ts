@@ -1,3 +1,4 @@
+import { isPlatformMuted } from "./audio";
 import { ROUTES, UPGRADES, type UpgradeDef } from "./data";
 import {
   boostActive,
@@ -396,7 +397,7 @@ export class UI {
 
     $("gold").textContent = fmt(s.gold);
     $("income").textContent = "+" + fmt(totalIncomePerSec(s, now)) + t("perSec");
-    $("muteBtn").textContent = s.settings.muted ? "🔇" : "🔊";
+    $("muteBtn").textContent = s.settings.muted || isPlatformMuted() ? "🔇" : "🔊";
 
     const favorBtn = $("favorBtn") as HTMLButtonElement;
     if (!g.canWatchAd()) {
