@@ -479,7 +479,7 @@ class Game implements GameApi {
 
   private dailyTick(now: number): void {
     const s = this.s;
-    if (this.dailyChecked || s.tutorial < 5 || modalOpen()) return;
+    if (this.dailyChecked || s.tutorial < 5 || modalOpen() || this.calm(now)) return;
     this.dailyChecked = true;
     const key = (t: number) => {
       const d = new Date(t);
@@ -1590,7 +1590,7 @@ class Game implements GameApi {
       }
       return;
     }
-    if (now < s.nextTradeWar || !isOpen(s, "war") || document.hidden || modalOpen()) return;
+    if (now < s.nextTradeWar || !isOpen(s, "war") || document.hidden || modalOpen() || this.calm(now)) return;
     if (s.spies > 0 && Math.random() < SPY_FOIL * s.spies) {
       s.nextTradeWar = now + (9 + Math.random() * 5) * 60_000;
       s.stats.foiled++;
@@ -1839,7 +1839,7 @@ class Game implements GameApi {
 
   private campTick(now: number): void {
     const s = this.s;
-    if (!isOpen(s, "events")) return;
+    if (!isOpen(s, "events") || (!s.camp && this.calm(now))) return;
     const k = campSeasonIndex(now);
     if (!s.camp) {
       s.camp = campWanted(now);
@@ -2044,7 +2044,7 @@ class Game implements GameApi {
       this.offerRival(bank);
     }
     const s = this.s;
-    if (now < this.nextRival || !isOpen(s, "events") || modalOpen() || document.hidden || this.map.stormLive(now)) return;
+    if (now < this.nextRival || !isOpen(s, "events") || modalOpen() || document.hidden || this.map.stormLive(now) || this.calm(now)) return;
     const owned = s.routes.map((r, i) => (r.owned > 0 ? i : -1)).filter((i) => i >= 0);
     if (owned.length === 0) return;
     const route = owned[Math.floor(Math.random() * owned.length)];
@@ -2094,7 +2094,7 @@ class Game implements GameApi {
   }
 
   startSilkStorm(route: number, now = Date.now()): void {
-    if (!isOpen(this.s, "events") || this.map.stormLive(now) || modalOpen()) return;
+    if (!isOpen(this.s, "events") || this.map.stormLive(now) || modalOpen() || this.calm(now)) return;
     this.stormBank = 0;
     this.map.beginStorm(route, now);
     sfx.event();
@@ -2773,7 +2773,7 @@ class Game implements GameApi {
 
   private courtTick(now: number): void {
     const s = this.s;
-    if (!isOpen(s, "court") || s.court || now < s.nextCourt || modalOpen() || document.hidden) return;
+    if (!isOpen(s, "court") || s.court || now < s.nextCourt || modalOpen() || document.hidden || this.calm(now)) return;
     const p = pickPetition(s);
     s.court = p.id;
     s.storiesSeen.push("court_" + p.id);
@@ -3135,7 +3135,7 @@ class Game implements GameApi {
 
   private festTick(now: number): void {
     const s = this.s;
-    if (!isOpen(s, "events") || modalOpen() || document.hidden) return;
+    if (!isOpen(s, "events") || modalOpen() || document.hidden || this.calm(now)) return;
     const f = activeFestival(now);
     if (!f) return;
     const key = festivalKey(f, now);
@@ -3312,7 +3312,7 @@ class Game implements GameApi {
   private heroPrompted = false;
 
   private heroTick(): void {
-    if (this.s.hero || this.heroPrompted || !isOpen(this.s, "army") || modalOpen()) return;
+    if (this.s.hero || this.heroPrompted || !isOpen(this.s, "army") || modalOpen() || this.calm(Date.now())) return;
     this.heroPrompted = true;
     this.openHeroCreator();
   }
@@ -3484,11 +3484,24 @@ class Game implements GameApi {
     this.ui.dirty = true;
   }
 
+  private calmUntil = 0;
+  private unlockShowing = false;
+
+  private calm(now: number): boolean {
+    return this.unlockShowing || now < this.calmUntil;
+  }
+
   private unlockTick(): void {
     const s = this.s;
-    if (modalOpen() || document.hidden) return;
+    const now = Date.now();
+    if (this.unlockShowing && !modalOpen()) {
+      this.unlockShowing = false;
+      this.calmUntil = now + 15_000;
+    }
+    if (modalOpen() || document.hidden || now < this.calmUntil - 9_000) return;
     const f = pendingFeature(s);
     if (!f) return;
+    this.unlockShowing = true;
     s.unlocked.push(f.id);
     sfx.fanfare();
     this.ui.dirty = true;
@@ -3548,7 +3561,12 @@ class Game implements GameApi {
       hint.classList.remove("show");
     }
     this.map.highlightRoute = s.tutorial === 0 ? 0 : s.tutorial === 2 ? 1 : -1;
+    if (s.tutorial !== this.lastTut) {
+      if (this.lastTut >= 0 && this.map.highlightRoute >= 0) this.map.flyToRoute(this.map.highlightRoute);
+      this.lastTut = s.tutorial;
+    }
   }
+  private lastTut = -1;
 
   private tutorialHighlight(): { route: number; part: "send" | "buy" } | null {
     switch (this.s.tutorial) {

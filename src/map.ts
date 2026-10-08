@@ -1441,7 +1441,7 @@ export class MapView {
   }
 
   private drawWeather(g: CanvasRenderingContext2D, u: number, time: number): void {
-    if (this.weather === "clear") return;
+    if (this.weather === "clear" || !this.lastState || !isOpen(this.lastState, "realm")) return;
     const w = this.w;
     const h = this.h;
     const n = this.lite ? 40 : 90;

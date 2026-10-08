@@ -32,7 +32,9 @@ for (const [tag, vp] of [
   await page.locator("#modal:not(.hidden) button.primary").first().click().catch(() => {});
 
   await ev(page, `g.s.routes[2].owned = 1;`);
-  await page.waitForTimeout(1500);
+  await page.waitForTimeout(3000);
+  console.log(tag, "modal during calm:", await page.evaluate(() => { const m = document.getElementById("modal")!; return m.classList.contains("hidden") ? null : m.querySelector("h2")?.textContent; }));
+  await page.waitForTimeout(4500);
   await shot(page, `${tag}-04-unlockArmy`, 200);
   await page.locator("#modal:not(.hidden) button.primary").first().click().catch(() => {});
   await page.waitForTimeout(800);

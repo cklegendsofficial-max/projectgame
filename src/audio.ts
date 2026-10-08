@@ -3,6 +3,7 @@ let master: GainNode | null = null;
 let muted = false;
 let suspendedForAd = false;
 let lastCoin = 0;
+let lastFanfare = 0;
 
 function ensure(): AudioContext | null {
   if (!ctx) {
@@ -105,22 +106,25 @@ export const sfx = {
     const now = performance.now();
     if (now - lastCoin < 90) return;
     lastCoin = now;
-    tone(1318, 0, 0.08, "square", 0.25);
-    tone(1760, 0.05, 0.14, "square", 0.22);
+    tone(1318, 0, 0.08, "triangle", 0.3);
+    tone(1760, 0.05, 0.14, "triangle", 0.26);
   },
   buy(): void {
-    tone(523, 0, 0.06, "triangle", 0.5);
-    tone(784, 0.04, 0.1, "triangle", 0.45);
+    tone(523, 0, 0.06, "triangle", 0.42);
+    tone(784, 0.04, 0.1, "triangle", 0.38);
   },
   send(): void {
-    tone(330, 0, 0.08, "sine", 0.6);
-    tone(440, 0.05, 0.1, "sine", 0.5);
+    tone(330, 0, 0.08, "sine", 0.48);
+    tone(440, 0.05, 0.1, "sine", 0.4);
   },
   error(): void {
-    tone(180, 0, 0.12, "sawtooth", 0.25);
+    tone(180, 0, 0.12, "triangle", 0.35);
   },
   fanfare(): void {
-    [523, 659, 784, 1046].forEach((f, i) => tone(f, i * 0.09, 0.25, "triangle", 0.5));
+    const now = performance.now();
+    if (now - lastFanfare < 1200) return;
+    lastFanfare = now;
+    [523, 659, 784, 1046].forEach((f, i) => tone(f, i * 0.09, 0.25, "triangle", 0.45));
   },
   event(): void {
     tone(988, 0, 0.12, "sine", 0.5);
