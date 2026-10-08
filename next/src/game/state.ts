@@ -63,6 +63,8 @@ export interface Hero {
   skills: Record<Skill, number>;
   cskill: Record<string, number>;
   spts: number;
+  tal: Record<string, number>;
+  tpts: number;
   hp: number;
   energy: number;
   equip: Partial<Record<Slot, Item>>;
@@ -326,6 +328,8 @@ export function newGame(w: World): GameState {
       skills: { silah: 0, ticaret: 0, emek: 0 },
       cskill: {},
       spts: 0,
+      tal: {},
+      tpts: 0,
       hp: 999,
       energy: 999,
       equip: {},
@@ -409,7 +413,7 @@ export function loadGame(w: World): GameState {
       ...fresh,
       ...r,
       buildings: { ...fresh.buildings, ...(r.buildings ?? {}) },
-      hero: { ...fresh.hero, ...(r.hero ?? {}), path: null, pathI: 0 },
+      hero: { ...fresh.hero, ...(r.hero ?? {}), ...(r.hero && r.hero.tal === undefined ? { tal: {}, tpts: Math.max(0, (r.hero.lv ?? 1) - 1) } : {}), path: null, pathI: 0 },
       c: { ...fresh.c, ...(r.c ?? {}) },
       mats: { ...fresh.mats, ...(r.mats ?? {}) },
       story: { ...fresh.story, ...(r.story ?? {}) },

@@ -4,6 +4,7 @@ import { TACTICS, TACTIC_KEYS, type BattleResult, type Boss, type Tactic } from 
 import { GOODS, GOOD_KEYS, PLUS_CHANCE, SKILL_INFO, SKILL_KEYS, SLOTS, SLOT_NAME, STAT_INFO, STAT_KEYS, canPlus, itemStats, kindName, plusCost, skillLv, skillNext, type Item } from "../game/rpg";
 import { ARMOR_NAME, CLASSES, SKILL_MAX, WEAPON_NAME, skillPow, skillRank, type ClassId } from "../game/classes";
 import { CAPITAL, kurganBoss } from "../game/state";
+import { BRANCHES, BRANCH_KEYS, ROW_NEED, TALENTS, branchSpent } from "../game/talents";
 import { CITY_NAME } from "../game/data";
 import { COMPANIONS, COMP_BY_ID, COMP_MAX, FORT_GUARD, KARA_HAN, type CompId } from "../game/story";
 import { CITIES, H, NH, NW, W } from "../world/gen";
@@ -653,7 +654,7 @@ export class Hud {
     const s = g.s;
     const h = s.hero;
     const need = xpNeed(h.lv);
-    const tabs = this.tabs([["karakter", "Karakter"], ["beceri", `Beceriler${h.spts ? ` (${h.spts})` : ""}`], ["techizat", `Teçhizat${h.bag.length ? ` (${h.bag.length})` : ""}`], ["ordu", "Birlik"]]);
+    const tabs = this.tabs([["karakter", "Karakter"], ["beceri", `Beceriler${h.spts ? ` (${h.spts})` : ""}`], ["yetenek", `Yetenekler${h.tpts ? ` (${h.tpts})` : ""}`], ["techizat", `Teçhizat${h.bag.length ? ` (${h.bag.length})` : ""}`], ["ordu", "Birlik"]]);
     let body = "";
     if (this.tab === "karakter") {
       const cl = g.cls();
@@ -680,6 +681,29 @@ export class Hud {
               .join("")
           : "") +
         `<button class="btn sm red reset" data-a="${this.act(() => confirm("Tüm ilerlemen silinip yeni bir oyun başlayacak. Emin misin?") && g.resetGame())}">Yeni oyun başlat</button>`;
+    } else if (this.tab === "yetenek") {
+      const spentAll = Object.values(h.tal).reduce((a, b) => a + b, 0);
+      body =
+        `<p class="dim">Her seviyede 1 yetenek puanı kazanırsın. Bir dalın alt sırasını açmak için o dala sıra başına ${ROW_NEED} puan harcamalısın. Kendi yolunu seç: üç dalı birden bitiremezsin.</p>
+        <div class="stats"><div>${ic("scroll")}Yetenek puanı: <b>${h.tpts}</b></div>${spentAll ? `<button class="btn sm ${s.res.gold < g.respecCost() ? "off" : ""}" data-a="${this.act(() => g.respecTalents())}">Sıfırla ${ic("coins")}${g.respecCost()}</button>` : ""}</div><div class="tree">` +
+        BRANCH_KEYS.map((b) => {
+          const B = BRANCHES[b];
+          const spent = branchSpent(h.tal, b);
+          return `<div class="tb" style="--bc:${B.color}"><div class="tbh">${ic(B.icon)}<b>${B.name}</b><small>${spent} puan</small></div>${[0, 1, 2, 3, 4]
+            .map((row) => {
+              const open = spent >= row * ROW_NEED;
+              return `<div class="trow ${open ? "" : "shut"}">${TALENTS.filter((t) => t.branch === b && t.row === row)
+                .map((t) => {
+                  const r = g.tal(t.id);
+                  const why = g.talentReason(t);
+                  const st = r >= t.max ? "max" : !open ? "lock" : why ? (r ? "own" : "idle") : "can";
+                  return `<button class="tnode ${st}" data-a="${this.act(() => g.learnTalent(t.id))}">${ic(t.icon)}<b>${t.name}</b><i>${r}/${t.max}</i><small>${t.text(Math.max(1, r))}</small></button>`;
+                })
+                .join("")}</div>`;
+            })
+            .join("")}</div>`;
+        }).join("") +
+        `</div>`;
     } else if (this.tab === "beceri") {
       const cl = g.cls();
       body = `<p class="dim">${cl.name} becerileri savaşta kendiliğinden devreye girer. 3. seviyeden itibaren her seviyede 1 beceri puanı kazanırsın. Bir beceri en fazla ${SKILL_MAX}. seviyeye (Usta) çıkar.</p>

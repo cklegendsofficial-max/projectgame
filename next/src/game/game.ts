@@ -2,6 +2,7 @@ import { astar, CITIES, NAV, NH, NW, type World } from "../world/gen";
 import type { Camera } from "../render/camera";
 import type { WorldView } from "../render/worldView";
 import type { Hud } from "../ui/hud";
+import { ROW_NEED, TALENT_BY_ID, branchSpent, type Talent } from "./talents";
 import { TACTICS, TACTIC_KEYS, fight, odds, stanceWeights, tacticDelta, type BattleResult, type Boss, type Champion, type Tactic } from "./battle";
 import { BUILDINGS, BUILDING_BY_ID, CITY_NAME, DAY_SEC, RES_KEYS, UNITS, UNIT_KEYS, army, armyPower, armySize, buildCost, buildTime, prodPerMin, storageCap, trainSpeed, unitUnlocked, xpNeed, type Army, type BuildingId, type Res, type Unit } from "./data";
 import { CITY_TRADE, GOODS, GOOD_KEYS, PLUS_CHANCE, STAT_INFO, canPlus, classItem, goodMult, itemPrice, makeItem, plusCost, rollItem, setPlus, skillLv, type Good, type Item, type Skill, type Slot, type Stat } from "./rpg";
@@ -97,7 +98,48 @@ export class Game {
 
   maxHp(): number {
     const h = this.s.hero;
-    return 40 + this.stat("day") * 12 + h.lv * 4 + (this.eq("zirh")?.hp ?? 0);
+    return Math.round((40 + this.stat("day") * 12 + h.lv * 4 + (this.eq("zirh")?.hp ?? 0)) * (1 + 0.03 * this.tal("demirten")));
+  }
+
+  tal(id: string): number {
+    return this.s.hero.tal[id] ?? 0;
+  }
+
+  talentReason(t: Talent): string | null {
+    const h = this.s.hero;
+    if (this.tal(t.id) >= t.max) return "Tamamlandı";
+    const need = t.row * ROW_NEED;
+    if (branchSpent(h.tal, t.branch) < need) return `Bu dala ${need} puan gerekir`;
+    if (h.tpts <= 0) return "Yetenek puanın yok";
+    return null;
+  }
+
+  learnTalent(id: string): void {
+    const t = TALENT_BY_ID[id];
+    if (!t || this.talentReason(t)) return;
+    const h = this.s.hero;
+    h.tpts--;
+    h.tal[id] = this.tal(id) + 1;
+    this.hud.toast(`${t.name} ${h.tal[id]}/${t.max}`, "good");
+  }
+
+  respecCost(): number {
+    return 100 + this.s.hero.lv * 60;
+  }
+
+  respecTalents(): void {
+    const h = this.s.hero;
+    const spent = Object.values(h.tal).reduce((a, b) => a + b, 0);
+    if (!spent || !this.pay({ gold: this.respecCost() })) return;
+    h.tal = {};
+    h.tpts += spent;
+    this.hud.toast(`Yetenekler sıfırlandı: ${spent} puan geri geldi`, "good");
+  }
+
+  tdelta(t: Tactic, foe: Tactic): number {
+    const r = this.tal("taktik");
+    const edge = TACTICS[t].beats === foe || TACTICS[foe].beats === t ? 0.08 * r : 0;
+    return tacticDelta(t, foe, this.s.hero.army, this.stat("cev")) + edge;
   }
 
   maxEnergy(): number {
@@ -135,13 +177,13 @@ export class Game {
 
   heroAtk(): number {
     const w = this.eq("silah");
-    const m = this.cls().mods.atk;
+    const m = this.cls().mods.atk * (1 + 0.04 * this.tal("keskin") + 0.15 * this.tal("efsane"));
     if (!w) return (2 + this.stat("guc") * 1.5) * m * (1 + this.compMods().atk);
     return (w.atk + this.stat(WEAPON_STAT[w.kind as WeaponKind] ?? "guc") * 1.5) * (1 + this.skill("silah") * 0.06) * m * (1 + this.compMods().atk);
   }
 
   heroDef(): number {
-    return ((this.eq("zirh")?.def ?? 0) + (this.eq("kalkan")?.def ?? 0) + this.stat("day") * 0.6) * this.cls().mods.def;
+    return ((this.eq("zirh")?.def ?? 0) + (this.eq("kalkan")?.def ?? 0) + this.stat("day") * 0.6) * this.cls().mods.def * (1 + 0.05 * this.tal("demirten") + 0.15 * this.tal("efsane"));
   }
 
   champion(): Champion {
@@ -151,10 +193,10 @@ export class Game {
       def: this.heroDef(),
       hp: this.s.hero.hp,
       maxHp: this.maxHp(),
-      crit: m.crit + (this.eq("silah")?.crit ?? 0),
+      crit: m.crit + (this.eq("silah")?.crit ?? 0) + 0.025 * this.tal("kritik"),
       critMult: m.critMult,
       dodge: m.dodge,
-      heal: m.heal + this.compMods().heal,
+      heal: m.heal + this.compMods().heal + 0.015 * this.tal("kanici"),
       rage: m.rage,
       firstStrike: m.firstStrike,
       skills: this.classSkills()
@@ -189,20 +231,20 @@ export class Game {
   }
 
   stealMult(): number {
-    return 1 + this.classSkills().filter((s) => s.kind === "steal").reduce((t, s) => t + skillPow(s, this.skillLvOf(s.id)), 0);
+    return 1 + 0.1 * this.tal("ganimet") + this.classSkills().filter((s) => s.kind === "steal").reduce((t, s) => t + skillPow(s, this.skillLvOf(s.id)), 0);
   }
 
   heroBonus(): number {
-    return 0.025 * this.stat("lid") + 0.02 * (this.s.hero.lv - 1) + this.cls().mods.army + this.compMods().army;
+    return 0.025 * this.stat("lid") + 0.02 * (this.s.hero.lv - 1) + this.cls().mods.army + this.compMods().army + 0.03 * this.tal("nara");
   }
 
   heroCap(): number {
     if (!this.s.free) return 0;
-    return 2 + this.stat("lid") * 3 + this.s.hero.lv + (this.s.beylik ? this.bld("saray") * 5 : 0);
+    return 2 + this.stat("lid") * 3 + this.s.hero.lv + (this.s.beylik ? this.bld("saray") * 5 : 0) + 3 * this.tal("komutan");
   }
 
   carryCap(): number {
-    return 10 + this.stat("guc") * 3 + (this.eq("at")?.carry ?? 0) + armySize(this.s.hero.army) * 2 + this.compMods().carry;
+    return 10 + this.stat("guc") * 3 + (this.eq("at")?.carry ?? 0) + armySize(this.s.hero.army) * 2 + this.compMods().carry + 15 * this.tal("deve");
   }
 
   cargoUsed(): number {
@@ -214,7 +256,7 @@ export class Game {
   }
 
   wagePerMin(): number {
-    return UNIT_KEYS.reduce((a, u) => a + this.s.hero.army[u] * WAGE[u], 0);
+    return UNIT_KEYS.reduce((a, u) => a + this.s.hero.army[u] * WAGE[u], 0) * (1 - 0.1 * this.tal("kurtsurusu"));
   }
 
   upkeepPerMin(): number {
@@ -273,7 +315,7 @@ export class Game {
     this.fogT += dt;
     if (this.fogT > 0.25) {
       this.fogT = 0;
-      this.reveal(s.hero.x, s.hero.y, 11 + this.compMods().sight);
+      this.reveal(s.hero.x, s.hero.y, 11 + this.compMods().sight + 2 * this.tal("kartal"));
       for (const m of s.marches) this.reveal(m.x, m.y, 5);
     }
     this.quests();
@@ -577,11 +619,11 @@ export class Game {
   }
 
   buyFactor(): number {
-    return Math.max(1.02, 1.12 - this.skill("ticaret") * 0.006 - this.stat("kar") * 0.004 - this.cls().mods.trade - this.compMods().trade);
+    return Math.max(1.02, 1.12 - this.skill("ticaret") * 0.006 - this.stat("kar") * 0.004 - this.cls().mods.trade - this.compMods().trade) - 0.01 * this.tal("pazarlik");
   }
 
   sellFactor(): number {
-    return Math.min(0.98, 0.88 + this.skill("ticaret") * 0.006 + this.stat("kar") * 0.004 + this.cls().mods.trade + this.compMods().trade);
+    return Math.min(0.98, 0.88 + this.skill("ticaret") * 0.006 + this.stat("kar") * 0.004 + this.cls().mods.trade + this.compMods().trade) + 0.01 * this.tal("pazarlik") + 0.05 * this.tal("ipekhan");
   }
 
   buyPrice(city: string, g: Good): number {
@@ -977,7 +1019,7 @@ export class Game {
 
   heroSpeed(): number {
     const n = armySize(this.s.hero.army);
-    return HERO_SPEED * (1 + this.stat("cev") * 0.02 + (this.eq("at")?.spd ?? 0) + this.compMods().speed) * (1 - Math.min(0.35, n / 300));
+    return HERO_SPEED * (1 + this.stat("cev") * 0.02 + (this.eq("at")?.spd ?? 0) + this.compMods().speed + 0.04 * this.tal("ruzgar")) * (1 - Math.min(0.35, n / 300));
   }
 
   private moveHero(dt: number): void {
@@ -1112,7 +1154,7 @@ export class Game {
       this.s.renown += b.tier * 2;
       this.s.c.wins++;
       const it = this.drop(b.tier, 0.3 + b.tier * 0.1);
-      const ruh = Math.random() < 0.15 + b.tier * 0.05 ? 1 : 0;
+      const ruh = Math.random() < 0.15 + b.tier * 0.05 + 0.1 * this.tal("ruhavci") ? 1 : 0;
       this.s.mats.ruh += ruh;
       return `+${gold} altın · +${b.tier * 2} şöhret${ruh ? " · +1 Ruh Taşı" : ""}${it ? `<br>Ganimet: <b class="r${it.rar}">${it.name}</b>` : ""}`;
     });
@@ -1136,10 +1178,9 @@ export class Game {
     let r = Math.random();
     const stance = TACTIC_KEYS.find((t) => (r -= w[t]) < 0) ?? "duvar";
     const known = this.scouts();
-    const cev = this.stat("cev");
     const champ = this.champion();
     const opts = TACTIC_KEYS.map((t) => {
-      const d = known ? tacticDelta(t, stance, h.army, cev) : TACTIC_KEYS.reduce((a, f) => a + w[f] * tacticDelta(t, f, h.army, cev), 0);
+      const d = known ? this.tdelta(t, stance) : TACTIC_KEYS.reduce((a, f) => a + w[f] * this.tdelta(t, f), 0);
       return { t, odds: odds(h.army, this.heroBonus() + d, enemy, enemyBonus, champ, boss) };
     });
     const go = (t: Tactic, auto: boolean) => this.resolveBattle(title, enemy, enemyBonus, after, boss, foe, t, stance, auto);
@@ -1183,14 +1224,14 @@ export class Game {
   }
 
   scouts(): boolean {
-    return this.stat("cev") >= 6 || this.hasComp("ferhat") || this.s.cls === "hirsiz";
+    return this.stat("cev") >= 6 || this.hasComp("ferhat") || this.s.cls === "hirsiz" || this.tal("gozcu") > 0;
   }
 
   private resolveBattle(title: string, enemy: Army, enemyBonus: number, after: (win: boolean) => string, boss: Boss | null, foe: string, t: Tactic, stance: Tactic, auto: boolean): void {
     const h = this.s.hero;
     this.lastTactic = auto ? this.lastTactic : t;
     const champ = this.champion();
-    const res: BattleResult = fight(h.army, this.heroBonus() + tacticDelta(t, stance, h.army, this.stat("cev")), enemy, enemyBonus, champ, boss);
+    const res: BattleResult = fight(h.army, this.heroBonus() + this.tdelta(t, stance), enemy, enemyBonus, champ, boss);
     const edge = TACTICS[t].beats === stance ? " — <b class=\"cheap\">üstünlük senin!</b>" : TACTICS[stance].beats === t ? " — <b class=\"dear\">düşman seni okudu!</b>" : "";
     const tline = `Taktik: ${TACTICS[t].name}${auto ? " (otomatik)" : ""} · Düşman: ${TACTICS[stance].name}${edge}`;
     const before = { ...h.army };
@@ -1198,7 +1239,7 @@ export class Game {
     h.army = { ...res.rounds[res.rounds.length - 1].a };
     h.hp = Math.max(1, res.heroHp);
     h.skills.silah += 6 * (res.rounds.length - 2);
-    const rev = this.cls().mods.revive;
+    const rev = this.cls().mods.revive + 0.15 * this.tal("tengri");
     let revived = 0;
     if (res.win && rev > 0)
       for (const u of UNIT_KEYS) {
@@ -1228,7 +1269,7 @@ export class Game {
 
   addXp(xp: number): boolean {
     const h = this.s.hero;
-    xp = Math.round(xp * (1 + this.compMods().xp));
+    xp = Math.round(xp * (1 + this.compMods().xp + 0.2 * this.tal("efsane") + 0.1 * this.tal("tengri")));
     h.xp += xp;
     let up = false;
     while (h.xp >= xpNeed(h.lv)) {
@@ -1236,6 +1277,7 @@ export class Game {
       h.lv++;
       h.points += 3;
       if (h.lv >= 3) h.spts++;
+      h.tpts++;
       h.hp = this.maxHp();
       up = true;
     }
@@ -1323,7 +1365,7 @@ export class Game {
       this.ambushT = 30;
       const h = s.hero;
       const safe = this.nearCity(400) >= 0 || Math.hypot(h.x - CAPITAL.x, h.y - CAPITAL.y) < 450;
-      if (!safe && Math.random() < 0.35) {
+      if (!safe && Math.random() < 0.35 * (1 - 0.25 * this.tal("kacakci"))) {
         const tier = Math.min(5, 1 + Math.floor(Math.hypot(h.x - CAPITAL.x, h.y - CAPITAL.y) / 700));
         const a = Math.random() * Math.PI * 2;
         const x = h.x + Math.cos(a) * 200;
@@ -1408,7 +1450,7 @@ export class Game {
     if (!c) return;
     const ci = CITIES.findIndex((x) => x.id === c.to);
     if (this.nearCity() !== ci) return;
-    const gold = Math.round(c.gold * (this.s.serais[c.to] ? 1.25 : 1));
+    const gold = Math.round(c.gold * (this.s.serais[c.to] ? 1.25 : 1) * (1 + 0.1 * this.tal("kacakci")));
     this.s.res.gold += gold;
     this.s.renown += 4;
     this.s.c.contracts++;
@@ -1462,11 +1504,11 @@ export class Game {
   seraiRate(city: string): number {
     const sr = this.s.serais[city];
     if (!sr) return 0;
-    return sr.lv * 5 * (1 + 0.15 * (this.seraiCount() - 1));
+    return sr.lv * 5 * (1 + 0.15 * (this.seraiCount() - 1)) * (1 + 0.12 * this.tal("hanagasi"));
   }
 
   seraiCap(city: string): number {
-    return this.seraiRate(city) * 12;
+    return this.seraiRate(city) * 12 * (this.tal("ipekhan") ? 2 : 1);
   }
 
   seraiIncome(): number {
