@@ -4,6 +4,7 @@ import type { Camera } from "./camera";
 import type { Game } from "../game/game";
 import { CITY_NAME, NODE_SPRITE, armySize } from "../game/data";
 import { CAPITAL, SLAVE_RADIUS } from "../game/state";
+import { FACTIONS, type FactionId } from "../game/factions";
 
 const urls: Record<string, string> = {};
 for (const [p, u] of Object.entries(import.meta.glob<string>("../assets/**/*.webp", { eager: true, query: "?url", import: "default" }))) {
@@ -156,6 +157,7 @@ export class WorldView {
   private heroBars!: Graphics;
   private bandits = new Map<number, Container>();
   private marchesM = new Map<number, Container>();
+  private caravansM = new Map<number, Container>();
   private mark: { x: number; y: number; t: number } | null = null;
   private time = 0;
   private visT = 0;
@@ -362,12 +364,28 @@ export class WorldView {
     this.mark = { x, y, t: 0 };
   }
 
-  private bandit(id: number): Container {
+  private caravan(id: number, color: number): Container {
+    let c = this.caravansM.get(id);
+    if (c) return c;
+    c = new Container();
+    const sh = new Graphics().ellipse(0, 20, 17, 5).fill({ color: 0x000000, alpha: 0.35 });
+    const p = this.portrait("j_caravan", 16, color);
+    const ex = new Text({ text: "⚔", style: { ...LABEL_STYLE, fontSize: 22, fill: "#ff5a3c" } });
+    ex.anchor.set(0.5, 1);
+    ex.position.set(0, -18);
+    ex.label = "ex";
+    c.addChild(sh, p, ex);
+    this.units.addChild(c);
+    this.caravansM.set(id, c);
+    return c;
+  }
+
+  private bandit(id: number, posse = false): Container {
     let c = this.bandits.get(id);
     if (c) return c;
     c = new Container();
     const sh = new Graphics().ellipse(0, 22, 18, 6).fill({ color: 0x000000, alpha: 0.35 });
-    const p = this.portrait("j_bandit", 18, 0xd2452c);
+    const p = posse ? this.portrait("soldier", 18, 0x4a8cff) : this.portrait("j_bandit", 18, 0xd2452c);
     const t = new Text({ text: "", style: { ...LABEL_STYLE, fontSize: 16, fill: "#ffc4b4" } });
     t.anchor.set(0.5, 0);
     t.position.set(0, 21);
@@ -509,7 +527,7 @@ export class WorldView {
     const live = new Set<number>();
     for (const b of s.bandits) {
       live.add(b.id);
-      const c = this.bandit(b.id);
+      const c = this.bandit(b.id, b.posse);
       const vis = game.isExplored(b.x, b.y);
       c.visible = vis;
       c.position.set(b.x, b.y);
@@ -522,6 +540,21 @@ export class WorldView {
     for (const [id, c] of this.bandits) if (!live.has(id)) {
       c.destroy({ children: true });
       this.bandits.delete(id);
+    }
+    const liveC = new Set<number>();
+    for (const cv of s.caravans) {
+      liveC.add(cv.id);
+      const c = this.caravan(cv.id, parseInt(FACTIONS[cv.fac as FactionId].color.slice(1), 16));
+      c.visible = game.isExplored(cv.x, cv.y);
+      c.position.set(cv.x, cv.y + (cv.raid ? 0 : Math.sin(this.time * 5 + cv.id) * 1.2));
+      c.scale.set(inv * 0.9);
+      const ex = c.getChildByLabel("ex")!;
+      ex.visible = !!cv.raid;
+      ex.alpha = 0.6 + Math.abs(Math.sin(this.time * 8)) * 0.4;
+    }
+    for (const [id, c] of this.caravansM) if (!liveC.has(id)) {
+      c.destroy({ children: true });
+      this.caravansM.delete(id);
     }
     const liveM = new Set<number>();
     for (const m of s.marches) {

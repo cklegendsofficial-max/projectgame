@@ -368,6 +368,25 @@ export class Hud {
     });
   }
 
+  choice(title: string, img: string, html: string, opts: { label: string; cls: string; fn: () => void }[]): void {
+    this.storyOpen = true;
+    this.close();
+    const el = document.createElement("div");
+    el.className = "battle";
+    el.innerHTML = `<div class="bbox story choice"><img class="simg" src="${assetUrl(img)}" alt=""><h2>${title}</h2><p>${html}</p>${opts.map((o, i) => `<button class="btn big ${o.cls}" data-i="${i}">${o.label}</button>`).join("")}</div>`;
+    this.root.appendChild(el);
+    el.querySelectorAll<HTMLButtonElement>(".btn").forEach((b) =>
+      b.addEventListener("click", () => {
+        const o = opts[Number(b.dataset.i)];
+        if (o.cls.includes("off")) return;
+        el.remove();
+        this.storyOpen = false;
+        o.fn();
+        this.nextStory();
+      }),
+    );
+  }
+
   tactics(title: string, enemy: Army, boss: Boss | null, foe: string, stance: Tactic | null, w: Record<Tactic, number>, opts: { t: Tactic; odds: number }[], last: Tactic, pick: (t: Tactic) => void, flee: string, onFlee: () => void): void {
     this.battleOpen = true;
     this.close();
@@ -700,7 +719,10 @@ export class Hud {
       };
       const bl = g.cityBounties(c.id);
       const off2 = g.contractOffer(c.id);
-      const rumor = `<h3>${ic("scroll")} Söylentiler</h3>` + (s.events.map((e) => `<div class="qrow">${ic(GOODS[e.good].icon)} ${e.text}<span class="${e.mult > 1 ? "dear" : "cheap"}">×${e.mult.toFixed(1)}</span></div>`).join("") || `<p class="dim">Kervancılar bu aralar sakin günler geçtiğini söylüyor.</p>`) +
+      const kadi = s.wanted
+        ? `<h3>${ic("wanted")} Kadı</h3><div class="grow">${ic("wanted", "gimg")}<div class="bi2"><b class="dear">Aranıyorsun ${"★".repeat(s.wanted)}</b><small>Muhafızlar şehir dışında peşine düşer; 3 yıldızda kimse sana iş vermez. Kadıya kefaret ödersen sicilin temizlenir.</small></div><button class="btn sm ${!near || s.res.gold < g.bribeCost() ? "off" : ""}" data-a="${this.act(() => g.bribe())}">Öde ${ic("coins")}${g.bribeCost()}</button></div>`
+        : "";
+      const rumor = kadi + `<h3>${ic("scroll")} Söylentiler</h3>` + (s.events.map((e) => `<div class="qrow">${ic(GOODS[e.good].icon)} ${e.text}<span class="${e.mult > 1 ? "dear" : "cheap"}">×${e.mult.toFixed(1)}</span></div>`).join("") || `<p class="dim">Kervancılar bu aralar sakin günler geçtiğini söylüyor.</p>`) +
         `<h3>${ic("j_caravan")} Kervan sözleşmesi</h3>` +
         (s.contract
           ? `<div class="odds mid">Elinde bir emanet var: ${s.contract.cargo} → <b>${CITY_NAME[s.contract.to]}</b> · ${dur(s.contract.until - g.now)}</div>`
@@ -1000,7 +1022,7 @@ export class Hud {
         return `<div class="res" title="${RES_NAME[k]}">${ic(RES_ICON[k])}<b>${fmt(s.res[k])}</b>${Math.round(r) ? `<small class="${r < 0 ? "neg" : ""}">${r >= 0 ? "+" : ""}${Math.round(r)}/dk</small>` : ""}</div>`;
       }).join("") +
       `<div class="res vit"><div class="mbar hp"><i style="width:${(h.hp / g.maxHp()) * 100}%"></i><span>❤ ${Math.floor(h.hp)}</span></div><div class="mbar en"><i style="width:${(h.energy / g.maxEnergy()) * 100}%"></i><span>⚡ ${Math.floor(h.energy)}</span></div></div>
-       <div class="res hero">${ic(g.face(), "ic round")}<b>Sv ${h.lv}</b>${h.points + h.spts + h.tpts ? `<small class="pts">+${h.points + h.spts + h.tpts}</small>` : ""}</div>
+       <div class="res hero">${ic(g.face(), "ic round")}<b>Sv ${h.lv}</b>${h.points + h.spts + h.tpts ? `<small class="pts">+${h.points + h.spts + h.tpts}</small>` : ""}${s.wanted ? `<small class="wanted" title="Aranıyorsun">${"★".repeat(s.wanted)}</small>` : ""}</div>
        ${s.free ? `<div class="res">${ic("crown")}<b>${s.renown}</b></div>` : ""}
        <div class="res day">${night ? "🌙" : "☀️"}<b>Gün ${day.day}</b></div>`;
     const q = g.quest();

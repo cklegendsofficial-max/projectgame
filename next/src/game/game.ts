@@ -13,10 +13,10 @@ import { SETS, SET_FORGE, SET_KEYS, SET_SLOTS, UNIQUES, addMods, type GearMods, 
 import { FACTIONS, FACTION_KEYS, HOSTILE, REP_RANKS, RANK_PERKS, factionOf, repRank, type FactionId } from "./factions";
 import { CLASS_BY_ID, CLASS_SKILLS, SKILL_MAX, WEAPON_NAME, WEAPON_STAT, skillPow, skillRank, type ClassDef, type ClassId, type ClassSkill, type WeaponKind } from "./classes";
 import { CHAPTERS, COMP_BY_ID, COMP_MAX, FORT_GUARD, KARA_HAN, KASIM, type Chapter, type CompId, type CompMods, type Companion } from "./story";
-import { CAPITAL, SLAVE_RADIUS, banditArmy, campGarrison, kurganBoss, kurganGuard, loadGame, saveGame as rawSave, wipeGame, type Bandit, type Bounty, type Contract, type GameState } from "./state";
+import { CAPITAL, SLAVE_RADIUS, banditArmy, campGarrison, kurganBoss, kurganGuard, loadGame, saveGame as rawSave, wipeGame, type Bandit, type Bounty, type Caravan, type Contract, type GameState } from "./state";
 
 export type Target =
-  | { kind: "village" | "camp" | "node" | "ruin" | "city" | "bandit" | "kurgan"; i: number }
+  | { kind: "village" | "camp" | "node" | "ruin" | "city" | "bandit" | "kurgan" | "caravan"; i: number }
   | { kind: "capital" }
   | { kind: "fort" }
   | { kind: "point"; x: number; y: number };
@@ -52,6 +52,8 @@ export class Game {
   act: Activity | null = null;
   target: Target | null = null;
   private repath = 0;
+  private cvT = 2;
+  private posseT = 20;
   private fogT = 0;
   private saveT = 0;
   private desertT = 0;
@@ -334,6 +336,8 @@ export class Game {
     if (!this.battleLock) {
       this.moveHero(dt);
       this.bandits(dt, now);
+      this.caravanTick(dt);
+      this.wantedTick(dt);
       this.marches(dt, now);
     }
     this.fogT += dt;
@@ -1025,6 +1029,7 @@ export class Game {
   sideReason(city = ""): string | null {
     if (!this.s.free) return "Önce hürriyetini kazan";
     if (city && this.hostile(city)) return `${FACTIONS[factionOf(city)].name} sana iş vermiyor`;
+    if (this.s.wanted >= 3) return "Aranan birine kimse iş vermez";
     if (this.s.sideQ.length >= 3) return "En fazla 3 görev alabilirsin";
     return null;
   }
@@ -1362,6 +1367,8 @@ export class Game {
         return s.story.fort;
       case "bandit":
         return s.bandits.find((b) => b.id === t.i) ?? null;
+      case "caravan":
+        return s.caravans.find((b) => b.id === t.i) ?? null;
     }
   }
 
@@ -1393,7 +1400,7 @@ export class Game {
     const hit = this.pick(x, y);
     if (hit) {
       const p = this.targetPos(hit)!;
-      if (hit.kind !== "bandit" && Math.hypot(p.x - this.s.hero.x, p.y - this.s.hero.y) < 60) {
+      if (hit.kind !== "bandit" && hit.kind !== "caravan" && Math.hypot(p.x - this.s.hero.x, p.y - this.s.hero.y) < 60) {
         this.s.hero.path = null;
         this.target = null;
         this.hud.openPlace(hit);
@@ -1422,6 +1429,7 @@ export class Game {
       }
     };
     for (const b of s.bandits) test({ kind: "bandit", i: b.id }, b.x, b.y, 1.3);
+    for (const cv of s.caravans) test({ kind: "caravan", i: cv.id }, cv.x, cv.y, 1.3);
     if (Math.hypot(CAPITAL.x - x, CAPITAL.y - y) < r * 2.2) return { kind: "capital" };
     CITIES.forEach((c, i) => i !== CAP_I && test({ kind: "city", i }, c.x, c.y, 2));
     s.villages.forEach((v, i) => test({ kind: "village", i }, v.x, v.y, 1.3));
@@ -1441,16 +1449,17 @@ export class Game {
   private moveHero(dt: number): void {
     const h = this.s.hero;
     const t = this.target;
-    if (t?.kind === "bandit") {
+    if (t?.kind === "bandit" || t?.kind === "caravan") {
       this.repath -= dt;
-      const b = this.s.bandits.find((x) => x.id === t.i);
+      const b = t.kind === "bandit" ? this.s.bandits.find((x) => x.id === t.i) : this.s.caravans.find((x) => x.id === t.i);
       if (!b) {
         this.target = null;
         h.path = null;
       } else if (Math.hypot(b.x - h.x, b.y - h.y) < 30) {
         h.path = null;
         this.target = null;
-        this.engageBandit(b, false);
+        if (t.kind === "bandit") this.engageBandit(b as Bandit, false);
+        else this.meetCaravan(b as Caravan);
         return;
       } else if (this.repath <= 0) {
         this.repath = 0.8;
@@ -1483,7 +1492,7 @@ export class Game {
       h.path = null;
       const tg = this.target;
       this.target = null;
-      if (tg && tg.kind !== "point" && tg.kind !== "bandit") this.hud.openPlace(tg);
+      if (tg && tg.kind !== "point" && tg.kind !== "bandit" && tg.kind !== "caravan") this.hud.openPlace(tg);
     }
   }
 
@@ -1509,15 +1518,47 @@ export class Game {
       }
     });
     for (const b of s.bandits) {
-      const c = s.camps[b.camp];
       const dh = Math.hypot(h.x - b.x, h.y - b.y);
+      if (b.posse) {
+        b.chase = s.wanted > 0 && this.nearCity() < 0 && dh < 900;
+        if (!s.wanted || dh > 1400) b.army = { spear: 0, archer: 0, horse: 0 };
+        const d = Math.hypot(h.x - b.x, h.y - b.y);
+        if (b.chase && d > 1) {
+          const sp = (BANDIT_SPEED * 1.25 * dt) / Math.max(0.6, Math.min(3, this.cellCost(b.x, b.y)));
+          const nx = b.x + ((h.x - b.x) / d) * Math.min(sp, d);
+          const ny = b.y + ((h.y - b.y) / d) * Math.min(sp, d);
+          if (this.cellCost(nx, ny) !== Infinity) {
+            b.x = nx;
+            b.y = ny;
+          }
+        }
+        if (b.chase && dh < 24 && !this.battleLock) {
+          this.engageBandit(b, true);
+          return;
+        }
+        continue;
+      }
+      const c = s.camps[b.camp];
       const pow = armyPower(b.army);
-      b.chase = b.amb ? !safe && dh < 450 : !safe && !this.act && dh < 230 && pow > heroPow * 0.75 && Math.hypot(h.x - c.x, h.y - c.y) < 700;
+      const raiding = s.caravans.some((cv) => cv.raid === b.id);
+      b.chase = b.amb ? !safe && dh < 450 : !raiding && !safe && !this.act && dh < 230 && pow > heroPow * 0.75 && Math.hypot(h.x - c.x, h.y - c.y) < 700;
       if (b.amb && dh > 600) b.army = { spear: 0, archer: 0, horse: 0 };
-      const flee = dh < 200 && pow < heroPow * 0.45;
+      const flee = !raiding && dh < 200 && pow < heroPow * 0.45;
       let tx = b.tx;
       let ty = b.ty;
-      if (b.chase) {
+      const prey = !b.chase && !flee && !raiding && !b.amb ? s.caravans.find((cv) => !cv.raid && Math.hypot(cv.x - b.x, cv.y - b.y) < 220 && Math.hypot(cv.x - c.x, cv.y - c.y) < 900) : undefined;
+      if (raiding) {
+        tx = b.x;
+        ty = b.y;
+      } else if (prey) {
+        tx = prey.x;
+        ty = prey.y;
+        if (Math.hypot(prey.x - b.x, prey.y - b.y) < 16) {
+          prey.raid = b.id;
+          prey.raidT = 30;
+          if (this.isExplored(prey.x, prey.y)) this.hud.toast(`${FACTIONS[prey.fac as FactionId].name} kervanı saldırı altında! Yetişirsen kurtarabilirsin.`, "bad");
+        }
+      } else if (b.chase) {
         tx = h.x;
         ty = h.y;
       } else if (flee) {
@@ -1561,10 +1602,14 @@ export class Game {
   }
 
   private engageBandit(b: Bandit, ambush: boolean): void {
+    if (b.posse) return this.fightPosse(b);
     const c = this.s.camps[b.camp];
     this.battle(ambush ? `${c.name} pusu kurdu!` : `${c.name} çetesi`, b.army, 0, (win) => {
       this.s.bandits = this.s.bandits.filter((x) => x.id !== b.id);
+      const cv = this.s.caravans.find((x) => x.raid === b.id);
+      if (cv) cv.raid = 0;
       if (!win) return "";
+      const saved = cv ? this.rescueCaravan(cv) : "";
       const gold = Math.round((armyPower(b.army) * 0.9 + 8 * b.tier) * this.cls().mods.loot * this.stealMult());
       this.gain({ gold });
       this.s.renown += b.tier * 2;
@@ -1572,8 +1617,213 @@ export class Game {
       const it = this.drop(b.tier, 0.3 + b.tier * 0.1);
       const ruh = Math.random() < 0.15 + b.tier * 0.05 + 0.1 * this.tal("ruhavci") ? 1 : 0;
       this.s.mats.ruh += ruh;
-      return `+${gold} altın · +${b.tier * 2} şöhret${ruh ? " · +1 Ruh Taşı" : ""}${it ? `<br>Ganimet: <b class="r${it.rar}">${it.name}</b>` : ""}`;
+      return `+${gold} altın · +${b.tier * 2} şöhret${ruh ? " · +1 Ruh Taşı" : ""}${it ? `<br>Ganimet: <b class="r${it.rar}">${it.name}</b>` : ""}${saved}`;
     });
+  }
+
+  // ---------- caravans & outlawry ----------
+
+  caravanValue(cv: Caravan): number {
+    return Math.round(GOODS[cv.good].base * cv.qty);
+  }
+
+  private caravanTick(dt: number): void {
+    const s = this.s;
+    if (!s.free) return;
+    this.cvT -= dt;
+    if (this.cvT <= 0 && s.caravans.length < 7) {
+      this.cvT = 14 + Math.random() * 14;
+      this.spawnCaravan();
+    }
+    for (const cv of [...s.caravans]) {
+      if (cv.raid) {
+        const b = s.bandits.find((x) => x.id === cv.raid);
+        if (!b) {
+          cv.raid = 0;
+          continue;
+        }
+        cv.raidT -= dt;
+        if (cv.raidT <= 0) {
+          s.caravans = s.caravans.filter((x) => x.id !== cv.id);
+          b.army.spear += 2;
+          const m = this.market(cv.to);
+          m[cv.good] = Math.min(1.2, (m[cv.good] ?? 0) + 0.15);
+          if (this.isExplored(cv.x, cv.y)) this.hud.toast(`Bir ${FACTIONS[cv.fac as FactionId].short} kervanı yağmalandı. ${CITY_NAME[cv.to]} pazarında ${GOODS[cv.good].name} pahalanacak.`, "info");
+        }
+        continue;
+      }
+      let move = HERO_SPEED * 0.62 * dt;
+      while (move > 0 && cv.pathI < cv.path.length) {
+        const tx = cv.path[cv.pathI];
+        const ty = cv.path[cv.pathI + 1];
+        const d = Math.hypot(tx - cv.x, ty - cv.y);
+        if (d <= move) {
+          cv.x = tx;
+          cv.y = ty;
+          move -= d;
+          cv.pathI += 2;
+        } else {
+          cv.x += ((tx - cv.x) / d) * move;
+          cv.y += ((ty - cv.y) / d) * move;
+          move = 0;
+        }
+      }
+      if (cv.pathI >= cv.path.length) {
+        s.caravans = s.caravans.filter((x) => x.id !== cv.id);
+        const m = this.market(cv.to);
+        m[cv.good] = Math.max(-0.7, (m[cv.good] ?? 0) - 0.12);
+      }
+    }
+  }
+
+  private spawnCaravan(): void {
+    const s = this.s;
+    const from = CITIES[Math.floor(Math.random() * CITIES.length)];
+    const near = CITIES.filter((c) => c.id !== from.id)
+      .map((c) => ({ c, d: Math.hypot(c.x - from.x, c.y - from.y) }))
+      .sort((a, b) => a.d - b.d)
+      .slice(0, 3);
+    const to = near[Math.floor(Math.random() * near.length)].c;
+    const path = this.findPath(from.x + 10, from.y + 100, to.x + 10, to.y + 100);
+    if (!path) return;
+    const cheap = CITY_TRADE[from.id].cheap;
+    const good = cheap[Math.floor(Math.random() * cheap.length)];
+    const tier = Math.max(1, Math.min(5, Math.round(s.hero.lv / 4)));
+    const n = Math.round(4 + tier * 3 + Math.random() * 4);
+    s.caravans.push({ id: s.nextId++, from: from.id, to: to.id, fac: factionOf(from.id), path, pathI: 0, x: from.x + 10, y: from.y + 100, guard: army(Math.round(n * 0.6), Math.round(n * 0.3), Math.round(n * 0.1)), good, qty: 8 + tier * 4 + Math.floor(Math.random() * 6), raid: 0, raidT: 0 });
+  }
+
+  caravanBuyPrice(cv: Caravan): number {
+    return Math.max(1, Math.round(this.price(cv.from, cv.good) * 0.92 * this.buyFactor()));
+  }
+
+  private meetCaravan(cv: Caravan): void {
+    const fac = FACTIONS[cv.fac as FactionId];
+    const p = this.caravanBuyPrice(cv);
+    const room = Math.max(0, this.carryCap() - this.cargoUsed());
+    const k = Math.min(5, cv.qty, room);
+    const pow = Math.round(armyPower(cv.guard));
+    this.battleLock = true;
+    const done = (f: () => void) => () => {
+      this.battleLock = false;
+      f();
+    };
+    this.hud.choice(
+      `${fac.name} kervanı`,
+      "icons/j_caravan",
+      `${CITY_NAME[cv.from]} → ${CITY_NAME[cv.to]} · ${cv.qty} ${GOODS[cv.good].name} taşıyor (değeri ~${this.caravanValue(cv)} altın).<br>Muhafız: ${armySize(cv.guard)} asker (güç ${pow}).${cv.raid ? `<br><b class="dear">Haramiler kervana saldırıyor!</b>` : ""}`,
+      [
+        { label: `${k} ${GOODS[cv.good].name} al · ${p * k} altın`, cls: k > 0 && this.s.res.gold >= p * k ? "go" : "off", fn: done(() => this.buyFromCaravan(cv, k)) },
+        { label: `Kervanı soy · ${fac.short} itibarı düşer, aranırsın`, cls: "bad", fn: done(() => this.robCaravan(cv)) },
+        { label: "Yoluna devam et", cls: "", fn: done(() => {}) },
+      ],
+    );
+  }
+
+  private buyFromCaravan(cv: Caravan, k: number): void {
+    const p = this.caravanBuyPrice(cv);
+    if (k <= 0 || !this.pay({ gold: p * k })) return;
+    const h = this.s.hero;
+    h.cargo[cv.good] = (h.cargo[cv.good] ?? 0) + k;
+    h.paid[cv.good] = (h.paid[cv.good] ?? 0) + p * k;
+    cv.qty -= k;
+    h.skills.ticaret += Math.ceil((p * k) / 25);
+    this.hud.toast(`Kervandan ${k} ${GOODS[cv.good].name} aldın (−${p * k} altın)`, "info");
+  }
+
+  private robCaravan(cv: Caravan): void {
+    const fac = cv.fac as FactionId;
+    this.battle(`${FACTIONS[fac].name} kervanı`, cv.guard, 0.05, (win) => {
+      const s = this.s;
+      this.addWanted(win ? 2 : 1);
+      s.rep[fac] = this.rep(fac) - (win ? 60 : 25);
+      if (!win) return `Muhafızlar seni püskürttü. ${FACTIONS[fac].name} adını kara listeye yazdı.`;
+      s.caravans = s.caravans.filter((x) => x.id !== cv.id);
+      const room = Math.max(0, this.carryCap() - this.cargoUsed());
+      const k = Math.min(cv.qty, room);
+      s.hero.cargo[cv.good] = (s.hero.cargo[cv.good] ?? 0) + k;
+      const gold = Math.round(this.caravanValue(cv) * 0.25 * this.stealMult());
+      this.gain({ gold });
+      s.c.robbed++;
+      const lg = this.legendDrop(0.03);
+      return `Kervan senin! +${k} ${GOODS[cv.good].name}${k < cv.qty ? ` (yükün doldu, ${cv.qty - k} adet geride kaldı)` : ""}, +${gold} altın.<br><b class="dear">Aranıyorsun (${"★".repeat(s.wanted)}) · ${FACTIONS[fac].name} itibarı −60</b>${lg ? `<br>Efsane: <b class="r4">${lg.name}</b>` : ""}`;
+    }, null, `${FACTIONS[fac].short} muhafızları`);
+  }
+
+  private rescueCaravan(cv: Caravan): string {
+    const fac = cv.fac as FactionId;
+    const gold = Math.round(this.caravanValue(cv) * 0.2);
+    this.s.res.gold += gold;
+    this.s.c.rescued++;
+    this.addRep(fac, 25, "kervanı kurtardın");
+    const k = Math.min(3, cv.qty, Math.max(0, this.carryCap() - this.cargoUsed()));
+    if (k) {
+      this.s.hero.cargo[cv.good] = (this.s.hero.cargo[cv.good] ?? 0) + k;
+      cv.qty -= k;
+    }
+    return `<br><b class="cheap">Kervanı kurtardın!</b> Kervanbaşı minnettar: +${gold} altın${k ? `, +${k} ${GOODS[cv.good].name} hediye` : ""}, ${FACTIONS[fac].short} itibarı +25`;
+  }
+
+  addWanted(n: number): void {
+    const s = this.s;
+    s.wanted = Math.min(5, s.wanted + n);
+    s.wantedT = 150;
+  }
+
+  private wantedTick(dt: number): void {
+    const s = this.s;
+    if (s.wanted <= 0) return;
+    s.wantedT -= dt;
+    if (s.wantedT <= 0) {
+      s.wanted--;
+      s.wantedT = 150;
+      this.hud.toast(s.wanted ? `Aranma azaldı: ${"★".repeat(s.wanted)}` : "Artık aranmıyorsun", "info");
+    }
+    if (s.wanted >= 2 && this.nearCity() < 0 && !s.bandits.some((b) => b.posse)) {
+      this.posseT -= dt;
+      if (this.posseT <= 0) {
+        this.posseT = 50;
+        const h = s.hero;
+        const c = CITIES.map((c) => ({ c, d: Math.hypot(c.x - h.x, c.y - h.y) })).sort((a, b) => a.d - b.d)[0].c;
+        const ang = Math.atan2(c.y - h.y, c.x - h.x);
+        const x = h.x + Math.cos(ang) * 420;
+        const y = h.y + Math.sin(ang) * 420;
+        const w = s.wanted;
+        const n = Math.round((6 + h.lv * 0.8) * (0.6 + w * 0.3));
+        s.bandits.push({ id: s.nextId++, camp: -1, tier: w, x, y, army: army(Math.round(n * 0.5), Math.round(n * 0.3), Math.round(n * 0.2)), tx: x, ty: y, wait: 0, chase: true, posse: true });
+        this.hud.toast(`${CITY_NAME[c.id]} muhafızları peşinde! (${"★".repeat(w)})`, "bad");
+      }
+    }
+  }
+
+  private fightPosse(b: Bandit): void {
+    this.battle("Muhafızlar seni yakaladı!", b.army, 0.1, (win) => {
+      const s = this.s;
+      s.bandits = s.bandits.filter((x) => x.id !== b.id);
+      if (win) {
+        s.wantedT = 150;
+        this.addWanted(1);
+        const c = CITIES.map((c) => ({ c, d: Math.hypot(c.x - s.hero.x, c.y - s.hero.y) })).sort((a, b) => a.d - b.d)[0].c;
+        const f = factionOf(c.id);
+        s.rep[f] = this.rep(f) - 30;
+        return `Muhafızları dağıttın, ama bu adını daha da kirletti. Aranma: ${"★".repeat(s.wanted)}`;
+      }
+      const fine = Math.round(s.res.gold * 0.25);
+      s.res.gold -= fine;
+      s.wanted = 0;
+      return `Zincire vurulup kadının önüne çıkarıldın. ${fine} altın ceza ödedin; aranman kalktı.`;
+    }, null, "Şehir muhafızları");
+  }
+
+  bribeCost(): number {
+    return Math.round(this.s.wanted * (120 + this.s.hero.lv * 25));
+  }
+
+  bribe(): void {
+    if (!this.s.wanted || !this.pay({ gold: this.bribeCost() })) return;
+    this.s.wanted = 0;
+    this.s.bandits = this.s.bandits.filter((b) => !b.posse);
+    this.hud.toast("Kadıya kefaret ödedin. Sicilin temiz.", "good");
   }
 
   battle(title: string, enemy: Army, enemyBonus: number, after: (win: boolean) => string, boss: Boss | null = null, foe = "Haramiler"): void {

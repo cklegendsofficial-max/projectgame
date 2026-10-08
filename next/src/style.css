@@ -247,6 +247,10 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #1c120a; col
 @keyframes legpulse { 50% { box-shadow: 0 0 22px color-mix(in srgb, var(--sc) 85%, transparent), inset 0 0 16px color-mix(in srgb, var(--sc) 35%, transparent); } }
 .grow.leg { border-color: #ff9a3c88; background: linear-gradient(90deg, #ff9a3c1c, #0003 60%); }
 .grow.leg .gimg { filter: drop-shadow(0 0 6px #ff9a3caa); }
+.res .wanted { color: #ff5a3c; font-weight: 900; letter-spacing: -1px; text-shadow: 0 0 6px #ff2a1a; animation: wantedblink 1s steps(2) infinite; }
+@keyframes wantedblink { 50% { opacity: .55; } }
+.bbox.choice .btn.big { width: 100%; margin-top: 8px; }
+.bbox.choice .btn.bad { background: linear-gradient(#a8402c, #6e2216); color: #ffe2d8; border-color: #ff7a5c; }
 .ftag { --fc: #e0b04a; display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; color: var(--fc); border: 1px solid color-mix(in srgb, var(--fc) 60%, transparent); background: color-mix(in srgb, var(--fc) 14%, transparent); }
 .frep { --fc: #e0b04a; padding: 7px 10px; margin-bottom: 6px; border-radius: 10px; background: #0004; border: 1px solid #3b2614; border-left: 4px solid var(--fc); }
 .frep .frh { display: flex; align-items: center; gap: 8px; }

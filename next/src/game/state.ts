@@ -86,6 +86,23 @@ export interface Bandit {
   chase: boolean;
   tier: number;
   amb?: boolean;
+  posse?: boolean;
+}
+
+export interface Caravan {
+  id: number;
+  from: string;
+  to: string;
+  fac: string;
+  path: number[];
+  pathI: number;
+  x: number;
+  y: number;
+  guard: Army;
+  good: Good;
+  qty: number;
+  raid: number;
+  raidT: number;
 }
 
 export interface March {
@@ -135,6 +152,8 @@ export interface Counters {
   crafted: number;
   raids: number;
   sides: number;
+  robbed: number;
+  rescued: number;
 }
 
 export interface GameState {
@@ -184,6 +203,9 @@ export interface GameState {
   codex: string[];
   rep: Record<string, number>;
   repGift: string[];
+  caravans: Caravan[];
+  wanted: number;
+  wantedT: number;
 }
 
 export interface MarketEvent {
@@ -311,7 +333,7 @@ export function banditArmy(tier: number): Army {
 }
 
 export function newCounters(): Counters {
-  return { shifts: 0, trains: 0, profit: 0, wins: 0, recruits: 0, bought: 0, moved: 0, camps: 0, built: 0, trained: 0, marched: 0, spent: 0, plus: 0, kurgans: 0, contracts: 0, crafted: 0, raids: 0, sides: 0 };
+  return { shifts: 0, trains: 0, profit: 0, wins: 0, recruits: 0, bought: 0, moved: 0, camps: 0, built: 0, trained: 0, marched: 0, spent: 0, plus: 0, kurgans: 0, contracts: 0, crafted: 0, raids: 0, sides: 0, robbed: 0, rescued: 0 };
 }
 
 export function newGame(w: World): GameState {
@@ -383,6 +405,9 @@ export function newGame(w: World): GameState {
     codex: [],
     rep: {},
     repGift: [],
+    caravans: [],
+    wanted: 0,
+    wantedT: 0,
   };
 }
 
@@ -414,7 +439,7 @@ function decodeBits(s: string, n: number): Uint8Array {
 
 export function saveGame(s: GameState): void {
   try {
-    localStorage.setItem(KEY, JSON.stringify({ ...s, explored: encodeBits(s.explored), bandits: [] }));
+    localStorage.setItem(KEY, JSON.stringify({ ...s, explored: encodeBits(s.explored), bandits: [], caravans: [] }));
   } catch {
     /* storage full or blocked */
   }
@@ -437,6 +462,7 @@ export function loadGame(w: World): GameState {
       story: { ...fresh.story, ...(r.story ?? {}) },
       explored: typeof r.explored === "string" ? decodeBits(r.explored, NW * NH) : fresh.explored,
       bandits: [],
+      caravans: [],
       marches: Array.isArray(r.marches) ? r.marches : [],
     } as GameState;
   } catch {
