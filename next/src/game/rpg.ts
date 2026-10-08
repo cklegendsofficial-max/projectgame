@@ -1,18 +1,19 @@
+import { WEAPON_NAME, WEAPON_STAT, type ArmorKind, type ClassDef, type WeaponKind } from "./classes";
+
 export type Stat = "guc" | "cev" | "day" | "lid" | "kar";
 export const STAT_KEYS: Stat[] = ["guc", "cev", "day", "lid", "kar"];
-export const STAT_INFO: Record<Stat, { name: string; desc: string; icon: string }> = {
-  guc: { name: "Güç", desc: "Kılıç hasarı, çalışma verimi ve taşıma kapasitesi", icon: "r_sword" },
-  cev: { name: "Çeviklik", desc: "Yay hasarı ve yürüyüş hızı", icon: "r_bow" },
-  day: { name: "Dayanıklılık", desc: "Can, enerji ve savunma", icon: "shield" },
-  lid: { name: "Liderlik", desc: "Birlik büyüklüğü ve askerlerin saldırı gücü", icon: "tug" },
-  kar: { name: "Karizma", desc: "Gönüllü sayısı, asker ücreti ve pazar fiyatları", icon: "crown" },
+export const STAT_INFO: Record<Stat, { name: string; short: string; desc: string; icon: string }> = {
+  guc: { name: "Güç", short: "GÜÇ", desc: "Kılıç ve balta hasarı, çalışma verimi, taşıma kapasitesi", icon: "r_sword" },
+  cev: { name: "Çeviklik", short: "ÇEV", desc: "Hançer ve yay hasarı, yürüyüş hızı", icon: "r_bow" },
+  day: { name: "Dayanıklılık", short: "DAY", desc: "Can, enerji ve savunma", icon: "shield" },
+  lid: { name: "Liderlik", short: "LİD", desc: "Birlik büyüklüğü ve askerlerin saldırı gücü", icon: "tug" },
+  kar: { name: "Karizma", short: "KAR", desc: "Asa hasarı, gönüllü sayısı, asker ücreti ve pazar fiyatları", icon: "crown" },
 };
 
-export type Skill = "kilic" | "ok" | "ticaret" | "emek";
-export const SKILL_KEYS: Skill[] = ["kilic", "ok", "ticaret", "emek"];
+export type Skill = "silah" | "ticaret" | "emek";
+export const SKILL_KEYS: Skill[] = ["silah", "ticaret", "emek"];
 export const SKILL_INFO: Record<Skill, { name: string; desc: string; icon: string }> = {
-  kilic: { name: "Kılıç", desc: "Kılıçla verdiğin hasarı artırır. Talim meydanında ve savaşta gelişir.", icon: "it_sword_2" },
-  ok: { name: "Okçuluk", desc: "Yayla verdiğin hasarı artırır. Talim meydanında ve savaşta gelişir.", icon: "it_bow_2" },
+  silah: { name: "Silah Ustalığı", desc: "Silahınla verdiğin hasarı her seviyede %6 artırır. Talim meydanında ve savaşta gelişir.", icon: "swords" },
   ticaret: { name: "Ticaret", desc: "Alış-satış fiyatlarını iyileştirir. Pazarda alışveriş yaptıkça gelişir.", icon: "merchant" },
   emek: { name: "Emek", desc: "Ormanda, ocakta ve tarlada çalışma verimini artırır.", icon: "mat_wood" },
 };
@@ -32,7 +33,7 @@ export const SLOT_NAME: Record<Slot, string> = { silah: "Silah", zirh: "Zırh", 
 export interface Item {
   id: number;
   slot: Slot;
-  kind: "kilic" | "ok" | "";
+  kind: WeaponKind | ArmorKind | "";
   tier: number;
   rar: number;
   name: string;
@@ -44,6 +45,9 @@ export interface Item {
   carry: number;
   lid: number;
   kar: number;
+  crit: number;
+  lvReq: number;
+  req: { stat: Stat; v: number } | null;
 }
 
 export const RARITY = [
@@ -53,9 +57,15 @@ export const RARITY = [
   { name: "Destansı", mult: 2, color: "#d58cff" },
 ];
 
-const SWORDS = ["Paslı Kılıç", "Demir Kılıç", "Çelik Pala", "Şam Kılıcı", "Hükümdar Kılıcı"];
-const BOWS = ["Av Yayı", "Kompozit Yay", "Türk Yayı", "Usta Yayı", "Hakan Yayı"];
-const ARMORS = ["Keçe Yelek", "Deri Zırh", "Zincir Zırh", "Lamel Zırh", "Altın Lamel"];
+const WEAPONS: Record<WeaponKind, { names: string[]; icon: string; atk: number[]; crit: number }> = {
+  kilic: { names: ["Paslı Kılıç", "Demir Kılıç", "Çelik Pala", "Şam Kılıcı", "Hükümdar Kılıcı"], icon: "it_sword_", atk: [4, 8, 13, 19, 27], crit: 0 },
+  balta: { names: ["Odun Baltası", "Savaş Baltası", "Çift Ağızlı Balta", "Tolga Baltası", "Ejder Baltası"], icon: "it_axe_", atk: [6, 11, 17, 25, 35], crit: 0 },
+  hancer: { names: ["Kör Hançer", "Demir Hançer", "Kıvrık Hançer", "Gölge Hançeri", "Ateş Hançeri"], icon: "it_dagger_", atk: [3, 7, 11, 17, 24], crit: 0.08 },
+  ok: { names: ["Av Yayı", "Kompozit Yay", "Türk Yayı", "Usta Yayı", "Hakan Yayı"], icon: "it_bow_", atk: [4, 8, 13, 19, 27], crit: 0.04 },
+  asa: { names: ["Ardıç Asa", "Kemik Asa", "Kristal Asa", "Tengri Asası", "Gök Kurt Asası"], icon: "it_staff_", atk: [4, 7, 12, 18, 25], crit: 0 },
+};
+const HEAVY = ["Keçe Yelek", "Deri Zırh", "Zincir Zırh", "Lamel Zırh", "Altın Lamel"];
+const LIGHT = ["Deri Yelek", "Bağcıklı Deri", "Sertleştirilmiş Deri", "Gece Zırhı", "Gölge Cübbesi"];
 const SHIELDS = ["Hasır Kalkan", "Ahşap Kalkan", "Demir Kalkan", "Tolga Kalkan", "Ejder Kalkan"];
 const MOUNTS = ["Katır", "Bozkır Atı", "Arap Atı"];
 const CHARMS = [
@@ -65,35 +75,40 @@ const CHARMS = [
   { name: "Kristal Muska", icon: "tr_crystal" },
   { name: "Yıldız Taşı", icon: "tr_star" },
 ];
+export const WEAPON_KINDS: WeaponKind[] = ["kilic", "balta", "hancer", "ok", "asa"];
 
-export function makeItem(id: number, slot: Slot, tier: number, rar: number, kind: "kilic" | "ok" | "" = ""): Item {
+export function makeItem(id: number, slot: Slot, tier: number, rar: number, kind: WeaponKind | ArmorKind | "" = ""): Item {
   tier = Math.max(1, Math.min(5, tier));
   const m = RARITY[rar].mult;
-  const it: Item = { id, slot, kind: "", tier, rar, name: "", icon: "", atk: 0, def: 0, hp: 0, spd: 0, carry: 0, lid: 0, kar: 0 };
+  const it: Item = { id, slot, kind: "", tier, rar, name: "", icon: "", atk: 0, def: 0, hp: 0, spd: 0, carry: 0, lid: 0, kar: 0, crit: 0, lvReq: (tier - 1) * 3 + 1, req: null };
   const t = tier - 1;
+  const need = 1 + t * 3;
   if (slot === "silah") {
-    it.kind = kind || "kilic";
-    if (it.kind === "kilic") {
-      it.name = SWORDS[t];
-      it.icon = `it_sword_${tier}`;
-      it.atk = Math.round([4, 8, 13, 19, 27][t] * m);
-    } else {
-      it.name = BOWS[t];
-      it.icon = `it_bow_${tier}`;
-      it.atk = Math.round([5, 9, 14, 21, 30][t] * m);
-    }
+    const k = (WEAPON_KINDS as string[]).includes(kind) ? (kind as WeaponKind) : "kilic";
+    const w = WEAPONS[k];
+    it.kind = k;
+    it.name = w.names[t];
+    it.icon = w.icon + tier;
+    it.atk = Math.round(w.atk[t] * m);
+    it.crit = w.crit;
+    it.req = { stat: WEAPON_STAT[k], v: need };
   } else if (slot === "zirh") {
-    it.name = ARMORS[t];
-    it.icon = `it_armor_${tier}`;
-    it.def = Math.round([3, 6, 10, 15, 22][t] * m);
-    it.hp = Math.round([5, 10, 18, 28, 40][t] * m);
+    const heavy = kind !== "hafif";
+    it.kind = heavy ? "agir" : "hafif";
+    it.name = (heavy ? HEAVY : LIGHT)[t];
+    it.icon = heavy ? `it_armor_${tier}` : `it_light_${tier}`;
+    it.def = Math.round((heavy ? [3, 6, 10, 15, 22] : [2, 4, 7, 11, 16])[t] * m);
+    it.hp = Math.round((heavy ? [5, 10, 18, 28, 40] : [4, 8, 14, 22, 32])[t] * m);
+    if (heavy) it.req = { stat: "guc", v: need };
   } else if (slot === "kalkan") {
     it.name = SHIELDS[t];
     it.icon = `it_shield_${tier}`;
     it.def = Math.round([2, 4, 7, 11, 16][t] * m);
+    it.req = { stat: "day", v: need };
   } else if (slot === "at") {
     const k = Math.min(2, Math.floor(t / 2 + 0.5));
     it.tier = k * 2 + 1;
+    it.lvReq = k * 5 + 1;
     it.name = MOUNTS[k];
     it.icon = `mount_${k + 1}`;
     it.spd = Math.round([10, 22, 35][k] * m) / 100;
@@ -108,22 +123,40 @@ export function makeItem(id: number, slot: Slot, tier: number, rar: number, kind
   return it;
 }
 
-export function rollItem(id: number, tier: number, luck = 0): Item {
+export function classItem(id: number, cls: ClassDef, slot: Slot, tier: number, rar: number): Item {
+  if (slot === "silah") return makeItem(id, slot, tier, rar, cls.weapons[Math.floor(Math.random() * cls.weapons.length)]);
+  if (slot === "zirh") return makeItem(id, slot, tier, rar, cls.armor);
+  return makeItem(id, slot, tier, rar);
+}
+
+export function rollItem(id: number, tier: number, cls: ClassDef | null, luck = 0): Item {
   const slots: Slot[] = ["silah", "silah", "zirh", "zirh", "kalkan", "at", "tilsim"];
-  const slot = slots[Math.floor(Math.random() * slots.length)];
+  let slot = slots[Math.floor(Math.random() * slots.length)];
   const r = Math.random() + luck;
   const rar = r > 0.97 ? 3 : r > 0.85 ? 2 : r > 0.6 ? 1 : 0;
   const t = Math.max(1, Math.min(5, tier + (Math.random() < 0.25 ? 1 : 0) - (Math.random() < 0.25 ? 1 : 0)));
-  return makeItem(id, slot, t, rar, Math.random() < 0.5 ? "kilic" : "ok");
+  if (cls && Math.random() < 0.65) {
+    if (slot === "kalkan" && !cls.shield) slot = "zirh";
+    return classItem(id, cls, slot, t, rar);
+  }
+  const kind = slot === "silah" ? WEAPON_KINDS[Math.floor(Math.random() * 5)] : slot === "zirh" ? (Math.random() < 0.5 ? "agir" : "hafif") : "";
+  return makeItem(id, slot, t, rar, kind);
 }
 
 export function itemPrice(it: Item): number {
   return Math.round(30 * Math.pow(it.tier, 2.1) * RARITY[it.rar].mult * (it.slot === "at" ? 1.6 : 1));
 }
 
+export function kindName(it: Item): string {
+  if (it.slot === "silah") return WEAPON_NAME[it.kind as WeaponKind];
+  if (it.slot === "zirh") return it.kind === "agir" ? "Ağır zırh" : "Hafif zırh";
+  return SLOT_NAME[it.slot];
+}
+
 export function itemStats(it: Item): string {
   const p: string[] = [];
-  if (it.atk) p.push(`Saldırı ${it.atk}${it.kind === "ok" ? " (yay)" : ""}`);
+  if (it.atk) p.push(`Saldırı ${it.atk}`);
+  if (it.crit) p.push(`Kritik +%${Math.round(it.crit * 100)}`);
   if (it.def) p.push(`Savunma ${it.def}`);
   if (it.hp) p.push(`Can +${it.hp}`);
   if (it.spd) p.push(`Hız +%${Math.round(it.spd * 100)}`);

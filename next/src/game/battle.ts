@@ -5,12 +5,19 @@ export interface Champion {
   def: number;
   hp: number;
   maxHp: number;
+  crit: number;
+  critMult: number;
+  dodge: number;
+  heal: number;
+  rage: boolean;
+  firstStrike: boolean;
 }
 
 export interface Round {
   a: Army;
   b: Army;
   hp: number;
+  ev: string[];
 }
 
 export interface BattleResult {
@@ -67,15 +74,41 @@ export function fight(a0: Army, aBonus: number, b0: Army, bBonus = 0, champ: Cha
   const c = champ ? { ...champ } : null;
   const hpA = { spear: 0, archer: 0, horse: 0 };
   const hpB = { spear: 0, archer: 0, horse: 0 };
-  const rounds: Round[] = [{ a: { ...a }, b: { ...b }, hp: c?.hp ?? 0 }];
+  const rounds: Round[] = [{ a: { ...a }, b: { ...b }, hp: c?.hp ?? 0, ev: [] }];
   const aAlive = () => armySize(a) > 0 || (!!c && c.hp > 0);
+  const champHit = (ev: string[]) => {
+    if (!c || c.hp <= 0) return 0;
+    let d = c.atk;
+    if (c.rage && c.hp < c.maxHp / 2) {
+      d *= 1.3;
+      if (!ev.includes("Öfke")) ev.push("Öfke");
+    }
+    if (Math.random() < c.crit) {
+      d *= c.critMult;
+      ev.push("Kritik!");
+    }
+    return d;
+  };
+  if (c?.firstStrike) {
+    const ev = ["Gölge Darbesi"];
+    b = hit({ spear: 0, archer: 0, horse: 0 }, b, aBonus, hpB, champHit(ev) * 1.5, null).out;
+    rounds.push({ a: { ...a }, b: { ...b }, hp: c.hp, ev });
+  }
   for (let r = 0; r < 12 && aAlive() && armySize(b) > 0; r++) {
-    const atkB = hit(a, b, aBonus, hpB, c && c.hp > 0 ? c.atk * (1 + aBonus) : 0, null);
+    const ev: string[] = [];
+    const atkB = hit(a, b, aBonus, hpB, champHit(ev) * (1 + aBonus), null);
     const atkA = hit(b, a, bBonus, hpA, 0, c);
-    if (c) c.hp = Math.max(0, c.hp - (atkA.toChamp * 100) / (100 + c.def * 6));
+    if (c) {
+      if (c.dodge > 0 && Math.random() < c.dodge) ev.push("Sıyrıldın");
+      else c.hp = Math.max(0, c.hp - (atkA.toChamp * 100) / (100 + c.def * 6));
+      if (c.heal > 0 && c.hp > 0) {
+        c.hp = Math.min(c.maxHp, c.hp + c.maxHp * c.heal);
+        ev.push("Ruh şifası");
+      }
+    }
     a = atkA.out;
     b = atkB.out;
-    rounds.push({ a: { ...a }, b: { ...b }, hp: c?.hp ?? 0 });
+    rounds.push({ a: { ...a }, b: { ...b }, hp: c?.hp ?? 0, ev });
     if (c && c.hp <= 0) break;
     if (armySize(b) < armySize(b0) * 0.2) break;
     if (!c && armySize(a) < armySize(a0) * 0.25) break;
@@ -86,7 +119,7 @@ export function fight(a0: Army, aBonus: number, b0: Army, bBonus = 0, champ: Cha
   const win = !heroDown && endA / Math.max(1, startA) >= armyPower(b, bBonus) / Math.max(1, armyPower(b0, bBonus)) && aAlive();
   if (win) b = { spear: 0, archer: 0, horse: 0 };
   else for (const u of UNIT_KEYS) a[u] = Math.floor(a[u] * 0.6);
-  rounds.push({ a: { ...a }, b: { ...b }, hp: c?.hp ?? 0 });
+  rounds.push({ a: { ...a }, b: { ...b }, hp: c?.hp ?? 0, ev: [] });
   const lostA = { spear: a0.spear - a.spear, archer: a0.archer - a.archer, horse: a0.horse - a.horse };
   const lostB = { spear: b0.spear - b.spear, archer: b0.archer - b.archer, horse: b0.horse - b.horse };
   return { rounds, win, lostA, lostB, heroHp: Math.round(c?.hp ?? 0), heroDown };

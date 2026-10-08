@@ -1,7 +1,7 @@
 import { chromium, type Page } from "playwright-core";
 
 const mode = process.argv[2] ?? "desk";
-const out = `playtest/rpg-${mode}`;
+const out = `playtest/rpg-${mode}-${process.argv[3] ?? "suikastci"}`;
 const shot = async (page: Page, name: string, wait = 400) => {
   await page.waitForTimeout(wait);
   await page.screenshot({ path: `${out}-${name}.png` });
@@ -17,9 +17,15 @@ await page.evaluate(() => localStorage.clear());
 await page.reload();
 await page.waitForFunction(() => !document.getElementById("loading"), null, { timeout: 60000 });
 const ev = <T = unknown>(fn: string) => page.evaluate(`(() => { const g = window.game; ${fn} })()`) as Promise<T>;
-const log = async (tag: string) => console.log(tag, JSON.stringify(await ev(`const h = g.s.hero; return { q: g.s.quest, gold: Math.round(g.s.res.gold), free: g.s.free, lv: h.lv, pts: h.points, hp: Math.round(h.hp), en: Math.round(h.energy), atk: +g.heroAtk().toFixed(1), army: h.army, bag: h.bag.map(i => i.name), eq: Object.values(h.equip).map(i => i.name), renown: g.s.renown, profit: g.s.c.profit, skills: h.skills };`)));
+const log = async (tag: string) => console.log(tag, JSON.stringify(await ev(`const h = g.s.hero; return { q: g.s.quest, gold: Math.round(g.s.res.gold), free: g.s.free, lv: h.lv, pts: h.points, hp: Math.round(h.hp), en: Math.round(h.energy), atk: +g.heroAtk().toFixed(1), army: h.army, bag: h.bag.map(i => i.name), eq: Object.values(h.equip).map(i => i.name), renown: g.s.renown, profit: g.s.c.profit, skills: h.skills, cls: g.s.cls, name: h.name, stats: h.stats };`)));
 
-await shot(page, "01-intro", 900);
+const cls = process.argv[3] ?? "suikastci";
+await shot(page, "00-class", 900);
+await page.locator(`.ccard[data-c="${cls}"]`).click();
+await page.locator(".cname input").fill("Börü");
+await shot(page, "00b-class-pick", 300);
+await page.locator(".cname .btn").click();
+await shot(page, "01-intro", 600);
 await page.locator(".battle .btn").click();
 await log("start");
 // walk to work node

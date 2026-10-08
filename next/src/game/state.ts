@@ -2,6 +2,7 @@ import { CITIES, H, NAV, NW, NH, W, type World } from "../world/gen";
 import { rng } from "../world/noise";
 import { BANDIT_NAMES, BUILDINGS, VILLAGE_NAMES, army, type Army, type BuildingId, type NodeKind, type Res, type Unit } from "./data";
 import type { Good, Item, Skill, Slot, Stat } from "./rpg";
+import type { ClassId } from "./classes";
 
 export interface Village {
   name: string;
@@ -134,6 +135,7 @@ export interface GameState {
   time: number;
   kills: number;
   nextId: number;
+  cls: ClassId | null;
   free: boolean;
   beylik: boolean;
   renown: number;
@@ -243,7 +245,7 @@ export function newGame(w: World): GameState {
   const places = placeWorld(w);
   const buildings = Object.fromEntries(BUILDINGS.map((b) => [b.id, { lv: 0, until: 0 }])) as GameState["buildings"];
   return {
-    v: 2,
+    v: 3,
     res: { gold: 0, food: 0, wood: 0, stone: 0 },
     resAt: now,
     buildings,
@@ -260,7 +262,7 @@ export function newGame(w: World): GameState {
       pathI: 0,
       stats: { guc: 2, cev: 2, day: 2, lid: 1, kar: 1 },
       points: 0,
-      skills: { kilic: 0, ok: 0, ticaret: 0, emek: 0 },
+      skills: { silah: 0, ticaret: 0, emek: 0 },
       hp: 999,
       energy: 999,
       equip: {},
@@ -276,6 +278,7 @@ export function newGame(w: World): GameState {
     time: 0,
     kills: 0,
     nextId: 1,
+    cls: null,
     free: false,
     beylik: false,
     renown: 0,
@@ -288,7 +291,7 @@ export function newGame(w: World): GameState {
   };
 }
 
-const KEY = "kervan_krallik_v2";
+const KEY = "kervan_krallik_v3";
 
 function encodeBits(a: Uint8Array): string {
   let s = "";
@@ -328,7 +331,7 @@ export function loadGame(w: World): GameState {
     const raw = localStorage.getItem(KEY);
     if (!raw) return fresh;
     const r = JSON.parse(raw) as Partial<GameState> & { explored?: string };
-    if (r.v !== 2) return fresh;
+    if (r.v !== 3) return fresh;
     return {
       ...fresh,
       ...r,

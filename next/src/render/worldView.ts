@@ -260,7 +260,7 @@ export class WorldView {
     this.ruinM = s.ruins.map((r) => this.place("map/ruins", r.x, r.y, 72));
     for (const m of [...this.campM]) if (m.label) m.label.style.fill = "#ffb0a0";
     this.places.children.sort((a, b) => a.y - b.y);
-    this.heroPortrait(s.free ? "heroes/hero1" : "heroes/slave");
+    this.heroPortrait(game.face());
   }
 
   private ring(color: number, r: number): Graphics {
