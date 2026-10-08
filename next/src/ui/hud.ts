@@ -6,6 +6,7 @@ import { ARMOR_NAME, CLASSES, SKILL_MAX, WEAPON_NAME, skillPow, skillRank, type 
 import { CAPITAL, kurganBoss } from "../game/state";
 import { BRANCHES, BRANCH_KEYS, ROW_NEED, TALENTS, branchSpent } from "../game/talents";
 import { CONSUMABLES, CONS_BY_ID, CRAFT_SLOTS, REFINES, gearCost, type Cost, type Mat } from "../game/crafting";
+import { SIDE_TEXT, type SideQuest } from "../game/sidequests";
 import { CITY_NAME } from "../game/data";
 import { COMPANIONS, COMP_BY_ID, COMP_MAX, FORT_GUARD, KARA_HAN, type CompId } from "../game/story";
 import { CITIES, H, NH, NW, W } from "../world/gen";
@@ -69,6 +70,34 @@ export class Hud {
   private sagaOpen = false;
   private craftTier = 1;
 
+  private sideEl!: HTMLElement;
+
+  private topSide(): SideQuest | null {
+    const q = this.g.s.sideQ;
+    return q.find((x) => this.g.sideReady(x)) ?? q[0] ?? null;
+  }
+
+  private sideRow(q: SideQuest, right: string): string {
+    const g = this.g;
+    const p = Math.max(0, Math.min(q.need, g.sideProg(q)));
+    const ready = p >= q.need;
+    const back = ready ? `<small class="cheap">Tamamlandı — ${CITY_NAME[g.sideTurnIn(q)]} şehrine dön</small>` : q.need > 1 ? `<small>İlerleme ${p}/${q.need}</small>` : "";
+    return `<div class="grow sq">${ic(SIDE_TEXT[q.kind].icon, "gimg")}<div class="bi2"><b>${q.title}</b><small class="dim">${q.giver}</small><small>${q.text}</small>${back}<small>${ic("coins")}${q.gold} · ${ic("scroll")}${q.xp} TP · ${ic("crown")}${q.renown}${q.item ? ` · ${ic("chest")}eşya` : ""}</small></div>${right}</div>`;
+  }
+
+  private boardHtml(city: string, near: boolean): string {
+    const g = this.g;
+    const s = g.s;
+    if (!s.free) return "";
+    const mine = s.sideQ.filter((q) => q.city === city || g.sideTurnIn(q) === city);
+    const why = g.sideReason();
+    return (
+      `<h3>${ic("quest")} Şehir görevleri <em>${s.sideQ.length}/3</em></h3>` +
+      mine.map((q) => this.sideRow(q, `<button class="btn sm" data-a="${this.act(() => g.dropSide(q.id))}">Bırak</button>`)).join("") +
+      (g.sideBoard(city).map((q) => this.sideRow(q, `<button class="btn sm ${why || !near ? "off" : ""}" data-a="${this.act(() => g.takeSide(city, q.id))}">Al</button>`)).join("") || `<p class="dim">Bugünlük iş kalmadı. Yarın yeni ilanlar asılır.</p>`)
+    );
+  }
+
   private matsHtml(c: Cost): string {
     return (Object.entries(c) as [Mat, number][])
       .map(([m, v]) => {
@@ -82,7 +111,7 @@ export class Hud {
   constructor(private g: Game) {
     this.root.innerHTML = `
       <div class="top"></div>
-      <div class="track"><div class="quest"></div><div class="quest saga hidden"></div><div class="quest task hidden"></div></div>
+      <div class="track"><div class="quest"></div><div class="quest saga hidden"></div><div class="quest task hidden"></div><div class="quest sq hidden"></div></div>
       <div class="toasts"></div>
       <div class="actbar hidden"></div>
       <div class="bottom">
@@ -97,6 +126,12 @@ export class Hud {
     this.questEl = this.root.querySelector(".quest")!;
     this.sagaEl = this.root.querySelector(".saga")!;
     this.taskEl = this.root.querySelector(".task")!;
+    this.sideEl = this.root.querySelector(".quest.sq")!;
+    this.sideEl.addEventListener("click", () => {
+      const q = this.topSide();
+      const p = q && g.sideGoto(q);
+      if (p) g.cam.flyTo(p.x, p.y, Math.max(g.cam.zoom, 0.65));
+    });
     this.taskEl.addEventListener("click", () => {
       const r = g.s.raid;
       const c = g.s.contract;
@@ -607,7 +642,7 @@ export class Hud {
               ? `<div class="brow">${ic("map/serai", "bimg")}<div class="bi2">${bar(sr.coffer, g.seraiCap(c.id), "", `Kasa ${Math.floor(sr.coffer)}/${Math.round(g.seraiCap(c.id))}`)}<small>Dakikada ${g.seraiRate(c.id).toFixed(1)} altın · Ağında ${g.seraiCount()} kervansaray · Bedava konaklama, ticarette %${2 * sr.lv} avantaj</small>${swhy && sr.lv < 3 ? `<small class="why">${swhy}</small>` : ""}</div>${sr.lv < 3 ? `<button class="btn sm ${swhy ? "off" : ""}" data-a="${this.act(() => g.buildSerai(c.id))}">Geliştir<br>${ic("coins")}${g.seraiCost(c.id)}</button>` : ""}</div>`
               : `<div class="brow">${ic("map/serai", "bimg")}<div class="bi2"><b>${CITY_NAME[c.id]} yolunda kendi hanın</b><small>Kasası her dakika altın biriktirir, uğradığında toplarsın. Burada konaklama bedava, emanet teslimine %25 prim. Her yeni kervansaray tüm ağın gelirini %15 artırır.</small>${swhy ? `<small class="why">${swhy}</small>` : ""}</div><button class="btn sm ${swhy || !near ? "off" : ""}" data-a="${this.act(() => g.buildSerai(c.id))}">Kur<br>${ic("coins")}${g.seraiCost(c.id)}</button></div>`);
       body = `${nearNote}<div class="brow">${ic("han", "bimg")}<div class="bi2"><b>Kervansaray odası</b><small>Canını ve enerjini tamamen doldurur.</small></div><button class="btn ${!near || g.act ? "off" : ""}" data-a="${this.act(() => g.rest())}">Uyu ${g.restCost() ? `${ic("coins")}${g.restCost()}` : "· bedava"}</button></div>
-        ${serai}${rumor}
+        ${this.boardHtml(c.id, near)}${serai}${rumor}
         <h3>${ic("wanted")} Ödül ilanları</h3>` +
         (bl.map(({ b, i }) => {
           const cp = s.camps[b.camp];
@@ -886,7 +921,7 @@ export class Hud {
         return `<div class="res" title="${RES_NAME[k]}">${ic(RES_ICON[k])}<b>${fmt(s.res[k])}</b>${Math.round(r) ? `<small class="${r < 0 ? "neg" : ""}">${r >= 0 ? "+" : ""}${Math.round(r)}/dk</small>` : ""}</div>`;
       }).join("") +
       `<div class="res vit"><div class="mbar hp"><i style="width:${(h.hp / g.maxHp()) * 100}%"></i><span>❤ ${Math.floor(h.hp)}</span></div><div class="mbar en"><i style="width:${(h.energy / g.maxEnergy()) * 100}%"></i><span>⚡ ${Math.floor(h.energy)}</span></div></div>
-       <div class="res hero">${ic(g.face(), "ic round")}<b>Sv ${h.lv}</b>${h.points + h.spts ? `<small class="pts">+${h.points + h.spts}</small>` : ""}</div>
+       <div class="res hero">${ic(g.face(), "ic round")}<b>Sv ${h.lv}</b>${h.points + h.spts + h.tpts ? `<small class="pts">+${h.points + h.spts + h.tpts}</small>` : ""}</div>
        ${s.free ? `<div class="res">${ic("crown")}<b>${s.renown}</b></div>` : ""}
        <div class="res day">${night ? "🌙" : "☀️"}<b>Gün ${day.day}</b></div>`;
     const q = g.quest();
@@ -895,6 +930,15 @@ export class Hud {
       : `${ic("crown", "qi")}<div><b>Tüm görevler bitti</b><span>Kampları temizle, beyliğini büyüt, batıya doğru keşfet.</span></div>`;
     const ch = g.chapter();
     this.questEl.classList.toggle("hidden", !q && !!ch && s.free);
+    const sq = this.topSide();
+    this.sideEl.classList.toggle("hidden", !sq);
+    if (sq) {
+      const p = Math.max(0, Math.min(sq.need, g.sideProg(sq)));
+      const ready = p >= sq.need;
+      const html = `${ic(SIDE_TEXT[sq.kind].icon, "qi")}<div><small>Şehir görevi${s.sideQ.length > 1 ? ` · +${s.sideQ.length - 1} daha` : ""}</small><b>${sq.title}</b><span>${ready ? `Tamamlandı! ${CITY_NAME[g.sideTurnIn(sq)]} şehrine dön.` : `${sq.text}${sq.need > 1 ? ` (${p}/${sq.need})` : ""}`}</span></div>`;
+      if (this.sideEl.innerHTML !== html) this.sideEl.innerHTML = html;
+      this.sideEl.classList.toggle("ready", ready);
+    }
     const lordGoal = s.story.done && !s.story.lord;
     this.sagaEl.classList.toggle("hidden", !(ch && s.free) && !lordGoal);
     if (ch && s.free) {

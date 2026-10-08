@@ -75,5 +75,21 @@ await ev(`g.hud.tab = "atolye"; g.hud.render();`);
 await shot("05-atolye-after");
 await ev(`g.hud.close(); g.hud["openHero"](); g.hud.tab = "techizat"; g.hud.render();`);
 await shot("06-bag");
+// side quests
+await ev(`g.hud.close(); g.s.sideQ = []; g.s.board = {}; const c = g.targetPos({kind:"city", i: 6}); g.s.hero.x = c.x; g.s.hero.y = c.y; g.hud.openPlace({kind:"city", i: 6}); g.hud.tab = "han"; g.hud.render();`);
+await shot("07-board");
+console.log("board", JSON.stringify(await ev(`return g.sideBoard("bukhara").map(q => [q.kind, q.title, q.need, q.gold, q.xp, q.to, q.good]);`)));
+await ev(`for (const q of [...g.sideBoard("bukhara")]) g.takeSide("bukhara", q.id);`);
+const g0 = await ev<number>(`return g.s.res.gold;`);
+await ev(`g.hud.close(); const s = g.s; for (const q of s.sideQ) { if (q.kind === "deliver") s.hero.cargo[q.good] = q.need + 1; if (q.kind === "ruh") s.mats.ruh += q.need; if (q.kind === "ruin") s.ruins[q.ruin].looted = true; if (["hunt","camp","craft","kurgan","raid"].includes(q.kind)) s.c[{hunt:"wins",camp:"camps",craft:"crafted",kurgan:"kurgans",raid:"raids"}[q.kind]] += q.need; } const c = g.targetPos({kind:"city", i: 6}); s.hero.x = c.x + 800; s.hero.y = c.y;`);
+await page.waitForTimeout(600);
+await shot("08-tracker");
+await ev(`const c = g.targetPos({kind:"city", i: 6}); g.s.hero.x = c.x; g.s.hero.y = c.y;`);
+await page.waitForTimeout(800);
+for (let k = 0; k < 3; k++) {
+  await ev(`const q = g.s.sideQ[0]; if (q) { const c = g.sideGoto(q); g.s.hero.x = c.x; g.s.hero.y = c.y; }`);
+  await page.waitForTimeout(700);
+}
+console.log("sides", JSON.stringify(await ev(`return { left: g.s.sideQ.length, done: g.s.c.sides, gold: Math.round(g.s.res.gold - ${g0}) };`)));
 console.log("errors:", errs);
 await browser.close();

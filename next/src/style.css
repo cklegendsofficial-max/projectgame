@@ -74,6 +74,8 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #1c120a; col
 .tnode.max { background: linear-gradient(color-mix(in srgb, var(--bc) 30%, #3a2614), #22160a); border-color: var(--bc); }
 .tnode.lock, .tnode.idle { cursor: default; }
 .tnode.lock .ic { filter: grayscale(1); }
+.quest.sq { border-color: #6ab8ff; }
+.quest.sq.ready { border-color: #7fd36a; box-shadow: 0 0 12px #7fd36a55; }
 .mat { display: inline-flex; align-items: center; gap: 2px; margin-right: 6px; white-space: nowrap; }
 .mat .ic { width: 16px; height: 16px; }
 .mat.lack { color: #ff8a6a; }
@@ -311,6 +313,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #1c120a; col
   .track { top: auto; bottom: 92px; left: 6px; width: auto; right: 6px; gap: 4px; }
   .quest { padding: 6px; }
   .quest:not(.hidden) + .quest.saga span { display: none; }
+  .quest:not(.hidden) ~ .quest.sq span { display: none; }
   .quest .qi { width: 30px; height: 30px; }
   .quest span { font-size: 12px; }
   .mini { width: 120px; height: 70px; top: 96px; bottom: auto; right: 6px; }

@@ -190,7 +190,7 @@ class SoundSystem {
         break;
       case "quest":
       case "level":
-        [0, 4, 7, 11, 14].forEach((k, i) => this.pluck(n(k) * 2, t + i * 0.09, 0.18, this.fx, 1.4));
+        [0, 2, 4, 7, 9].forEach((k, i) => this.pluck(n(k) * 2, t + i * 0.09, 0.18, this.fx, 1.4));
         break;
       case "story":
         this.tone(ROOT / 2, t, 3, 0.25, "sine");

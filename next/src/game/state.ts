@@ -3,6 +3,7 @@ import { rng } from "../world/noise";
 import { BANDIT_NAMES, BUILDINGS, VILLAGE_NAMES, army, type Army, type BuildingId, type NodeKind, type Res, type Unit } from "./data";
 import type { Good, Item, Skill, Slot, Stat } from "./rpg";
 import type { ClassId } from "./classes";
+import type { SideQuest } from "./sidequests";
 
 export interface Village {
   name: string;
@@ -131,6 +132,9 @@ export interface Counters {
   plus: number;
   kurgans: number;
   contracts: number;
+  crafted: number;
+  raids: number;
+  sides: number;
 }
 
 export interface GameState {
@@ -175,6 +179,8 @@ export interface GameState {
   serais: Record<string, { lv: number; coffer: number }>;
   cons: Record<string, number>;
   buffs: Record<string, number>;
+  sideQ: SideQuest[];
+  board: Record<string, { day: number; list: SideQuest[] }>;
 }
 
 export interface MarketEvent {
@@ -302,7 +308,7 @@ export function banditArmy(tier: number): Army {
 }
 
 export function newCounters(): Counters {
-  return { shifts: 0, trains: 0, profit: 0, wins: 0, recruits: 0, bought: 0, moved: 0, camps: 0, built: 0, trained: 0, marched: 0, spent: 0, plus: 0, kurgans: 0, contracts: 0 };
+  return { shifts: 0, trains: 0, profit: 0, wins: 0, recruits: 0, bought: 0, moved: 0, camps: 0, built: 0, trained: 0, marched: 0, spent: 0, plus: 0, kurgans: 0, contracts: 0, crafted: 0, raids: 0, sides: 0 };
 }
 
 export function newGame(w: World): GameState {
@@ -369,6 +375,8 @@ export function newGame(w: World): GameState {
     serais: {},
     cons: {},
     buffs: {},
+    sideQ: [],
+    board: {},
   };
 }
 

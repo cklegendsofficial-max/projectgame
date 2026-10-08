@@ -4,6 +4,7 @@ import type { WorldView } from "../render/worldView";
 import type { Hud } from "../ui/hud";
 import { ROW_NEED, TALENT_BY_ID, branchSpent, type Talent } from "./talents";
 import { CONS_BY_ID, REFINES, gearCost, type Cost, type Mat } from "./crafting";
+import { GIVERS, SIDE_TEXT, type SideKind, type SideQuest } from "./sidequests";
 import { audio } from "../audio";
 import { TACTICS, TACTIC_KEYS, fight, odds, stanceWeights, tacticDelta, type BattleResult, type Boss, type Champion, type Tactic } from "./battle";
 import { BUILDINGS, BUILDING_BY_ID, CITY_NAME, DAY_SEC, RES_KEYS, UNITS, UNIT_KEYS, army, armyPower, armySize, buildCost, buildTime, prodPerMin, storageCap, trainSpeed, unitUnlocked, xpNeed, type Army, type BuildingId, type Res, type Unit } from "./data";
@@ -325,6 +326,7 @@ export class Game {
     this.worldEvents(dt, now);
     this.checkContract();
     this.seraiVisit();
+    this.sideTick();
     this.saveT += dt;
     if (this.saveT > 8) {
       this.saveT = 0;
@@ -820,6 +822,167 @@ export class Game {
     });
   }
 
+  // ---------- side quests ----------
+
+  sideProg(q: SideQuest): number {
+    const c = this.s.c;
+    switch (q.kind) {
+      case "hunt":
+        return c.wins - q.base;
+      case "camp":
+        return c.camps - q.base;
+      case "craft":
+        return c.crafted - q.base;
+      case "kurgan":
+        return c.kurgans - q.base;
+      case "raid":
+        return c.raids - q.base;
+      case "ruin":
+        return this.s.ruins[q.ruin!]?.looted ? 1 : 0;
+      case "deliver":
+        return Math.min(q.need, this.s.hero.cargo[q.good!] ?? 0);
+      case "ruh":
+        return Math.min(q.need, this.s.mats.ruh);
+    }
+  }
+
+  sideReady(q: SideQuest): boolean {
+    return this.sideProg(q) >= q.need;
+  }
+
+  sideTurnIn(q: SideQuest): string {
+    return q.kind === "deliver" ? q.to! : q.city;
+  }
+
+  sideGoto(q: SideQuest): { x: number; y: number } | null {
+    const s = this.s;
+    if (this.sideReady(q) || q.kind === "craft" || q.kind === "ruh") return CITIES.find((c) => c.id === this.sideTurnIn(q)) ?? null;
+    if (q.kind === "deliver") return CITIES.find((c) => c.id === q.to) ?? null;
+    if (q.kind === "ruin") return s.ruins[q.ruin!] ?? null;
+    if (q.kind === "kurgan") return this.nearest(s.kurgans.filter((k) => k.alive));
+    if (q.kind === "camp") return this.nearest(s.camps.filter((k) => k.alive));
+    if (q.kind === "raid") return s.raid ? s.villages[s.raid.v] : null;
+    return this.nearest(s.bandits.filter((b) => this.isExplored(b.x, b.y))) ?? this.nearest(s.camps.filter((k) => k.alive));
+  }
+
+  sideBoard(city: string): SideQuest[] {
+    const s = this.s;
+    const day = this.dayOf().day;
+    let b = s.board[city];
+    if (!b || b.day !== day) {
+      b = s.board[city] = { day, list: [] };
+      for (let k = 0; k < 3; k++) {
+        const q = this.makeSide(city, b.list);
+        if (q) b.list.push(q);
+      }
+    }
+    return b.list;
+  }
+
+  private makeSide(city: string, board: SideQuest[] = []): SideQuest | null {
+    const s = this.s;
+    const lv = s.hero.lv;
+    const pick = <T,>(a: T[]) => a[Math.floor(Math.random() * a.length)];
+    const taken = [...s.sideQ, ...board];
+    const ruins = s.ruins.map((r, i) => ({ r, i })).filter((x) => !x.r.looted && !taken.some((q) => q.ruin === x.i));
+    let kinds: SideKind[] = ["hunt", "hunt", "camp", "deliver", "deliver", "craft", "kurgan", "raid", "ruh"];
+    if (ruins.length) kinds.push("ruin", "ruin");
+    const fresh = kinds.filter((k) => !board.some((q) => q.kind === k));
+    if (fresh.length) kinds = fresh;
+    const kind = pick(kinds);
+    const c = s.c;
+    const q: SideQuest = { id: s.nextId++, city, kind, giver: pick(GIVERS), title: pick(SIDE_TEXT[kind].titles), text: "", need: 1, base: 0, gold: 0, xp: 0, renown: 2, item: Math.random() < 0.35 };
+    let diff = 1;
+    if (kind === "hunt") {
+      q.need = 2 + Math.floor(Math.random() * 3);
+      q.base = c.wins;
+      diff = q.need * 0.5;
+    } else if (kind === "camp") {
+      q.need = 1 + (Math.random() < 0.3 ? 1 : 0);
+      q.base = c.camps;
+      diff = 1.4 * q.need;
+    } else if (kind === "craft") {
+      q.need = 2 + Math.floor(Math.random() * 2);
+      q.base = c.crafted;
+      diff = 0.9;
+    } else if (kind === "kurgan") {
+      q.base = c.kurgans;
+      diff = 2;
+    } else if (kind === "raid") {
+      q.base = c.raids;
+      diff = 1.5;
+    } else if (kind === "ruh") {
+      q.need = 2 + Math.floor(Math.random() * 3);
+      diff = q.need * 0.6;
+    } else if (kind === "ruin") {
+      const r = pick(ruins);
+      q.ruin = r.i;
+      diff = 1.2;
+    } else {
+      const to = pick(CITIES.filter((x) => x.id !== city));
+      q.to = to.id;
+      q.good = pick(CITY_TRADE[to.id].dear);
+      q.need = Math.min(12, 3 + Math.floor(lv / 3));
+      const from = CITIES.find((x) => x.id === city)!;
+      diff = 0.6 + Math.hypot(to.x - from.x, to.y - from.y) / 1500;
+    }
+    const extra = kind === "deliver" ? `${CITY_NAME[q.to!]} · ${GOODS[q.good!].name}` : kind === "ruin" ? "haritada işaretli" : "";
+    q.text = SIDE_TEXT[kind].text(q.need, extra);
+    q.gold = Math.round((40 + 22 * lv) * diff);
+    q.xp = Math.round((25 + 12 * lv) * diff);
+    q.renown = Math.max(2, Math.round(2 * diff));
+    return q;
+  }
+
+  sideReason(): string | null {
+    if (!this.s.free) return "Önce hürriyetini kazan";
+    if (this.s.sideQ.length >= 3) return "En fazla 3 görev alabilirsin";
+    return null;
+  }
+
+  takeSide(city: string, id: number): void {
+    if (this.sideReason()) return;
+    const b = this.sideBoard(city);
+    const i = b.findIndex((q) => q.id === id);
+    if (i < 0) return;
+    const [q] = b.splice(i, 1);
+    if (q.kind === "ruin") {
+      const r = this.s.ruins[q.ruin!];
+      this.reveal(r.x, r.y, 5);
+    }
+    this.s.sideQ.push(q);
+    this.hud.toast(`Görev alındı: ${q.title}`, "good");
+  }
+
+  dropSide(id: number): void {
+    this.s.sideQ = this.s.sideQ.filter((q) => q.id !== id);
+  }
+
+  private sideTick(): void {
+    const s = this.s;
+    if (!s.sideQ.length || this.battleLock) return;
+    const ci = this.nearCity();
+    if (ci < 0) return;
+    const city = CITIES[ci].id;
+    for (const q of [...s.sideQ]) {
+      if (this.sideTurnIn(q) !== city || !this.sideReady(q)) continue;
+      if (q.kind === "deliver") {
+        s.hero.cargo[q.good!] = (s.hero.cargo[q.good!] ?? 0) - q.need;
+        s.hero.paid[q.good!] = Math.max(0, (s.hero.paid[q.good!] ?? 0) * 0.5);
+        if (!s.hero.cargo[q.good!]) delete s.hero.cargo[q.good!];
+      }
+      if (q.kind === "ruh") s.mats.ruh -= q.need;
+      s.sideQ = s.sideQ.filter((x) => x.id !== q.id);
+      s.res.gold += q.gold;
+      s.renown += q.renown;
+      s.c.sides++;
+      const up = this.addXp(q.xp);
+      const it = q.item ? this.drop(Math.min(5, 1 + Math.floor(s.hero.lv / 4)), 1) : null;
+      this.hud.questDone({ title: q.title, text: q.text, done: () => true, reward: { gold: q.gold } });
+      this.hud.toast(`${q.giver}: "Sağ ol yiğit!" +${q.xp} TP, +${q.renown} şöhret${it ? ` · ${it.name}` : ""}${up ? " · Seviye atladın!" : ""}`, "good");
+    }
+  }
+
   // ---------- crafting ----------
 
   matHave(m: Mat): number {
@@ -876,6 +1039,7 @@ export class Game {
       const it = classItem(s.nextId++, this.cls(), slot, t, rar);
       s.hero.bag.push(it);
       this.craftXp(12 * t + rar * 10);
+      s.c.crafted++;
       this.hud.toast(`Ürettin: ${it.name}${rar >= 3 ? "!" : ""}`, rar >= 2 ? "good" : "info");
       if (rar === 4) audio.play("level");
     });
@@ -1644,6 +1808,7 @@ export class Game {
       this.s.raidAt = this.now + 240000;
       v.rep = Math.min(100, v.rep + 20);
       v.rec = this.volMax(v.rep);
+      this.s.c.raids++;
       const gold = Math.round((30 + armyPower(r.army)) * this.stealMult());
       this.gain({ gold, food: 80 });
       this.s.renown += 6;
