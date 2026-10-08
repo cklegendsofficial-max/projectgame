@@ -135,6 +135,9 @@ export class WorldView {
   private fogCanvas = document.createElement("canvas");
   private fogSmall = document.createElement("canvas");
   private night = new Graphics();
+  private clouds = new Container();
+  private lights = new Container();
+  private troops = new Container();
   fogDirty = true;
   private tex: Record<string, Texture> = {};
   private villageM: Marker[] = [];
@@ -172,6 +175,7 @@ export class WorldView {
     this.layer.addChild(this.labels);
     this.layer.addChild(this.units);
     this.layer.addChild(this.fxG);
+    this.buildAmbience();
     this.fogSmall.width = NW;
     this.fogSmall.height = NH;
     this.fogCanvas.width = NW * FOG_UP;
@@ -180,8 +184,46 @@ export class WorldView {
     this.fog.scale.set(W / this.fogCanvas.width, H / this.fogCanvas.height);
     this.layer.addChild(this.fog);
     this.app.stage.addChild(this.layer);
-    this.app.stage.addChild(this.night);
     this.buildHero();
+  }
+
+  private glowTex(): Texture {
+    const c = document.createElement("canvas");
+    c.width = c.height = 128;
+    const g = c.getContext("2d")!;
+    const gr = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+    gr.addColorStop(0, "rgba(255,255,255,1)");
+    gr.addColorStop(0.35, "rgba(255,255,255,0.45)");
+    gr.addColorStop(1, "rgba(255,255,255,0)");
+    g.fillStyle = gr;
+    g.fillRect(0, 0, 128, 128);
+    return Texture.from(c);
+  }
+
+  private buildAmbience(): void {
+    const glow = this.glowTex();
+    for (let k = 0; k < 9; k++) {
+      const s = new Sprite(glow);
+      s.anchor.set(0.5);
+      s.tint = 0x1a120a;
+      s.alpha = 0.16;
+      s.width = 700 + ((k * 337) % 500);
+      s.height = s.width * 0.55;
+      s.position.set(((k * 1931) % W), ((k * 787) % H));
+      this.clouds.addChild(s);
+    }
+    this.layer.addChild(this.clouds);
+    this.layer.addChild(this.night);
+    for (const c of CITIES) {
+      const s = new Sprite(glow);
+      s.anchor.set(0.5);
+      s.tint = 0xffb050;
+      s.width = s.height = c.id === CAPITAL.id ? 340 : 260;
+      s.position.set(c.x, c.y - 10);
+      s.blendMode = "add";
+      this.lights.addChild(s);
+    }
+    this.layer.addChild(this.lights);
   }
 
   t(key: string): Texture {
@@ -311,6 +353,7 @@ export class WorldView {
     c.addChild(sh, flag, p, this.heroCount, this.heroBars);
     this.heroFlag = flag;
     this.hero = c;
+    this.units.addChild(this.troops);
     this.units.addChild(c);
   }
 
@@ -381,6 +424,45 @@ export class WorldView {
       const fy = Math.hypot(tx - h.x, ty - h.y) < 8 ? h.y + 30 : ty;
       c.position.set(c.x + (fx - c.x) * Math.min(1, dt * 6), c.y + (fy - c.y) * Math.min(1, dt * 6) - (moving ? Math.abs(Math.sin(this.time * 9 + i)) * 2 : 0));
       c.scale.set(inv);
+    });
+    const ar = h.army;
+    const tot = armySize(ar);
+    const figs = Math.min(10, Math.ceil(tot / 4));
+    const kinds: string[] = [];
+    if (figs > 0) {
+      const nh = Math.round((ar.horse / tot) * figs);
+      const na = Math.round((ar.archer / tot) * figs);
+      for (let k = 0; k < figs; k++) kinds.push(k < nh ? "u_cavalry" : k < nh + na ? "u_archer" : "u_spear");
+    }
+    while (this.troops.children.length > figs) this.troops.children[this.troops.children.length - 1].destroy();
+    while (this.troops.children.length < figs) {
+      const f = new Container();
+      f.addChild(new Graphics().ellipse(0, 8, 8, 3).fill({ color: 0x000000, alpha: 0.3 }));
+      const sp = new Sprite(this.t("u_spear"));
+      sp.anchor.set(0.5, 0.85);
+      sp.label = "fig";
+      f.addChild(sp);
+      f.position.set(h.x, h.y);
+      this.troops.addChild(f);
+    }
+    this.troops.children.forEach((f, k) => {
+      const sp = (f as Container).getChildByLabel("fig") as Sprite;
+      const tx = this.t(kinds[k]);
+      if (sp.texture !== tx) sp.texture = tx;
+      sp.scale.set((30 / Math.max(1, tx.width)) * (kinds[k] === "u_cavalry" ? 1.2 : 1));
+      const row = Math.floor(k / 3);
+      const col = (k % 3) - 1;
+      const back = Math.max(0, this.trail.length - 2 - (8 + row * 10) * 2);
+      const bx = this.trail[back] ?? h.x;
+      const by = this.trail[back + 1] ?? h.y;
+      const idle = Math.hypot(bx - h.x, by - h.y) < 6;
+      const ox = idle ? h.x + (col * 26 + (row % 2) * 13) * inv : bx + col * 16 * inv;
+      const oy = idle ? h.y + (44 + row * 18) * inv : by + col * 7 * inv;
+      f.x += (ox - f.x) * Math.min(1, dt * 5);
+      f.y += (oy - f.y) * Math.min(1, dt * 5);
+      sp.y = moving ? -Math.abs(Math.sin(this.time * 10 + k * 1.3)) * 2.5 : 0;
+      f.scale.set(inv);
+      f.visible = s.free;
     });
     if (s.story.fort && !this.fortM) {
       this.fortM = this.place("map/castle", s.story.fort.x, s.story.fort.y, 140, "Kara Tamga Kalesi", 1);
@@ -534,6 +616,14 @@ export class WorldView {
     const { t } = game.dayOf();
     const dark = Math.max(0, Math.cos(t * Math.PI * 2) * -1) * 0.38;
     this.night.clear();
-    if (dark > 0.01) this.night.rect(0, 0, cam.w, cam.h).fill({ color: 0x0c1430, alpha: dark });
+    if (dark > 0.01) this.night.rect(0, 0, W, H).fill({ color: 0x0c1430, alpha: dark });
+    this.lights.visible = dark > 0.03;
+    this.lights.alpha = Math.min(0.85, dark * 2.4) * (0.92 + Math.sin(this.time * 3) * 0.08);
+    for (const c of this.clouds.children) {
+      c.x += dt * 9;
+      c.y += dt * 2;
+      if (c.x - c.width / 2 > W) c.x = -c.width / 2;
+      if (c.y - c.height / 2 > H) c.y = -c.height / 2;
+    }
   }
 }
