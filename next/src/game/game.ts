@@ -3,6 +3,8 @@ import type { Camera } from "../render/camera";
 import type { WorldView } from "../render/worldView";
 import type { Hud } from "../ui/hud";
 import { ROW_NEED, TALENT_BY_ID, branchSpent, type Talent } from "./talents";
+import { CONS_BY_ID, REFINES, gearCost, type Cost, type Mat } from "./crafting";
+import { audio } from "../audio";
 import { TACTICS, TACTIC_KEYS, fight, odds, stanceWeights, tacticDelta, type BattleResult, type Boss, type Champion, type Tactic } from "./battle";
 import { BUILDINGS, BUILDING_BY_ID, CITY_NAME, DAY_SEC, RES_KEYS, UNITS, UNIT_KEYS, army, armyPower, armySize, buildCost, buildTime, prodPerMin, storageCap, trainSpeed, unitUnlocked, xpNeed, type Army, type BuildingId, type Res, type Unit } from "./data";
 import { CITY_TRADE, GOODS, GOOD_KEYS, PLUS_CHANCE, STAT_INFO, canPlus, classItem, goodMult, itemPrice, makeItem, plusCost, rollItem, setPlus, skillLv, type Good, type Item, type Skill, type Slot, type Stat } from "./rpg";
@@ -89,7 +91,7 @@ export class Game {
   }
 
   skill(k: Skill): number {
-    return skillLv(this.s.hero.skills[k]);
+    return skillLv(this.s.hero.skills[k] ?? 0);
   }
 
   eq(slot: Slot): Item | undefined {
@@ -189,14 +191,14 @@ export class Game {
   champion(): Champion {
     const m = this.cls().mods;
     return {
-      atk: this.heroAtk(),
+      atk: this.heroAtk() * (this.buff("totem") ? 1.25 : 1),
       def: this.heroDef(),
       hp: this.s.hero.hp,
       maxHp: this.maxHp(),
       crit: m.crit + (this.eq("silah")?.crit ?? 0) + 0.025 * this.tal("kritik"),
       critMult: m.critMult,
       dodge: m.dodge,
-      heal: m.heal + this.compMods().heal + 0.015 * this.tal("kanici"),
+      heal: m.heal + this.compMods().heal + 0.015 * this.tal("kanici") + (this.buff("tutsu") ? 0.04 : 0),
       rage: m.rage,
       firstStrike: m.firstStrike,
       skills: this.classSkills()
@@ -235,7 +237,7 @@ export class Game {
   }
 
   heroBonus(): number {
-    return 0.025 * this.stat("lid") + 0.02 * (this.s.hero.lv - 1) + this.cls().mods.army + this.compMods().army + 0.03 * this.tal("nara");
+    return 0.025 * this.stat("lid") + 0.02 * (this.s.hero.lv - 1) + this.cls().mods.army + this.compMods().army + 0.03 * this.tal("nara") + (this.buff("davul") ? 0.15 : 0);
   }
 
   heroCap(): number {
@@ -818,6 +820,109 @@ export class Game {
     });
   }
 
+  // ---------- crafting ----------
+
+  matHave(m: Mat): number {
+    const s = this.s;
+    if (m === "gold") return Math.floor(s.res.gold);
+    if (m === "ruh" || m === "parsomen") return s.mats[m];
+    return s.hero.cargo[m] ?? 0;
+  }
+
+  craftCost(c: Cost): Cost {
+    const k = 1 - 0.1 * this.tal("zanaat");
+    const out: Cost = {};
+    for (const [m, v] of Object.entries(c) as [Mat, number][]) out[m] = m === "gold" ? Math.round(v * k) : Math.max(1, Math.ceil(v * k));
+    return out;
+  }
+
+  private payMats(c: Cost): void {
+    const s = this.s;
+    for (const [m, v] of Object.entries(c) as [Mat, number][]) {
+      if (m === "gold") s.res.gold -= v;
+      else if (m === "ruh" || m === "parsomen") s.mats[m] -= v;
+      else {
+        const have = s.hero.cargo[m] ?? 0;
+        s.hero.paid[m] = Math.max(0, (s.hero.paid[m] ?? 0) * (1 - v / Math.max(1, have)));
+        s.hero.cargo[m] = have - v;
+        if (!s.hero.cargo[m]) delete s.hero.cargo[m];
+      }
+    }
+  }
+
+  craftReason(c: Cost, lv = 1): string | null {
+    if (!this.s.free) return "Köleler atölyeye giremez";
+    if (this.nearCity() < 0) return "Bir şehirde olmalısın";
+    if (this.busy()) return "Meşgulsün";
+    if (this.s.hero.lv < lv) return `Seviye ${lv} gerekir`;
+    for (const [m, v] of Object.entries(this.craftCost(c)) as [Mat, number][]) if (this.matHave(m) < v) return "Malzeme eksik";
+    return null;
+  }
+
+  private craftXp(n: number): void {
+    const before = this.skill("zanaat");
+    this.s.hero.skills.zanaat = (this.s.hero.skills.zanaat ?? 0) + n;
+    if (this.skill("zanaat") > before) this.hud.toast(`Zanaat ${this.skill("zanaat")}. seviyeye çıktı`, "good");
+  }
+
+  craftGear(slot: Slot, t: number): void {
+    const base = gearCost(slot, t);
+    if (this.craftReason(base, (t - 1) * 3 + 1)) return;
+    this.payMats(this.craftCost(base));
+    this.start("Atölyede dövüyorsun", 4, () => {
+      const s = this.s;
+      const r = Math.random() + 0.08 + this.skill("zanaat") * 0.012 + 0.06 * this.tal("zanaat");
+      const rar = r > 1.04 ? 4 : r > 0.93 ? 3 : r > 0.74 ? 2 : r > 0.42 ? 1 : 0;
+      const it = classItem(s.nextId++, this.cls(), slot, t, rar);
+      s.hero.bag.push(it);
+      this.craftXp(12 * t + rar * 10);
+      this.hud.toast(`Ürettin: ${it.name}${rar >= 3 ? "!" : ""}`, rar >= 2 ? "good" : "info");
+      if (rar === 4) audio.play("level");
+    });
+  }
+
+  craftCons(id: string): void {
+    const c = CONS_BY_ID[id];
+    if (!c || this.craftReason(c.cost, c.lv)) return;
+    this.payMats(this.craftCost(c.cost));
+    this.start(`${c.name} hazırlıyorsun`, 2, () => {
+      this.s.cons[id] = (this.s.cons[id] ?? 0) + 1;
+      this.craftXp(5);
+      this.hud.toast(`${c.name} hazır`, "good");
+    });
+  }
+
+  refine(id: string): void {
+    const r = REFINES.find((x) => x.id === id);
+    if (!r || this.craftReason(r.cost)) return;
+    this.payMats(this.craftCost(r.cost));
+    this.start(r.name, 3, () => {
+      this.s.mats[r.out]++;
+      this.craftXp(8);
+      this.hud.toast(`${r.out === "ruh" ? "Ruh Taşı" : "Kutsal Parşömen"} elde ettin`, "good");
+    });
+  }
+
+  useCons(id: string): void {
+    const s = this.s;
+    const c = CONS_BY_ID[id];
+    if (!c || !s.cons[id] || this.battleLock) return;
+    const h = s.hero;
+    if (id === "merhem") {
+      if (h.hp >= this.maxHp()) return this.hud.toast("Canın zaten dolu", "info");
+      h.hp = Math.min(this.maxHp(), h.hp + this.maxHp() * 0.5);
+    } else if (id === "kimiz") {
+      if (h.energy >= this.maxEnergy()) return this.hud.toast("Enerjin zaten dolu", "info");
+      h.energy = this.maxEnergy();
+    } else s.buffs[id] = 3;
+    s.cons[id]--;
+    this.hud.toast(`${c.name} kullanıldı`, "good");
+  }
+
+  buff(id: string): boolean {
+    return (this.s.buffs[id] ?? 0) > 0;
+  }
+
   private drop(tier: number, chance: number): Item | null {
     if (Math.random() > chance * this.cls().mods.loot) return null;
     const it = rollItem(this.s.nextId++, tier, this.cls(), Math.min(0.1, this.stat("kar") * 0.005));
@@ -1233,6 +1338,7 @@ export class Game {
     const champ = this.champion();
     const res: BattleResult = fight(h.army, this.heroBonus() + this.tdelta(t, stance), enemy, enemyBonus, champ, boss);
     const edge = TACTICS[t].beats === stance ? " — <b class=\"cheap\">üstünlük senin!</b>" : TACTICS[stance].beats === t ? " — <b class=\"dear\">düşman seni okudu!</b>" : "";
+    for (const k of Object.keys(this.s.buffs)) if (--this.s.buffs[k] <= 0) delete this.s.buffs[k];
     const tline = `Taktik: ${TACTICS[t].name}${auto ? " (otomatik)" : ""} · Düşman: ${TACTICS[stance].name}${edge}`;
     const before = { ...h.army };
     const hpBefore = h.hp;

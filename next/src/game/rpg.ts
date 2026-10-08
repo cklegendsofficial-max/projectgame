@@ -10,12 +10,13 @@ export const STAT_INFO: Record<Stat, { name: string; short: string; desc: string
   kar: { name: "Karizma", short: "KAR", desc: "Asa hasarı, gönüllü sayısı, asker ücreti ve pazar fiyatları", icon: "crown" },
 };
 
-export type Skill = "silah" | "ticaret" | "emek";
-export const SKILL_KEYS: Skill[] = ["silah", "ticaret", "emek"];
+export type Skill = "silah" | "ticaret" | "emek" | "zanaat";
+export const SKILL_KEYS: Skill[] = ["silah", "ticaret", "emek", "zanaat"];
 export const SKILL_INFO: Record<Skill, { name: string; desc: string; icon: string }> = {
   silah: { name: "Silah Ustalığı", desc: "Silahınla verdiğin hasarı her seviyede %6 artırır. Talim meydanında ve savaşta gelişir.", icon: "swords" },
   ticaret: { name: "Ticaret", desc: "Alış-satış fiyatlarını iyileştirir. Pazarda alışveriş yaptıkça gelişir.", icon: "merchant" },
   emek: { name: "Emek", desc: "Ormanda, ocakta ve tarlada çalışma verimini artırır.", icon: "mat_wood" },
+  zanaat: { name: "Zanaat", desc: "Atölyede ürettikçe gelişir; nadir ve efsanevi eşya çıkarma şansını artırır.", icon: "anvil" },
 };
 
 export function skillLv(xp: number): number {
@@ -79,6 +80,7 @@ export const RARITY = [
   { name: "İyi", mult: 1.25, color: "#8fe07a" },
   { name: "Nadir", mult: 1.55, color: "#6ab8ff" },
   { name: "Destansı", mult: 2, color: "#d58cff" },
+  { name: "Efsanevi", mult: 2.6, color: "#ff9a3c" },
 ];
 
 const WEAPONS: Record<WeaponKind, { names: string[]; icon: string; atk: number[]; crit: number }> = {

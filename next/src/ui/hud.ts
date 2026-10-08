@@ -1,10 +1,11 @@
 import { LORD_SERAIS, type Game, type Quest, type Target } from "../game/game";
 import { BUILDINGS, NODE_NAME, RES_ICON, RES_KEYS, RES_NAME, UNITS, UNIT_KEYS, armySize, buildCost, buildTime, prodPerMin, unitUnlocked, xpNeed, type Army, type Res, type Unit } from "../game/data";
 import { TACTICS, TACTIC_KEYS, type BattleResult, type Boss, type Tactic } from "../game/battle";
-import { GOODS, GOOD_KEYS, PLUS_CHANCE, SKILL_INFO, SKILL_KEYS, SLOTS, SLOT_NAME, STAT_INFO, STAT_KEYS, canPlus, itemStats, kindName, plusCost, skillLv, skillNext, type Item } from "../game/rpg";
+import { GOODS, GOOD_KEYS, PLUS_CHANCE, SKILL_INFO, SKILL_KEYS, SLOTS, SLOT_NAME, STAT_INFO, STAT_KEYS, canPlus, itemStats, kindName, plusCost, skillLv, skillNext, type Item, type Slot } from "../game/rpg";
 import { ARMOR_NAME, CLASSES, SKILL_MAX, WEAPON_NAME, skillPow, skillRank, type ClassId } from "../game/classes";
 import { CAPITAL, kurganBoss } from "../game/state";
 import { BRANCHES, BRANCH_KEYS, ROW_NEED, TALENTS, branchSpent } from "../game/talents";
+import { CONSUMABLES, CONS_BY_ID, CRAFT_SLOTS, REFINES, gearCost, type Cost, type Mat } from "../game/crafting";
 import { CITY_NAME } from "../game/data";
 import { COMPANIONS, COMP_BY_ID, COMP_MAX, FORT_GUARD, KARA_HAN, type CompId } from "../game/story";
 import { CITIES, H, NH, NW, W } from "../world/gen";
@@ -66,6 +67,17 @@ export class Hud {
   private battleOpen = false;
   private storyOpen = false;
   private sagaOpen = false;
+  private craftTier = 1;
+
+  private matsHtml(c: Cost): string {
+    return (Object.entries(c) as [Mat, number][])
+      .map(([m, v]) => {
+        const icon = m === "gold" ? "coins" : m === "ruh" || m === "parsomen" ? m : GOODS[m].icon;
+        const have = this.g.matHave(m);
+        return `<span class="mat ${have < v ? "lack" : ""}">${ic(icon)}${m === "gold" ? v : `${have}/${v}`}</span>`;
+      })
+      .join(" ");
+  }
 
   constructor(private g: Game) {
     this.root.innerHTML = `
@@ -482,7 +494,7 @@ export class Hud {
     const list: [string, string][] = [];
     if (isCap && !s.free) list.push(["efendi", "Efendi"]);
     if (isCap && s.beylik) list.push(["bina", "Binalar"], ["kisla", "Kışla"], ["ordu", "Ordu"], ["sefer", "Seferler"]);
-    list.push(["pazar", "Pazar"], ["demirci", "Demirci"], ["ors", "Örs"], ["talim", "Talim"], ["han", "Han"]);
+    list.push(["pazar", "Pazar"], ["demirci", "Demirci"], ["atolye", "Atölye"], ["ors", "Örs"], ["talim", "Talim"], ["han", "Han"]);
     if (isCap && s.free && !s.beylik) list.push(["beylik", "Beylik"]);
     const tabs = this.tabs(list);
     let body = "";
@@ -519,6 +531,34 @@ export class Hud {
         (items.map((it) => row(it, `<button class="btn sm ${!near || s.res.gold < g.itemBuyPrice(it) ? "off" : ""}" data-a="${this.act(() => g.buyItem(c.id, it.id))}">${ic("coins")}${g.itemBuyPrice(it)}</button>`)).join("") || "<p>Demircide mal kalmadı.</p>") +
         `<h3>${ic("schest")} Heybendeki eşyalar</h3>` +
         (s.hero.bag.map((it) => row(it, `<button class="btn sm ${off}" data-a="${this.act(() => g.sellItem(it.id))}">Sat ${ic("coins")}${g.itemSellPrice(it)}</button>`)).join("") || `<p class="dim">Heyben boş.</p>`);
+    } else if (this.tab === "atolye") {
+      const zxp = s.hero.skills.zanaat ?? 0;
+      const zl = skillLv(zxp);
+      const ct = this.craftTier;
+      const cl = g.cls();
+      const slots = CRAFT_SLOTS.filter((sl) => sl !== "kalkan" || cl.shield);
+      const slotName = (sl: Slot) => (sl === "silah" ? cl.weapons.map((w) => WEAPON_NAME[w]).join("/") : sl === "zirh" ? ARMOR_NAME[cl.armor] : SLOT_NAME[sl]);
+      body =
+        `${nearNote}<p class="dim">Pazardan aldığın malları burada eşyaya, iksire ve Ruh Taşı'na dönüştür. Zanaatın yükseldikçe nadir, destansı ve <b class="r4">efsanevi</b> eşya çıkarma şansın artar.</p>
+        <div class="brow">${ic("anvil", "bimg")}<div class="bi2"><b>${SKILL_INFO.zanaat.name} <em>Sv ${zl}</em></b>${bar(zxp - 20 * zl * zl, skillNext(zl) - 20 * zl * zl, "", `${zxp}/${skillNext(zl)}`)}</div></div>
+        <h3>${ic("swords")} Eşya dök</h3><div class="row tiers">${[1, 2, 3, 4, 5].map((t) => `<button class="btn sm ${t === ct ? "go" : ""}" data-a="${this.act(() => (this.craftTier = t))}">Kademe ${t}</button>`).join("")}</div>` +
+        slots
+          .map((sl) => {
+            const cost = g.craftCost(gearCost(sl, ct));
+            const why = g.craftReason(gearCost(sl, ct), (ct - 1) * 3 + 1);
+            return `<div class="grow">${ic(sl === "silah" ? `it_sword_${ct}` : sl === "zirh" ? (cl.armor === "agir" ? `it_armor_${ct}` : `it_light_${ct}`) : sl === "kalkan" ? `it_shield_${ct}` : "tr_star", "gimg")}<div class="bi2"><b>${slotName(sl)} <em>K${ct}</em></b><small>${this.matsHtml(cost)}</small>${why && why !== "Malzeme eksik" ? `<small class="why">${why}</small>` : ""}</div><button class="btn sm ${why ? "off" : ""}" data-a="${this.act(() => g.craftGear(sl, ct))}">Dök</button></div>`;
+          })
+          .join("") +
+        `<h3>${ic("healer")} İksir ve savaş eşyaları</h3>` +
+        CONSUMABLES.map((c) => {
+          const why = g.craftReason(c.cost, c.lv);
+          return `<div class="grow">${ic(c.icon, "gimg")}<div class="bi2"><b>${c.name} <em>${s.cons[c.id] ?? 0} adet</em></b><small>${c.desc}</small><small>${this.matsHtml(g.craftCost(c.cost))}</small>${why && why !== "Malzeme eksik" ? `<small class="why">${why}</small>` : ""}</div><button class="btn sm ${why ? "off" : ""}" data-a="${this.act(() => g.craftCons(c.id))}">Yap</button></div>`;
+        }).join("") +
+        `<h3>${ic("ruh")} Simya</h3>` +
+        REFINES.map((r) => {
+          const why = g.craftReason(r.cost);
+          return `<div class="grow">${ic(r.icon, "gimg")}<div class="bi2"><b>${r.name}</b><small>${this.matsHtml(g.craftCost(r.cost))}</small></div><button class="btn sm ${why ? "off" : ""}" data-a="${this.act(() => g.refine(r.id))}">Yap</button></div>`;
+        }).join("");
     } else if (this.tab === "ors") {
       body = `${nearNote}${ic("anvil", "banner")}<p class="dim">Silah, zırh ve kalkanını +9'a kadar güçlendir. +4'ten sonra başarısızlık eşyayı bir seviye düşürür; +7'den sonra eşya parçalanabilir. Kutsal Parşömen eşyayı korur.</p>
         <div class="stats"><div>${ic("ruh")}Ruh Taşı: <b>${s.mats.ruh}</b></div><div>${ic("parsomen")}Parşömen: <b>${s.mats.parsomen}</b></div><button class="btn sm ${!near || s.res.gold < g.scrollPrice() ? "off" : ""}" data-a="${this.act(() => g.buyScroll())}">Parşömen al ${ic("coins")}${g.scrollPrice()}</button></div>` +
@@ -720,7 +760,13 @@ export class Hud {
       body = `<div class="slots">` + SLOTS.map((sl) => {
         const it = h.equip[sl];
         return `<div class="slot ${it ? "r" + it.rar : ""}" ${it ? `data-a="${this.act(() => g.unequip(sl))}" title="Çıkar"` : ""}>${it ? ic(it.icon, "simg2") : `<span class="empty">${SLOT_NAME[sl]}</span>`}<small>${it ? it.name : "Boş"}</small></div>`;
-      }).join("") + `</div><p class="dim">Kuşanılmış bir eşyaya dokunarak çıkarabilirsin. Eşyaları şehirlerde satabilirsin.</p><h3>${ic("schest")} Heybe</h3>` +
+      }).join("") + `</div><p class="dim">Kuşanılmış bir eşyaya dokunarak çıkarabilirsin. Eşyaları şehirlerde satabilirsin.</p>` +
+        (CONSUMABLES.some((c) => s.cons[c.id]) || Object.keys(s.buffs).length
+          ? `<h3>${ic("healer")} Çanta</h3>` +
+            (Object.keys(s.buffs).length ? `<div class="odds good">Etkin: ${Object.entries(s.buffs).map(([k, n]) => `${CONS_BY_ID[k]?.name ?? k} (${n} savaş)`).join(" · ")}</div>` : "") +
+            CONSUMABLES.filter((c) => s.cons[c.id]).map((c) => `<div class="grow">${ic(c.icon, "gimg")}<div class="bi2"><b>${c.name} <em>×${s.cons[c.id]}</em></b><small>${c.desc}</small></div><button class="btn sm go" data-a="${this.act(() => g.useCons(c.id))}">Kullan</button></div>`).join("")
+          : "") +
+        `<h3>${ic("schest")} Heybe</h3>` +
         (h.bag.map((it) => {
           const cur = h.equip[it.slot];
           const better = !cur || it.atk + it.def + it.hp / 3 + it.spd * 50 + it.lid + it.kar > cur.atk + cur.def + cur.hp / 3 + cur.spd * 50 + cur.lid + cur.kar;

@@ -173,6 +173,8 @@ export interface GameState {
   raid: { v: number; army: Army; until: number } | null;
   raidAt: number;
   serais: Record<string, { lv: number; coffer: number }>;
+  cons: Record<string, number>;
+  buffs: Record<string, number>;
 }
 
 export interface MarketEvent {
@@ -325,7 +327,7 @@ export function newGame(w: World): GameState {
       pathI: 0,
       stats: { guc: 2, cev: 2, day: 2, lid: 1, kar: 1 },
       points: 0,
-      skills: { silah: 0, ticaret: 0, emek: 0 },
+      skills: { silah: 0, ticaret: 0, emek: 0, zanaat: 0 },
       cskill: {},
       spts: 0,
       tal: {},
@@ -365,6 +367,8 @@ export function newGame(w: World): GameState {
     raid: null,
     raidAt: 0,
     serais: {},
+    cons: {},
+    buffs: {},
   };
 }
 
@@ -413,7 +417,7 @@ export function loadGame(w: World): GameState {
       ...fresh,
       ...r,
       buildings: { ...fresh.buildings, ...(r.buildings ?? {}) },
-      hero: { ...fresh.hero, ...(r.hero ?? {}), ...(r.hero && r.hero.tal === undefined ? { tal: {}, tpts: Math.max(0, (r.hero.lv ?? 1) - 1) } : {}), path: null, pathI: 0 },
+      hero: { ...fresh.hero, ...(r.hero ?? {}), ...(r.hero && r.hero.tal === undefined ? { tal: {}, tpts: Math.max(0, (r.hero.lv ?? 1) - 1) } : {}), skills: { ...fresh.hero.skills, ...(r.hero?.skills ?? {}) }, path: null, pathI: 0 },
       c: { ...fresh.c, ...(r.c ?? {}) },
       mats: { ...fresh.mats, ...(r.mats ?? {}) },
       story: { ...fresh.story, ...(r.story ?? {}) },

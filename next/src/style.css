@@ -74,6 +74,10 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #1c120a; col
 .tnode.max { background: linear-gradient(color-mix(in srgb, var(--bc) 30%, #3a2614), #22160a); border-color: var(--bc); }
 .tnode.lock, .tnode.idle { cursor: default; }
 .tnode.lock .ic { filter: grayscale(1); }
+.mat { display: inline-flex; align-items: center; gap: 2px; margin-right: 6px; white-space: nowrap; }
+.mat .ic { width: 16px; height: 16px; }
+.mat.lack { color: #ff8a6a; }
+.row.tiers { gap: 4px; flex-wrap: wrap; margin-bottom: 6px; }
 .panel .reset { display: block; margin: 18px auto 4px; opacity: .7; }
 .tbox .flee { display: block; width: 100%; margin-top: 10px; background: linear-gradient(#5a3a2a, #3a2418); color: #ffd8cc; border-color: #8a4a3a; }
 .tact .odds { margin: 4px 0 0; padding: 3px 10px; font-weight: 700; font-size: 16px; }
@@ -232,7 +236,8 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #1c120a; col
 .bi2 em.dear { color: #ffb347; font-style: normal; font-size: 11px; }
 .btn.plus { width: 34px; height: 34px; font-size: 20px; padding: 0; }
 .banner { width: 72px; height: 72px; float: right; margin: 0 0 6px 10px; object-fit: contain; }
-.r0 { color: #e8dcc0; } .r1 { color: #8fe07a; } .r2 { color: #6ab8ff; } .r3 { color: #d58cff; }
+.r0 { color: #e8dcc0; } .r1 { color: #8fe07a; } .r2 { color: #6ab8ff; } .r3 { color: #d58cff; } .r4 { color: #ff9a3c; text-shadow: 0 0 8px #ff9a3c66; }
+.slot.r4 { border-color: #ff9a3c; box-shadow: 0 0 12px #ff9a3c77; }
 .slots { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin: 4px 0 8px; }
 .slot { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 6px 2px; min-height: 84px; border-radius: 10px; background: #0005; border: 1px solid #5a3a1a; cursor: pointer; text-align: center; }
 .slot.r1 { border-color: #8fe07a; } .slot.r2 { border-color: #6ab8ff; } .slot.r3 { border-color: #d58cff; box-shadow: 0 0 10px #d58cff55; }

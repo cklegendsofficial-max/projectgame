@@ -52,5 +52,28 @@ const evs = await page.evaluate(`import("/src/game/battle.ts").then(m => { const
 console.log("events", JSON.stringify(evs));
 await ev(`g.hud["openHero"](); g.hud.tab = "beceri"; g.hud.render();`);
 await shot("03-skills");
+// crafting
+await ev(`g.hud.close(); const c = g.targetPos({kind:"city", i: 6}); g.s.hero.x = c.x; g.s.hero.y = c.y; g.s.hero.path = null; g.cam.flyTo(c.x, c.y, 0.8); g.s.hero.cargo = { demir: 40, deri: 30, pamuk: 20, gumus: 10, turkuaz: 12, yesim: 6, baharat: 10, ipek: 4 }; g.s.mats.ruh = 10; g.s.res.gold = 20000;`);
+await ev(`g.hud.openPlace({kind:"city", i: 6}); g.hud.tab = "atolye"; g.hud.render();`);
+await shot("04-atolye");
+const rars: number[] = [];
+for (let k = 0; k < 6; k++) {
+  await ev(`g.craftGear("silah", 2); if (g.act) g.act.t = g.act.dur;`);
+  await page.waitForTimeout(150);
+}
+for (const id of ["merhem", "davul", "totem"]) {
+  await ev(`g.craftCons("${id}"); if (g.act) g.act.t = g.act.dur;`);
+  await page.waitForTimeout(150);
+}
+await ev(`g.refine("ruhdamit"); if (g.act) g.act.t = g.act.dur;`);
+await page.waitForTimeout(150);
+console.log("craft", JSON.stringify(await ev(`return { bag: g.s.hero.bag.map(i => i.name + " r" + i.rar), cons: g.s.cons, ruh: g.s.mats.ruh, zanaat: g.skill("zanaat"), cargo: g.s.hero.cargo, gold: Math.round(g.s.res.gold) };`)), rars.length);
+const b0 = await ev<number>(`return g.heroBonus();`);
+await ev(`g.useCons("davul"); g.useCons("totem"); g.s.hero.hp = 10; g.useCons("merhem");`);
+console.log("buffs", JSON.stringify(await ev(`return { buffs: g.s.buffs, b0: ${b0}, b1: g.heroBonus(), hp: Math.round(g.s.hero.hp), cons: g.s.cons };`)));
+await ev(`g.hud.tab = "atolye"; g.hud.render();`);
+await shot("05-atolye-after");
+await ev(`g.hud.close(); g.hud["openHero"](); g.hud.tab = "techizat"; g.hud.render();`);
+await shot("06-bag");
 console.log("errors:", errs);
 await browser.close();
