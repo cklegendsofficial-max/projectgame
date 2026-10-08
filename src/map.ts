@@ -1,3 +1,4 @@
+import mapUrl from "./assets/map.webp";
 import { CITIES, CITY_BY_ID, ROUTES } from "./data";
 import { tripTime } from "./economy";
 import type { MapEvent } from "./events";
@@ -18,6 +19,17 @@ interface Floater {
 interface Pt {
   x: number;
   y: number;
+}
+
+const mapImage = new Image();
+mapImage.src = mapUrl;
+
+const cityUrls = import.meta.glob<string>("./assets/cities/*.webp", { eager: true, query: "?url", import: "default" });
+const cityImages: Record<string, HTMLImageElement> = {};
+for (const [path, url] of Object.entries(cityUrls)) {
+  const img = new Image();
+  img.src = url;
+  cityImages[path.split("/").pop()!.replace(".webp", "")] = img;
 }
 
 export type MapHit = { type: "event"; id: number } | { type: "route"; route: number } | null;
@@ -51,6 +63,7 @@ export class MapView {
     if (!ctx) throw new Error("Canvas not supported");
     this.ctx = ctx;
     this.bg = document.createElement("canvas");
+    if (!mapImage.complete) mapImage.addEventListener("load", () => this.w > 0 && this.renderBackground());
     canvas.addEventListener("mousemove", (e) => {
       this.hover = this.hitTestClient(e.clientX, e.clientY, this.lastState, this.lastEvents);
       canvas.style.cursor = this.hover ? "pointer" : "default";
@@ -128,6 +141,12 @@ export class MapView {
     g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     const W = this.w;
     const H = this.h;
+    if (mapImage.complete && mapImage.naturalWidth > 0) {
+      g.imageSmoothingQuality = "high";
+      g.drawImage(mapImage, 0, 0, W, H);
+      this.drawFrame(g, W, H);
+      return;
+    }
     const rnd = mulberry(1337);
 
     const grad = g.createRadialGradient(W * 0.5, H * 0.45, 10, W * 0.5, H * 0.5, Math.max(W, H) * 0.75);
@@ -255,6 +274,10 @@ export class MapView {
       }
     }
 
+    this.drawFrame(g, W, H);
+  }
+
+  private drawFrame(g: CanvasRenderingContext2D, W: number, H: number): void {
     const vg = g.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.max(W, H) * 0.75);
     vg.addColorStop(0, "rgba(60,35,10,0)");
     vg.addColorStop(1, "rgba(60,35,10,0.45)");
@@ -376,7 +399,7 @@ export class MapView {
 
     for (const city of CITIES) {
       const p = this.px(city.x, city.y);
-      this.drawCity(g, p, sc, this.cityVisible(s, city.id));
+      this.drawCity(g, p, sc, this.cityVisible(s, city.id), city.id);
     }
 
     for (let i = 0; i < ROUTES.length; i++) {
@@ -446,7 +469,18 @@ export class MapView {
     }
   }
 
-  private drawCity(g: CanvasRenderingContext2D, p: Pt, sc: number, alpha: number): void {
+  private drawCity(g: CanvasRenderingContext2D, p: Pt, sc: number, alpha: number, id: string): void {
+    const img = cityImages[id];
+    if (img?.complete && img.naturalWidth > 0) {
+      const w = 62 * sc;
+      const h = (w * img.naturalHeight) / img.naturalWidth;
+      g.save();
+      g.globalAlpha = alpha >= 1 ? 1 : 0.55 + alpha * 0.3;
+      if (alpha < 1) g.filter = "grayscale(0.85) brightness(1.05)";
+      g.drawImage(img, p.x - w / 2, p.y + 14 * sc - h, w, h);
+      g.restore();
+      return;
+    }
     g.save();
     g.globalAlpha = alpha;
     const s = 11 * sc;

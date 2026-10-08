@@ -18,15 +18,15 @@ export interface RouteDef {
 }
 
 export const CITIES: CityDef[] = [
-  { id: "constantinople", x: 0.07, y: 0.3 },
-  { id: "konya", x: 0.17, y: 0.5 },
-  { id: "tabriz", x: 0.34, y: 0.36 },
-  { id: "rey", x: 0.46, y: 0.52 },
-  { id: "nishapur", x: 0.6, y: 0.47 },
-  { id: "merv", x: 0.68, y: 0.64 },
-  { id: "bukhara", x: 0.77, y: 0.47 },
-  { id: "samarkand", x: 0.85, y: 0.38 },
-  { id: "kashgar", x: 0.95, y: 0.22 },
+  { id: "constantinople", x: 0.13, y: 0.47 },
+  { id: "konya", x: 0.2, y: 0.62 },
+  { id: "tabriz", x: 0.33, y: 0.45 },
+  { id: "rey", x: 0.53, y: 0.71 },
+  { id: "nishapur", x: 0.66, y: 0.56 },
+  { id: "merv", x: 0.73, y: 0.7 },
+  { id: "bukhara", x: 0.76, y: 0.48 },
+  { id: "samarkand", x: 0.84, y: 0.37 },
+  { id: "kashgar", x: 0.93, y: 0.2 },
 ];
 
 export const CITY_BY_ID: Record<string, CityDef> = Object.fromEntries(CITIES.map((c) => [c.id, c]));
@@ -41,7 +41,7 @@ const BASE_ROUTES: RouteDef[] = [
   { id: "jade", from: "kashgar", to: "samarkand", color: "#3fae6a", baseCost: 720, growth: 1.14, time: 8, profit: 540, masterCost: 100_000, bend: 0.18 },
   { id: "turquoise", from: "merv", to: "nishapur", color: "#2ec4c4", baseCost: 8_640, growth: 1.13, time: 16, profit: 4_320, masterCost: 500_000, bend: 0.14 },
   { id: "silk", from: "nishapur", to: "rey", color: "#c73e6b", baseCost: 103_680, growth: 1.12, time: 32, profit: 51_840, masterCost: 1_200_000, bend: -0.12 },
-  { id: "carpets", from: "rey", to: "tabriz", color: "#8a3ffc", baseCost: 1_244_160, growth: 1.11, time: 96, profit: 622_080, masterCost: 10_000_000, bend: 0.16 },
+  { id: "carpets", from: "rey", to: "tabriz", color: "#8a3ffc", baseCost: 1_244_160, growth: 1.11, time: 96, profit: 622_080, masterCost: 10_000_000, bend: -0.6 },
   { id: "silver", from: "tabriz", to: "konya", color: "#b8c4d6", baseCost: 14_929_920, growth: 1.1, time: 300, profit: 7_464_960, masterCost: 111_111_111, bend: -0.1 },
   { id: "porcelain", from: "konya", to: "constantinople", color: "#5b8def", baseCost: 179_159_040, growth: 1.09, time: 900, profit: 89_579_520, masterCost: 555_555_555, bend: 0.15 },
 ];
