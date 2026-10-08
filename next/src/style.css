@@ -30,6 +30,11 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #1c120a; col
 .quest.saga { border-color: #b46aff; background: linear-gradient(#2a1838ee, #170d22ee); }
 .quest.saga small { color: #d8b0ff; }
 .quest.saga .qi { border-radius: 50%; object-fit: cover; border: 2px solid #b46aff; }
+.quest.task { padding: 6px 10px; }
+.quest.task .qi { width: 30px; height: 30px; }
+.quest.task.alert { border-color: #ff5a3c; background: linear-gradient(#3a1410ee, #1d0a08ee); animation: pulse 1.2s infinite; }
+.raid { padding: 8px; margin-bottom: 8px; border-radius: 10px; border: 1px solid #ff5a3c; background: #3a141088; display: flex; flex-direction: column; gap: 4px; }
+.qrow span.dear { color: #ffb347; } .qrow span.cheap { color: #8fe07a; }
 .quest i.why { color: #ff9a7a; font-style: normal; }
 .saga-box { display: flex; gap: 10px; padding: 10px; margin-bottom: 10px; border-radius: 12px; background: linear-gradient(#2a1838, #170d22); border: 1px solid #b46aff; box-shadow: 0 0 14px #b46aff44; }
 .saga-box img { width: 84px; height: 84px; flex: none; border-radius: 12px; object-fit: cover; border: 2px solid #b46aff; }

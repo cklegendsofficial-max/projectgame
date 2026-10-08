@@ -7,7 +7,7 @@ import { BUILDINGS, BUILDING_BY_ID, CITY_NAME, DAY_SEC, RES_KEYS, UNITS, UNIT_KE
 import { CITY_TRADE, GOODS, GOOD_KEYS, PLUS_CHANCE, STAT_INFO, canPlus, classItem, goodMult, itemPrice, makeItem, plusCost, rollItem, setPlus, skillLv, type Good, type Item, type Skill, type Slot, type Stat } from "./rpg";
 import { CLASS_BY_ID, CLASS_SKILLS, SKILL_MAX, WEAPON_NAME, WEAPON_STAT, skillPow, skillRank, type ClassDef, type ClassId, type ClassSkill, type WeaponKind } from "./classes";
 import { CHAPTERS, COMP_BY_ID, COMP_MAX, FORT_GUARD, KARA_HAN, KASIM, type Chapter, type CompId, type CompMods, type Companion } from "./story";
-import { CAPITAL, SLAVE_RADIUS, banditArmy, campGarrison, kurganBoss, kurganGuard, loadGame, saveGame, type Bandit, type Bounty, type GameState } from "./state";
+import { CAPITAL, SLAVE_RADIUS, banditArmy, campGarrison, kurganBoss, kurganGuard, loadGame, saveGame, type Bandit, type Bounty, type Contract, type GameState } from "./state";
 
 export type Target =
   | { kind: "village" | "camp" | "node" | "ruin" | "city" | "bandit" | "kurgan"; i: number }
@@ -46,6 +46,7 @@ export class Game {
   private fogT = 0;
   private saveT = 0;
   private desertT = 0;
+  private ambushT = 30;
   private spawnAt = new Map<number, number>();
   battleLock = false;
 
@@ -266,6 +267,8 @@ export class Game {
     }
     this.quests();
     this.storyTick();
+    this.worldEvents(dt, now);
+    this.checkContract();
     this.saveT += dt;
     if (this.saveT > 8) {
       this.saveT = 0;
@@ -555,7 +558,7 @@ export class Game {
     const ci = CITIES.findIndex((c) => c.id === city);
     const day = this.dayOf().day;
     const wave = 1 + 0.12 * Math.sin(day * 1.7 + ci * 2.3 + GOOD_KEYS.indexOf(g) * 1.1);
-    return GOODS[g].base * goodMult(city, g) * wave * (1 + 0.6 * (this.market(city)[g] ?? 0));
+    return GOODS[g].base * goodMult(city, g) * wave * this.eventMult(city, g) * (1 + 0.6 * (this.market(city)[g] ?? 0));
   }
 
   buyFactor(): number {
@@ -1021,6 +1024,7 @@ export class Game {
     const h = s.hero;
     const heroPow = this.heroPower();
     const safe = !s.free || Math.hypot(h.x - CAPITAL.x, h.y - CAPITAL.y) < 450 || this.nearCity() >= 0;
+    if (s.bandits.some((b) => armySize(b.army) === 0)) s.bandits = s.bandits.filter((b) => armySize(b.army) > 0);
     s.camps.forEach((c, i) => {
       if (!c.alive) return;
       const mine = s.bandits.filter((b) => b.camp === i).length;
@@ -1035,7 +1039,8 @@ export class Game {
       const c = s.camps[b.camp];
       const dh = Math.hypot(h.x - b.x, h.y - b.y);
       const pow = armyPower(b.army);
-      b.chase = !safe && !this.act && dh < 230 && pow > heroPow * 0.75 && Math.hypot(h.x - c.x, h.y - c.y) < 700;
+      b.chase = b.amb ? !safe && dh < 450 : !safe && !this.act && dh < 230 && pow > heroPow * 0.75 && Math.hypot(h.x - c.x, h.y - c.y) < 700;
+      if (b.amb && dh > 600) b.army = { spear: 0, archer: 0, horse: 0 };
       const flee = dh < 200 && pow < heroPow * 0.45;
       let tx = b.tx;
       let ty = b.ty;
@@ -1222,6 +1227,131 @@ export class Game {
   kurganOdds(i: number): number {
     const k = this.s.kurgans[i];
     return this.odds(k.guard, 0.1 * k.tier, kurganBoss(k.tier));
+  }
+
+  // ---------- living world ----------
+
+  private worldEvents(dt: number, now: number): void {
+    const s = this.s;
+    const day = this.dayOf().day;
+    if (day !== s.evDay) {
+      s.evDay = day;
+      s.events = s.events.filter((e) => e.until >= day);
+      if (s.events.length < 3 && Math.random() < 0.75) this.newMarketEvent(day);
+    }
+    if (s.contract && now > s.contract.until) {
+      this.hud.toast(`Kervan sözleşmesi zaman aşımına uğradı (${CITY_NAME[s.contract.to]})`, "bad");
+      s.renown = Math.max(0, s.renown - 3);
+      s.contract = null;
+    }
+    this.ambushT -= dt;
+    if (s.contract && this.ambushT <= 0 && !this.battleLock) {
+      this.ambushT = 30;
+      const h = s.hero;
+      const safe = this.nearCity(400) >= 0 || Math.hypot(h.x - CAPITAL.x, h.y - CAPITAL.y) < 450;
+      if (!safe && Math.random() < 0.35) {
+        const tier = Math.min(5, 1 + Math.floor(Math.hypot(h.x - CAPITAL.x, h.y - CAPITAL.y) / 700));
+        const a = Math.random() * Math.PI * 2;
+        const x = h.x + Math.cos(a) * 200;
+        const y = h.y + Math.sin(a) * 200;
+        if (this.cellCost(x, y) < 3) {
+          const camp = s.camps.indexOf(this.nearest(s.camps) ?? s.camps[0]);
+          s.bandits.push({ id: s.nextId++, camp, tier, x, y, army: banditArmy(tier), tx: x, ty: y, wait: 9, chase: true, amb: true });
+          this.hud.toast("Kervan yağmacıları peşinde! Emanet yükü korumak için savaş ya da kaç.", "bad");
+        }
+      }
+    }
+    if (!s.raidAt || !s.free) s.raidAt = Math.max(s.raidAt, now + 240000);
+    if (s.raid) {
+      const v = s.villages[s.raid.v];
+      if (now > s.raid.until) {
+        v.rep = Math.max(0, v.rep - 15);
+        v.rec = 0;
+        this.hud.toast(`${v.name} yağmalandı! Köylüler sana küstü.`, "bad");
+        s.raid = null;
+        s.raidAt = now + 180000;
+      }
+    } else if (s.free && now > s.raidAt && !this.battleLock) {
+      s.raidAt = now + 200000 + Math.random() * 160000;
+      const h = s.hero;
+      const cand = s.villages.map((v, i) => ({ v, i, d: Math.hypot(v.x - h.x, v.y - h.y) })).filter((x) => x.d > 200 && x.d < 1300 && this.isExplored(x.v.x, x.v.y) && Math.hypot(x.v.x - CAPITAL.x, x.v.y - CAPITAL.y) > 260);
+      if (cand.length) {
+        const c = cand[Math.floor(Math.random() * cand.length)];
+        const tier = Math.min(5, Math.max(1, Math.round(h.lv / 3)));
+        const a = banditArmy(tier);
+        for (const u of UNIT_KEYS) a[u] = Math.round(a[u] * 1.4);
+        s.raid = { v: c.i, army: a, until: now + 150000 };
+        this.hud.toast(`${c.v.name} köyüne harami baskını! Yardıma koş.`, "bad");
+      }
+    }
+  }
+
+  private newMarketEvent(day: number): void {
+    const good = GOOD_KEYS[Math.floor(Math.random() * GOOD_KEYS.length)];
+    const ci = CITIES[Math.floor(Math.random() * CITIES.length)];
+    if (this.s.events.some((e) => e.city === ci.id && e.good === good)) return;
+    const short = Math.random() < 0.55;
+    const why = short ? ["kuraklık vurdu", "kervanlar baskına uğradı", "saray büyük bir düğün hazırlıyor", "yollar karla kapandı", "salgın korkusu yayıldı"] : ["büyük bir kervan geldi", "hasat bereketli geçti", "tüccarlar mallarını elden çıkarıyor", "depolar ağzına kadar dolu"];
+    const mult = short ? 1.6 + Math.random() * 0.5 : 0.45 + Math.random() * 0.15;
+    const text = `${CITY_NAME[ci.id]}: ${why[Math.floor(Math.random() * why.length)]}. ${GOODS[good].name} ${short ? "çok pahalı" : "çok ucuz"}!`;
+    this.s.events.push({ city: ci.id, good, mult, until: day + 2, text });
+    this.hud?.toast(`Söylenti: ${text}`, "info");
+  }
+
+  eventMult(city: string, g: Good): number {
+    return this.s.events.filter((e) => e.city === city && e.good === g).reduce((m, e) => m * e.mult, 1);
+  }
+
+  contractOffer(city: string): (Contract & { day: number }) | null {
+    const day = this.dayOf().day;
+    let o = this.s.offers[city];
+    if (!o || day - o.day >= 2) {
+      const from = CITIES.find((c) => c.id === city)!;
+      const others = CITIES.filter((c) => c.id !== city).sort(() => Math.random() - 0.5);
+      const to = others[0];
+      const d = Math.hypot(to.x - from.x, to.y - from.y);
+      const cargo = ["ipek balyaları", "mühürlü bir sandık", "baharat çuvalları", "bir elçinin mektupları", "değerli halılar", "yeşim heykeller"][Math.floor(Math.random() * 6)];
+      o = this.s.offers[city] = { from: city, to: to.id, gold: Math.round(60 + d * 0.12), until: Math.round((d / HERO_SPEED) * 2.2 + 90), cargo, day };
+    }
+    return o.day < 0 ? null : o;
+  }
+
+  takeContract(city: string): void {
+    const o = this.contractOffer(city);
+    if (!o || this.s.contract || !this.s.free) return;
+    this.s.contract = { ...o, until: this.now + o.until * 1000 };
+    o.day = -1;
+    this.hud.toast(`Sözleşme: ${o.cargo} → ${CITY_NAME[o.to]}`, "good");
+  }
+
+  private checkContract(): void {
+    const c = this.s.contract;
+    if (!c) return;
+    const ci = CITIES.findIndex((x) => x.id === c.to);
+    if (this.nearCity() !== ci) return;
+    this.s.res.gold += c.gold;
+    this.s.renown += 4;
+    this.s.c.contracts++;
+    const up = this.addXp(Math.round(c.gold / 3));
+    this.hud.toast(`Emanet teslim edildi: +${c.gold} altın, +4 şöhret${up ? " · Seviye atladın!" : ""}`, "good");
+    this.s.contract = null;
+  }
+
+  defendRaid(): void {
+    const r = this.s.raid;
+    if (!r) return;
+    const v = this.s.villages[r.v];
+    this.battle(`${v.name} baskını`, r.army, 0, (win) => {
+      if (!win) return "Haramiler köyü yağmalamaya devam ediyor…";
+      this.s.raid = null;
+      this.s.raidAt = this.now + 240000;
+      v.rep = Math.min(100, v.rep + 20);
+      v.rec = this.volMax(v.rep);
+      const gold = Math.round((30 + armyPower(r.army)) * this.stealMult());
+      this.gain({ gold, food: 80 });
+      this.s.renown += 6;
+      return `Köy kurtarıldı! Köylüler sana minnettar: +20 bağlılık, gönüllüler hazır, +${gold} altın, +80 yiyecek, +6 şöhret`;
+    });
   }
 
   // ---------- story & companions ----------

@@ -82,6 +82,7 @@ export interface Bandit {
   wait: number;
   chase: boolean;
   tier: number;
+  amb?: boolean;
 }
 
 export interface March {
@@ -127,6 +128,7 @@ export interface Counters {
   spent: number;
   plus: number;
   kurgans: number;
+  contracts: number;
 }
 
 export interface GameState {
@@ -162,6 +164,28 @@ export interface GameState {
   mats: { ruh: number; parsomen: number };
   story: { ch: number; fort: { x: number; y: number } | null; done: boolean };
   comps: string[];
+  events: MarketEvent[];
+  evDay: number;
+  contract: Contract | null;
+  offers: Record<string, Contract & { day: number }>;
+  raid: { v: number; army: Army; until: number } | null;
+  raidAt: number;
+}
+
+export interface MarketEvent {
+  city: string;
+  good: Good;
+  mult: number;
+  until: number;
+  text: string;
+}
+
+export interface Contract {
+  from: string;
+  to: string;
+  gold: number;
+  until: number;
+  cargo: string;
 }
 
 export const CAPITAL = CITIES.find((c) => c.id === "samarkand")!;
@@ -273,7 +297,7 @@ export function banditArmy(tier: number): Army {
 }
 
 export function newCounters(): Counters {
-  return { shifts: 0, trains: 0, profit: 0, wins: 0, recruits: 0, bought: 0, moved: 0, camps: 0, built: 0, trained: 0, marched: 0, spent: 0, plus: 0, kurgans: 0 };
+  return { shifts: 0, trains: 0, profit: 0, wins: 0, recruits: 0, bought: 0, moved: 0, camps: 0, built: 0, trained: 0, marched: 0, spent: 0, plus: 0, kurgans: 0, contracts: 0 };
 }
 
 export function newGame(w: World): GameState {
@@ -329,6 +353,12 @@ export function newGame(w: World): GameState {
     mats: { ruh: 0, parsomen: 0 },
     story: { ch: 0, fort: null, done: false },
     comps: [],
+    events: [],
+    evDay: 0,
+    contract: null,
+    offers: {},
+    raid: null,
+    raidAt: 0,
   };
 }
 

@@ -4,6 +4,7 @@ import type { BattleResult, Boss } from "../game/battle";
 import { GOODS, GOOD_KEYS, PLUS_CHANCE, SKILL_INFO, SKILL_KEYS, SLOTS, SLOT_NAME, STAT_INFO, STAT_KEYS, canPlus, itemStats, kindName, plusCost, skillLv, skillNext, type Item } from "../game/rpg";
 import { ARMOR_NAME, CLASSES, SKILL_MAX, WEAPON_NAME, skillPow, skillRank, type ClassId } from "../game/classes";
 import { CAPITAL, kurganBoss } from "../game/state";
+import { CITY_NAME } from "../game/data";
 import { COMPANIONS, COMP_BY_ID, COMP_MAX, FORT_GUARD, KARA_HAN, type CompId } from "../game/story";
 import { CITIES, H, NH, NW, W } from "../world/gen";
 import { assetUrl } from "../render/worldView";
@@ -45,6 +46,7 @@ export class Hud {
   private top!: HTMLElement;
   private questEl!: HTMLElement;
   private sagaEl!: HTMLElement;
+  private taskEl!: HTMLElement;
   private actEl!: HTMLElement;
   private panel!: HTMLElement;
   private toasts!: HTMLElement;
@@ -65,7 +67,7 @@ export class Hud {
   constructor(private g: Game) {
     this.root.innerHTML = `
       <div class="top"></div>
-      <div class="track"><div class="quest"></div><div class="quest saga hidden"></div></div>
+      <div class="track"><div class="quest"></div><div class="quest saga hidden"></div><div class="quest task hidden"></div></div>
       <div class="toasts"></div>
       <div class="actbar hidden"></div>
       <div class="bottom">
@@ -78,6 +80,13 @@ export class Hud {
     this.top = this.root.querySelector(".top")!;
     this.questEl = this.root.querySelector(".quest")!;
     this.sagaEl = this.root.querySelector(".saga")!;
+    this.taskEl = this.root.querySelector(".task")!;
+    this.taskEl.addEventListener("click", () => {
+      const r = g.s.raid;
+      const c = g.s.contract;
+      const p = r ? g.s.villages[r.v] : c ? CITIES.find((x) => x.id === c.to) : null;
+      if (p) g.cam.flyTo(p.x, p.y, Math.max(g.cam.zoom, 0.65));
+    });
     this.sagaEl.addEventListener("click", () => {
       const p = g.chapter()?.goto(g);
       if (p) g.cam.flyTo(p.x, p.y, Math.max(g.cam.zoom, 0.65));
@@ -313,10 +322,11 @@ export class Hud {
         const near = Math.hypot(v.x - s.hero.x, v.y - s.hero.y) < 80;
         const cost = g.recruitCost();
         const btn = (n: number, label: string) => {
-          const k = Math.min(n, v.rec, room);
+          const k = Math.max(0, Math.min(n, v.rec, room));
           return `<button class="btn ${k <= 0 || !near || !s.free ? "off" : ""}" data-a="${this.act(() => g.recruit(t.i, k))}">${label} (${k}) ${ic("coins")}${k * cost}</button>`;
         };
         html = this.frame(v.name, v.yurt ? "Göçebe obası" : "Köy", assetUrl(v.yurt ? "map/yurts" : "map/village"), `
+          ${s.raid?.v === t.i ? `<div class="raid"><b>${ic("j_bandit")} Haramiler köyü yağmalıyor!</b><small>Kalan süre ${dur(s.raid.until - g.now)}</small>${armyHtml(s.raid.army, "enemy")}<div class="odds ${g.odds(s.raid.army) >= 0.65 ? "good" : "mid"}">Zafer şansı: <b>%${Math.round(g.odds(s.raid.army) * 100)}</b></div>${near ? `<button class="btn red big" data-a="${this.act(() => { this.close(); g.defendRaid(); })}">${ic("swords")} Köyü savun!</button>` : ""}</div>` : ""}
           <p>Köylüler kervan yollarını haramilerden temizleyen bir yiğide gönüllü yazılır. Karizman ne kadar yüksekse o kadar çok genç seninle gelmek ister.</p>
           <div class="stats"><div>${ic("soldier")}Gönüllü: <b>${v.rec}</b>/${g.volMax(v.rep)}</div><div>${ic("crown")}Bağlılık: <b>${v.rep}</b>/100</div><div>${ic("tug")}Birlik: <b>${armySize(s.hero.army)}/${g.heroCap()}</b></div></div>
           ${v.rec < g.volMax(v.rep) ? `<p class="dim">Yeni gönüllü: ${dur(v.recAt - g.now)}</p>` : ""}
@@ -451,7 +461,8 @@ export class Hud {
           const have = s.hero.cargo[k] ?? 0;
           const avg = have > 0 ? Math.round((s.hero.paid[k] ?? 0) / have) : 0;
           const rel = g.price(c.id, k) / GOODS[k].base;
-          const tag = rel < 0.75 ? `<em class="cheap">ucuz</em>` : rel > 1.3 ? `<em class="dear">pahalı</em>` : "";
+          const em = g.eventMult(c.id, k);
+          const tag = em > 1.2 ? `<em class="dear">kıtlık!</em>` : em < 0.8 ? `<em class="cheap">bolluk!</em>` : rel < 0.75 ? `<em class="cheap">ucuz</em>` : rel > 1.3 ? `<em class="dear">pahalı</em>` : "";
           return `<div class="grow">${ic(GOODS[k].icon, "gimg")}<div class="bi2"><b>${GOODS[k].name} ${tag}</b><small>Al ${bp} · Sat ${sp}${have ? ` · Elinde ${have} (ort. ${avg})` : ""}</small></div>
             <div class="col2"><button class="btn sm ${off}" data-a="${this.act(() => g.buyGood(c.id, k, 1))}">Al</button><button class="btn sm ${off}" data-a="${this.act(() => g.buyGood(c.id, k, 5))}">Al 5</button><button class="btn sm ${!near || !have ? "off" : ""}" data-a="${this.act(() => g.sellGood(c.id, k, have))}">Sat</button></div></div>`;
         }).join("") +
@@ -490,11 +501,20 @@ export class Hud {
     } else if (this.tab === "han") {
       const room = g.heroCap() - armySize(s.hero.army);
       const hire = (u: Unit) => {
-        const k = Math.min(5, room);
+        const k = Math.max(0, Math.min(5, room));
         return `<button class="btn ${!near || k <= 0 || !s.free ? "off" : ""}" data-a="${this.act(() => g.hire(u, k))}">${ic(UNITS[u].icon)} ${k} ${UNITS[u].name} · ${ic("coins")}${g.hireCost(u) * k}</button>`;
       };
       const bl = g.cityBounties(c.id);
+      const off2 = g.contractOffer(c.id);
+      const rumor = `<h3>${ic("scroll")} Söylentiler</h3>` + (s.events.map((e) => `<div class="qrow">${ic(GOODS[e.good].icon)} ${e.text}<span class="${e.mult > 1 ? "dear" : "cheap"}">×${e.mult.toFixed(1)}</span></div>`).join("") || `<p class="dim">Kervancılar bu aralar sakin günler geçtiğini söylüyor.</p>`) +
+        `<h3>${ic("j_caravan")} Kervan sözleşmesi</h3>` +
+        (s.contract
+          ? `<div class="odds mid">Elinde bir emanet var: ${s.contract.cargo} → <b>${CITY_NAME[s.contract.to]}</b> · ${dur(s.contract.until - g.now)}</div>`
+          : off2
+            ? `<div class="grow">${ic("j_caravan", "gimg")}<div class="bi2"><b>${off2.cargo} → ${CITY_NAME[off2.to]}</b><small>Ödül ${off2.gold} altın · Süre ${dur(off2.until * 1000)} · Yolda yağmacılar saldırabilir</small></div><button class="btn sm ${!near || !s.free ? "off" : ""}" data-a="${this.act(() => g.takeContract(c.id))}">Kabul et</button></div>`
+            : `<p class="dim">Bugünlük kervan işi kalmadı.</p>`);
       body = `${nearNote}<div class="brow">${ic("han", "bimg")}<div class="bi2"><b>Kervansaray odası</b><small>Canını ve enerjini tamamen doldurur.</small></div><button class="btn ${!near || g.act ? "off" : ""}" data-a="${this.act(() => g.rest())}">Uyu ${ic("coins")}${g.restCost()}</button></div>
+        ${rumor}
         <h3>${ic("wanted")} Ödül ilanları</h3>` +
         (bl.map(({ b, i }) => {
           const cp = s.camps[b.camp];
@@ -748,6 +768,12 @@ export class Hud {
       const html = `${ic(ch.img, "qi round")}<div><small>Kara Tamga Destanı · Bölüm ${s.story.ch + 1}/5</small><b>${ch.title}</b><span>${ch.goal}${why ? ` <i class="why">(${why})</i>` : ""}</span></div>`;
       if (this.sagaEl.innerHTML !== html) this.sagaEl.innerHTML = html;
     }
+    const r = s.raid;
+    const ct = s.contract;
+    this.taskEl.classList.toggle("hidden", !r && !ct);
+    this.taskEl.classList.toggle("alert", !!r);
+    if (r) this.taskEl.innerHTML = `${ic("j_bandit", "qi")}<div><small>Baskın · ${dur(r.until - g.now)}</small><b>${s.villages[r.v].name} yağmalanıyor!</b></div>`;
+    else if (ct) this.taskEl.innerHTML = `${ic("j_caravan", "qi")}<div><small>Kervan sözleşmesi · ${dur(ct.until - g.now)}</small><b>${ct.cargo} → ${CITY_NAME[ct.to]}</b></div>`;
     const bld = g.building();
     this.root.querySelector('[data-b="capital"] span')!.textContent = bld ? `⏱ ${dur(s.buildings[bld].until - g.now)}` : "Semerkant";
     const hb = this.root.querySelector('[data-b="hero"]')!;

@@ -478,6 +478,12 @@ export class WorldView {
 
     this.fxG.clear();
     if (!s.free) this.fxG.circle(CAPITAL.x, CAPITAL.y, SLAVE_RADIUS).stroke({ color: 0xff6a4a, width: 4, alpha: 0.35 + Math.sin(this.time * 2) * 0.1 });
+    if (s.raid) {
+      const v = s.villages[s.raid.v];
+      const pr = (this.time * 1.4) % 1;
+      this.fxG.circle(v.x, v.y, 30 + pr * 40).stroke({ color: 0xff3a1a, width: 4, alpha: 0.9 * (1 - pr) });
+      this.fxG.circle(v.x, v.y - 10, 8 + Math.sin(this.time * 10) * 2).fill({ color: 0xff7a2a, alpha: 0.8 });
+    }
     if (s.story.fort && !s.story.done) {
       const pr = (this.time * 0.5) % 1;
       this.fxG.circle(s.story.fort.x, s.story.fort.y - 20, 60 + pr * 50).stroke({ color: 0xff3a3a, width: 4, alpha: 0.6 * (1 - pr) });
