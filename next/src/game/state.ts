@@ -105,6 +105,18 @@ export interface Caravan {
   raidT: number;
 }
 
+export interface Storm {
+  id: number;
+  kind: "kum" | "yagmur";
+  x: number;
+  y: number;
+  r: number;
+  vx: number;
+  vy: number;
+  age: number;
+  life: number;
+}
+
 export interface March {
   id: number;
   node: number;
@@ -204,6 +216,7 @@ export interface GameState {
   rep: Record<string, number>;
   repGift: string[];
   caravans: Caravan[];
+  storms: Storm[];
   titles: string[];
   title: string;
   wanted: number;
@@ -408,6 +421,7 @@ export function newGame(w: World): GameState {
     rep: {},
     repGift: [],
     caravans: [],
+    storms: [],
     titles: [],
     title: "",
     wanted: 0,
@@ -443,7 +457,7 @@ function decodeBits(s: string, n: number): Uint8Array {
 
 export function saveGame(s: GameState): void {
   try {
-    localStorage.setItem(KEY, JSON.stringify({ ...s, explored: encodeBits(s.explored), bandits: [], caravans: [] }));
+    localStorage.setItem(KEY, JSON.stringify({ ...s, explored: encodeBits(s.explored), bandits: [], caravans: [], storms: [] }));
   } catch {
     /* storage full or blocked */
   }
@@ -467,6 +481,7 @@ export function loadGame(w: World): GameState {
       explored: typeof r.explored === "string" ? decodeBits(r.explored, NW * NH) : fresh.explored,
       bandits: [],
       caravans: [],
+      storms: [],
       marches: Array.isArray(r.marches) ? r.marches : [],
     } as GameState;
   } catch {

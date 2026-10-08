@@ -158,6 +158,9 @@ export class WorldView {
   private bandits = new Map<number, Container>();
   private marchesM = new Map<number, Container>();
   private caravansM = new Map<number, Container>();
+  private stormC = new Container();
+  private stormM = new Map<number, { glow: Sprite; g: Graphics; flash: number }>();
+  private glow!: Texture;
   private mark: { x: number; y: number; t: number } | null = null;
   private time = 0;
   private visT = 0;
@@ -178,6 +181,8 @@ export class WorldView {
     this.layer.addChild(this.labels);
     this.layer.addChild(this.units);
     this.layer.addChild(this.fxG);
+    this.glow = this.glowTex();
+    this.layer.addChild(this.stormC);
     this.buildAmbience();
     this.fogSmall.width = NW;
     this.fogSmall.height = NH;
@@ -227,6 +232,70 @@ export class WorldView {
       this.lights.addChild(s);
     }
     this.layer.addChild(this.lights);
+  }
+
+  private drawStorms(game: Game, dt: number): void {
+    const live = new Set<number>();
+    for (const st of game.s.storms) {
+      live.add(st.id);
+      let m = this.stormM.get(st.id);
+      if (!m) {
+        const glow = new Sprite(this.glow);
+        glow.anchor.set(0.5);
+        glow.tint = st.kind === "kum" ? 0xd9b47a : 0x46566e;
+        const g = new Graphics();
+        this.stormC.addChild(glow, g);
+        m = { glow, g, flash: 0 };
+        this.stormM.set(st.id, m);
+      }
+      const k = Math.max(0, Math.min(1, st.age / 6, st.life / 6));
+      const sand = st.kind === "kum";
+      m.glow.position.set(st.x, st.y);
+      m.glow.width = st.r * 2.6;
+      m.glow.height = st.r * 2.3;
+      if (!sand && m.flash <= 0 && Math.random() < dt * 0.12) m.flash = 0.25;
+      m.flash -= dt;
+      m.glow.tint = !sand && m.flash > 0 ? 0xb8c8ff : sand ? 0xb4823e : 0x26324a;
+      m.glow.alpha = k * (sand ? 0.85 : 0.7) + (m.flash > 0 ? 0.3 : 0);
+      const g = m.g;
+      g.clear();
+      if (sand) {
+        for (let i = 0; i < 26; i++) {
+          const h1 = ((i * 2654435761 + 99) >>> 0) / 4294967296;
+          const h2 = ((i * 40503 + 7) >>> 0) % 1000 / 1000;
+          const a = h1 * Math.PI * 2 + this.time * 0.15;
+          const rr = Math.sqrt(h2) * st.r * 0.85;
+          const x = st.x + Math.cos(a) * rr + Math.sin(this.time * 0.7 + i) * 18;
+          const y = st.y + Math.sin(a) * rr * 0.8;
+          g.circle(x, y, 26 + (i % 5) * 9);
+        }
+        g.fill({ color: 0xd2a660, alpha: k * 0.16 });
+      }
+      const n = sand ? 280 : 230;
+      const wx = sand ? 1 : 0.35;
+      const wy = sand ? 0.18 : 1;
+      const L = st.r * 0.9;
+      for (let i = 0; i < n; i++) {
+        const h1 = ((i * 2654435761) >>> 0) / 4294967296;
+        const h2 = ((i * 2246822519 + 13) >>> 0) / 4294967296;
+        const h3 = ((i * 3266489917 + 7) >>> 0) / 4294967296;
+        const a = h1 * Math.PI * 2;
+        const rr = Math.sqrt(h2) * st.r;
+        const shift = (((this.time * (sand ? 140 : 260) + h3 * L) % L) + L) % L - L / 2;
+        const x = st.x + Math.cos(a) * rr + wx * shift;
+        const y = st.y + Math.sin(a) * rr + wy * shift;
+        const edge = 1 - Math.hypot(x - st.x, y - st.y) / st.r;
+        if (edge <= 0) continue;
+        const len = sand ? 10 + h3 * 14 : 12 + h3 * 10;
+        g.moveTo(x, y).lineTo(x + wx * len, y + wy * len);
+      }
+      g.stroke({ color: sand ? 0xf6deaa : 0xcfe0fa, width: sand ? 2.4 : 1.6, alpha: k * (sand ? 0.8 : 0.7) });
+    }
+    for (const [id, m] of this.stormM) if (!live.has(id)) {
+      m.glow.destroy();
+      m.g.destroy();
+      this.stormM.delete(id);
+    }
   }
 
   t(key: string): Texture {
@@ -656,6 +725,8 @@ export class WorldView {
       g.filter = "none";
       this.fog.texture.source.update();
     }
+
+    this.drawStorms(game, dt);
 
     const { t } = game.dayOf();
     const dark = Math.max(0, Math.cos(t * Math.PI * 2) * -1) * 0.38;

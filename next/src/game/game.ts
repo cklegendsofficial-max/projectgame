@@ -1,4 +1,4 @@
-import { astar, CITIES, NAV, NH, NW, type World } from "../world/gen";
+import { astar, CITIES, GH, GW, H, NAV, NH, NW, W, type World } from "../world/gen";
 import type { Camera } from "../render/camera";
 import type { WorldView } from "../render/worldView";
 import type { Hud } from "../ui/hud";
@@ -14,7 +14,7 @@ import { TITLE_CATS, titleKey, titleOf, titleReward } from "./titles";
 import { FACTIONS, FACTION_KEYS, HOSTILE, REP_RANKS, RANK_PERKS, factionOf, repRank, type FactionId } from "./factions";
 import { CLASS_BY_ID, CLASS_SKILLS, SKILL_MAX, WEAPON_NAME, WEAPON_STAT, skillPow, skillRank, type ClassDef, type ClassId, type ClassSkill, type WeaponKind } from "./classes";
 import { CHAPTERS, COMP_BY_ID, COMP_MAX, FORT_GUARD, KARA_HAN, KASIM, type Chapter, type CompId, type CompMods, type Companion } from "./story";
-import { CAPITAL, SLAVE_RADIUS, banditArmy, campGarrison, kurganBoss, kurganGuard, loadGame, saveGame as rawSave, wipeGame, type Bandit, type Bounty, type Caravan, type Contract, type GameState } from "./state";
+import { CAPITAL, SLAVE_RADIUS, banditArmy, campGarrison, kurganBoss, kurganGuard, loadGame, saveGame as rawSave, wipeGame, type Bandit, type Bounty, type Caravan, type Contract, type GameState, type Storm } from "./state";
 
 export type Target =
   | { kind: "village" | "camp" | "node" | "ruin" | "city" | "bandit" | "kurgan" | "caravan"; i: number }
@@ -55,6 +55,8 @@ export class Game {
   private repath = 0;
   private cvT = 2;
   private titleT = 1;
+  private stormT = 45;
+  private inStorm = 0;
   private posseT = 20;
   private fogT = 0;
   private saveT = 0;
@@ -377,12 +379,14 @@ export class Game {
       this.bandits(dt, now);
       this.caravanTick(dt);
       this.wantedTick(dt);
+      this.stormTick(dt);
       this.marches(dt, now);
     }
     this.fogT += dt;
     if (this.fogT > 0.25) {
       this.fogT = 0;
-      this.reveal(s.hero.x, s.hero.y, 11 + this.compMods().sight + 2 * this.tal("kartal"));
+      const hs = this.heroStorm();
+      this.reveal(s.hero.x, s.hero.y, 11 + this.compMods().sight + 2 * this.tal("kartal") - (hs ? (hs.kind === "kum" ? 6 : 3) : 0));
       for (const m of s.marches) this.reveal(m.x, m.y, 5);
     }
     this.quests();
@@ -1483,7 +1487,12 @@ export class Game {
 
   heroSpeed(): number {
     const n = armySize(this.s.hero.army);
-    return HERO_SPEED * (1 + this.stat("cev") * 0.02 + (this.eq("at")?.spd ?? 0) + this.compMods().speed + 0.04 * this.tal("ruzgar") + (this.gearMods().spd ?? 0)) * (1 - Math.min(0.35, n / 300));
+    return HERO_SPEED * (1 + this.stat("cev") * 0.02 + (this.eq("at")?.spd ?? 0) + this.compMods().speed + 0.04 * this.tal("ruzgar") + (this.gearMods().spd ?? 0)) * (1 - Math.min(0.35, n / 300)) * this.stormSlow(this.s.hero.x, this.s.hero.y);
+  }
+
+  stormSlow(x: number, y: number): number {
+    const st = this.stormAt(x, y);
+    return !st ? 1 : st.kind === "kum" ? 0.65 : 0.82;
   }
 
   private moveHero(dt: number): void {
@@ -1560,7 +1569,7 @@ export class Game {
     for (const b of s.bandits) {
       const dh = Math.hypot(h.x - b.x, h.y - b.y);
       if (b.posse) {
-        b.chase = s.wanted > 0 && this.nearCity() < 0 && dh < 900;
+        b.chase = s.wanted > 0 && this.nearCity() < 0 && dh < 900 && this.heroStorm()?.kind !== "kum";
         if (!s.wanted || dh > 1400) b.army = { spear: 0, archer: 0, horse: 0 };
         const d = Math.hypot(h.x - b.x, h.y - b.y);
         if (b.chase && d > 1) {
@@ -1661,6 +1670,49 @@ export class Game {
     });
   }
 
+  // ---------- weather ----------
+
+  stormAt(x: number, y: number): Storm | null {
+    return this.s.storms.find((st) => st.age > 4 && Math.hypot(st.x - x, st.y - y) < st.r) ?? null;
+  }
+
+  heroStorm(): Storm | null {
+    return this.stormAt(this.s.hero.x, this.s.hero.y);
+  }
+
+  private stormTick(dt: number): void {
+    const s = this.s;
+    this.stormT -= dt;
+    if (this.stormT <= 0 && s.free && s.storms.length < 2) {
+      this.stormT = 70 + Math.random() * 80;
+      const h = s.hero;
+      const a = Math.random() * Math.PI * 2;
+      const d = 520 + Math.random() * 380;
+      const x = Math.max(200, Math.min(W - 200, h.x + Math.cos(a) * d));
+      const y = Math.max(200, Math.min(H - 200, h.y + Math.sin(a) * d));
+      const m = this.world.moist[Math.floor((y / H) * GH) * GW + Math.floor((x / W) * GW)] ?? 0.5;
+      const kind = m < 0.32 ? "kum" : "yagmur";
+      const sp = 10 + Math.random() * 8;
+      const back = a + Math.PI + (Math.random() - 0.5) * 1.2;
+      s.storms.push({ id: s.nextId++, kind, x, y, r: 240 + Math.random() * 180, vx: Math.cos(back) * sp, vy: Math.sin(back) * sp, age: 0, life: 120 + Math.random() * 90 });
+      if (this.isExplored(x, y) || d < 700) this.hud.toast(kind === "kum" ? "Ufukta bir kum fırtınası yükseliyor…" : "Gökyüzü karardı, sağanak yaklaşıyor…", "info");
+    }
+    for (const st of s.storms) {
+      st.age += dt;
+      st.life -= dt;
+      st.x += st.vx * dt;
+      st.y += st.vy * dt;
+    }
+    if (s.storms.some((st) => st.life <= 0)) s.storms = s.storms.filter((st) => st.life > 0);
+    const hs = this.heroStorm();
+    audio.storm(!hs ? 0 : hs.kind === "kum" ? 1 : 2);
+    const id = hs?.id ?? 0;
+    if (id !== this.inStorm) {
+      this.inStorm = id;
+      if (hs) this.hud.toast(hs.kind === "kum" ? "Kum fırtınasına girdin: yavaşladın, görüşün daraldı. Muhafızlar izini kaybeder." : "Sağanak altındasın: yollar çamur, yürüyüş yavaşladı.", "info");
+    }
+  }
+
   // ---------- caravans & outlawry ----------
 
   caravanValue(cv: Caravan): number {
@@ -1692,7 +1744,7 @@ export class Game {
         }
         continue;
       }
-      let move = HERO_SPEED * 0.62 * dt;
+      let move = HERO_SPEED * 0.62 * dt * this.stormSlow(cv.x, cv.y);
       while (move > 0 && cv.pathI < cv.path.length) {
         const tx = cv.path[cv.pathI];
         const ty = cv.path[cv.pathI + 1];

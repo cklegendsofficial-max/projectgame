@@ -8,6 +8,8 @@ class SoundSystem {
   private music!: GainNode;
   private fx!: GainNode;
   private noise!: AudioBuffer;
+  private windG: GainNode | null = null;
+  private stormLv = -1;
   private nextNote = 0;
   private step = 3;
   private phrase = 0;
@@ -45,6 +47,12 @@ class SoundSystem {
     return this.muted;
   }
 
+  storm(level: number): void {
+    if (!this.ctx || !this.windG || level === this.stormLv) return;
+    this.stormLv = level;
+    this.windG.gain.setTargetAtTime([0.018, 0.09, 0.06][level] ?? 0.018, this.ctx.currentTime, 1.2);
+  }
+
   private drone(): void {
     const ctx = this.ctx!;
     const lp = ctx.createBiquadFilter();
@@ -75,7 +83,7 @@ class SoundSystem {
     bp.type = "bandpass";
     bp.frequency.value = 500;
     bp.Q.value = 0.6;
-    const wg = ctx.createGain();
+    const wg = (this.windG = ctx.createGain());
     wg.gain.value = 0.018;
     const wl = ctx.createOscillator();
     const wlg = ctx.createGain();
