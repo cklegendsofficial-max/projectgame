@@ -8,7 +8,8 @@ import { GIVERS, SIDE_TEXT, type SideKind, type SideQuest } from "./sidequests";
 import { audio } from "../audio";
 import { TACTICS, TACTIC_KEYS, fight, odds, stanceWeights, tacticDelta, type BattleResult, type Boss, type Champion, type Tactic } from "./battle";
 import { BUILDINGS, BUILDING_BY_ID, CITY_NAME, DAY_SEC, RES_KEYS, UNITS, UNIT_KEYS, army, armyPower, armySize, buildCost, buildTime, prodPerMin, storageCap, trainSpeed, unitUnlocked, xpNeed, type Army, type BuildingId, type Res, type Unit } from "./data";
-import { CITY_TRADE, GOODS, GOOD_KEYS, PLUS_CHANCE, STAT_INFO, canPlus, classItem, goodMult, itemPrice, makeItem, plusCost, rollItem, setPlus, skillLv, type Good, type Item, type Skill, type Slot, type Stat } from "./rpg";
+import { CITY_TRADE, GOODS, GOOD_KEYS, PLUS_CHANCE, SLOTS, STAT_INFO, canPlus, classItem, goodMult, itemPrice, makeItem, plusCost, rollItem, setPiece, setPlus, skillLv, uniqueItem, type Good, type Item, type Skill, type Slot, type Stat } from "./rpg";
+import { SETS, SET_FORGE, SET_KEYS, SET_SLOTS, UNIQUES, addMods, type GearMods, type SetId } from "./legend";
 import { CLASS_BY_ID, CLASS_SKILLS, SKILL_MAX, WEAPON_NAME, WEAPON_STAT, skillPow, skillRank, type ClassDef, type ClassId, type ClassSkill, type WeaponKind } from "./classes";
 import { CHAPTERS, COMP_BY_ID, COMP_MAX, FORT_GUARD, KARA_HAN, KASIM, type Chapter, type CompId, type CompMods, type Companion } from "./story";
 import { CAPITAL, SLAVE_RADIUS, banditArmy, campGarrison, kurganBoss, kurganGuard, loadGame, saveGame as rawSave, wipeGame, type Bandit, type Bounty, type Contract, type GameState } from "./state";
@@ -101,7 +102,25 @@ export class Game {
 
   maxHp(): number {
     const h = this.s.hero;
-    return Math.round((40 + this.stat("day") * 12 + h.lv * 4 + (this.eq("zirh")?.hp ?? 0)) * (1 + 0.03 * this.tal("demirten")));
+    return Math.round((40 + this.stat("day") * 12 + h.lv * 4 + (this.eq("zirh")?.hp ?? 0)) * (1 + 0.03 * this.tal("demirten") + (this.gearMods().hp ?? 0)));
+  }
+
+  setCount(id: SetId): number {
+    return SLOTS.filter((sl) => this.eq(sl)?.set === id).length;
+  }
+
+  gearMods(): GearMods {
+    const m: GearMods = {};
+    for (const sl of SLOTS) {
+      const it = this.eq(sl);
+      if (it?.mods) addMods(m, it.mods);
+    }
+    for (const k of SET_KEYS) {
+      const n = this.setCount(k);
+      if (n >= 2) addMods(m, SETS[k].b2);
+      if (n >= 4) addMods(m, SETS[k].b4);
+    }
+    return m;
   }
 
   tal(id: string): number {
@@ -180,26 +199,27 @@ export class Game {
 
   heroAtk(): number {
     const w = this.eq("silah");
-    const m = this.cls().mods.atk * (1 + 0.04 * this.tal("keskin") + 0.15 * this.tal("efsane"));
+    const m = this.cls().mods.atk * (1 + 0.04 * this.tal("keskin") + 0.15 * this.tal("efsane") + (this.gearMods().atk ?? 0));
     if (!w) return (2 + this.stat("guc") * 1.5) * m * (1 + this.compMods().atk);
     return (w.atk + this.stat(WEAPON_STAT[w.kind as WeaponKind] ?? "guc") * 1.5) * (1 + this.skill("silah") * 0.06) * m * (1 + this.compMods().atk);
   }
 
   heroDef(): number {
-    return ((this.eq("zirh")?.def ?? 0) + (this.eq("kalkan")?.def ?? 0) + this.stat("day") * 0.6) * this.cls().mods.def * (1 + 0.05 * this.tal("demirten") + 0.15 * this.tal("efsane"));
+    return ((this.eq("zirh")?.def ?? 0) + (this.eq("kalkan")?.def ?? 0) + this.stat("day") * 0.6) * this.cls().mods.def * (1 + 0.05 * this.tal("demirten") + 0.15 * this.tal("efsane") + (this.gearMods().def ?? 0));
   }
 
   champion(): Champion {
     const m = this.cls().mods;
+    const gm = this.gearMods();
     return {
       atk: this.heroAtk() * (this.buff("totem") ? 1.25 : 1),
       def: this.heroDef(),
       hp: this.s.hero.hp,
       maxHp: this.maxHp(),
-      crit: m.crit + (this.eq("silah")?.crit ?? 0) + 0.025 * this.tal("kritik"),
+      crit: m.crit + (this.eq("silah")?.crit ?? 0) + 0.025 * this.tal("kritik") + (gm.crit ?? 0),
       critMult: m.critMult,
       dodge: m.dodge,
-      heal: m.heal + this.compMods().heal + 0.015 * this.tal("kanici") + (this.buff("tutsu") ? 0.04 : 0),
+      heal: m.heal + this.compMods().heal + 0.015 * this.tal("kanici") + (this.buff("tutsu") ? 0.04 : 0) + (gm.heal ?? 0),
       rage: m.rage,
       firstStrike: m.firstStrike,
       skills: this.classSkills()
@@ -234,11 +254,11 @@ export class Game {
   }
 
   stealMult(): number {
-    return 1 + 0.1 * this.tal("ganimet") + this.classSkills().filter((s) => s.kind === "steal").reduce((t, s) => t + skillPow(s, this.skillLvOf(s.id)), 0);
+    return 1 + 0.1 * this.tal("ganimet") + (this.gearMods().loot ?? 0) + this.classSkills().filter((s) => s.kind === "steal").reduce((t, s) => t + skillPow(s, this.skillLvOf(s.id)), 0);
   }
 
   heroBonus(): number {
-    return 0.025 * this.stat("lid") + 0.02 * (this.s.hero.lv - 1) + this.cls().mods.army + this.compMods().army + 0.03 * this.tal("nara") + (this.buff("davul") ? 0.15 : 0);
+    return 0.025 * this.stat("lid") + 0.02 * (this.s.hero.lv - 1) + this.cls().mods.army + this.compMods().army + 0.03 * this.tal("nara") + (this.buff("davul") ? 0.15 : 0) + (this.gearMods().army ?? 0);
   }
 
   heroCap(): number {
@@ -247,7 +267,7 @@ export class Game {
   }
 
   carryCap(): number {
-    return 10 + this.stat("guc") * 3 + (this.eq("at")?.carry ?? 0) + armySize(this.s.hero.army) * 2 + this.compMods().carry + 15 * this.tal("deve");
+    return 10 + this.stat("guc") * 3 + (this.eq("at")?.carry ?? 0) + armySize(this.s.hero.army) * 2 + this.compMods().carry + 15 * this.tal("deve") + (this.gearMods().carry ?? 0);
   }
 
   cargoUsed(): number {
@@ -977,7 +997,7 @@ export class Game {
       s.renown += q.renown;
       s.c.sides++;
       const up = this.addXp(q.xp);
-      const it = q.item ? this.drop(Math.min(5, 1 + Math.floor(s.hero.lv / 4)), 1) : null;
+      const it = q.item ? (this.legendDrop(0.06) ?? this.drop(Math.min(5, 1 + Math.floor(s.hero.lv / 4)), 1)) : null;
       this.hud.questDone({ title: q.title, text: q.text, done: () => true, reward: { gold: q.gold } });
       this.hud.toast(`${q.giver}: "Sağ ol yiğit!" +${q.xp} TP, +${q.renown} şöhret${it ? ` · ${it.name}` : ""}${up ? " · Seviye atladın!" : ""}`, "good");
     }
@@ -1092,6 +1112,63 @@ export class Game {
     const it = rollItem(this.s.nextId++, tier, this.cls(), Math.min(0.1, this.stat("kar") * 0.005));
     this.s.hero.bag.push(it);
     return it;
+  }
+
+  // ---------- legendary gear ----------
+
+  legendTier(): number {
+    return Math.max(2, Math.min(5, 1 + Math.floor(this.s.hero.lv / 4)));
+  }
+
+  legendDrop(chance: number): Item | null {
+    const s = this.s;
+    if (!s.free || Math.random() > chance * this.stealMult()) return null;
+    const pick = <T,>(a: T[]) => a[Math.floor(Math.random() * a.length)];
+    let it: Item;
+    if (Math.random() < 0.35) {
+      const fresh = UNIQUES.filter((u) => !s.codex.includes(`uq:${u.id}`));
+      it = uniqueItem(s.nextId++, this.cls(), pick(fresh.length ? fresh : UNIQUES), this.legendTier());
+    } else {
+      it = setPiece(s.nextId++, this.cls(), pick(SET_KEYS), pick(SET_SLOTS), this.legendTier());
+    }
+    this.gainLegend(it);
+    return it;
+  }
+
+  private gainLegend(it: Item): void {
+    const s = this.s;
+    s.hero.bag.push(it);
+    const key = it.uq ? `uq:${it.uq}` : `set:${it.set}:${it.slot}`;
+    const first = !s.codex.includes(key);
+    if (first) s.codex.push(key);
+    audio.play("level");
+    const lore = it.uq ? UNIQUES.find((u) => u.id === it.uq)!.lore : SETS[it.set!].lore;
+    const tag = it.set ? `${SETS[it.set].name} parçası` : "Destan eşyası";
+    if (first) this.hud.story(`${tag}: ${it.name}`, it.icon, `<i>${lore}</i><br><br><b class="r4">${it.name}</b><br>Destan Koleksiyonu: <b>${s.codex.length}/${this.codexMax()}</b>`, "Kuşan beni");
+    else this.hud.toast(`${tag}: ${it.name}`, "good");
+  }
+
+  codexMax(): number {
+    return UNIQUES.length + SET_KEYS.length * SET_SLOTS.length;
+  }
+
+  forgeCost(): Cost {
+    return this.craftCost({ gold: SET_FORGE.gold, ruh: SET_FORGE.ruh, parsomen: SET_FORGE.parsomen, yesim: SET_FORGE.yesim });
+  }
+
+  forgeReason(): string | null {
+    return this.craftReason({ gold: SET_FORGE.gold, ruh: SET_FORGE.ruh, parsomen: SET_FORGE.parsomen, yesim: SET_FORGE.yesim }, SET_FORGE.lv);
+  }
+
+  forgeSet(set: SetId, slot: Slot): void {
+    if (this.forgeReason()) return;
+    this.payMats(this.forgeCost());
+    this.start("Efsane Ocağı'nda dövüyorsun", 8, () => {
+      const it = setPiece(this.s.nextId++, this.cls(), set, slot, this.legendTier());
+      this.s.c.crafted++;
+      this.craftXp(60);
+      this.gainLegend(it);
+    });
   }
 
   // ---------- bounties ----------
@@ -1288,7 +1365,7 @@ export class Game {
 
   heroSpeed(): number {
     const n = armySize(this.s.hero.army);
-    return HERO_SPEED * (1 + this.stat("cev") * 0.02 + (this.eq("at")?.spd ?? 0) + this.compMods().speed + 0.04 * this.tal("ruzgar")) * (1 - Math.min(0.35, n / 300));
+    return HERO_SPEED * (1 + this.stat("cev") * 0.02 + (this.eq("at")?.spd ?? 0) + this.compMods().speed + 0.04 * this.tal("ruzgar") + (this.gearMods().spd ?? 0)) * (1 - Math.min(0.35, n / 300));
   }
 
   private moveHero(dt: number): void {
@@ -1539,7 +1616,7 @@ export class Game {
 
   addXp(xp: number): boolean {
     const h = this.s.hero;
-    xp = Math.round(xp * (1 + this.compMods().xp + 0.2 * this.tal("efsane") + 0.1 * this.tal("tengri")));
+    xp = Math.round(xp * (1 + this.compMods().xp + 0.2 * this.tal("efsane") + 0.1 * this.tal("tengri") + (this.gearMods().xp ?? 0)));
     h.xp += xp;
     let up = false;
     while (h.xp >= xpNeed(h.lv)) {
@@ -1580,6 +1657,8 @@ export class Game {
       this.s.bounties = this.s.bounties.filter((x) => x.camp !== i);
       const items = [this.drop(c.tier, 1), this.drop(c.tier, 0.5)].filter((x): x is Item => !!x);
       for (const it of items) txt += `<br>Ganimet: <b class="r${it.rar}">${it.name}</b>`;
+      const lg = c.tier >= 3 ? this.legendDrop(0.03 * c.tier) : null;
+      if (lg) txt += `<br>Efsane: <b class="r4">${lg.name}</b>`;
       return txt;
     });
   }
@@ -1606,6 +1685,8 @@ export class Game {
       const it = rollItem(this.s.nextId++, Math.min(5, k.tier + 1), this.cls(), 0.25);
       this.s.hero.bag.push(it);
       txt += `<br>Ganimet: <b class="r${it.rar}">${it.name}</b>`;
+      const lg = this.legendDrop(0.1 + 0.05 * k.tier);
+      if (lg) txt += `<br>Efsane: <b class="r4">${lg.name}</b>`;
       return txt;
     }, boss, boss.name);
   }
@@ -1885,15 +1966,15 @@ export class Game {
       s.mats.ruh += 25;
       s.mats.parsomen += 3;
       this.gain({ gold: 5000 });
-      const it = classItem(s.nextId++, this.cls(), "silah", 5, 3);
-      s.hero.bag.push(it);
+      const it = uniqueItem(s.nextId++, this.cls(), UNIQUES[0], 5);
+      this.gainLegend(it);
       this.hud.story(
         "Destan tamamlandı: Kara Tamga yıkıldı",
         this.face(),
         `Kara Han'ın kılıcı elinden düştü. Kalenin zindanlarında annenle küçük Ertuğrul'u buldun; zincirlerini kendi ellerinle kırdın. Esirlerin ruhları mor bir ışık selinde göğe yükseldi ve bozkırdaki bütün Kurgan Taşları bir an için sustu.<br><br>Ozanlar artık senin adını söylüyor: <b>${s.hero.name}, İpek Yolu'nun Kurtarıcısı</b>.<br><br>Ama Kara Han'ın kılıcını alan herkes bilir: bozkırda boşalan taht uzun süre boş kalmaz. Yolların, beyliğin ve ordun seni bekliyor.<br><br><b>Yeni hedef:</b> İpek Yolu'nun ${LORD_SERAIS} şehrinde kervansaray kurarak yolun efendisi ol.`,
         "Yola devam",
       );
-      return `Kara Han yenildi! +5000 altın, +100 şöhret, +25 Ruh Taşı, +3 Parşömen<br>Efsanevi ganimet: <b class="r3">${it.name}</b>`;
+      return `Kara Han yenildi! +5000 altın, +100 şöhret, +25 Ruh Taşı, +3 Parşömen<br>Destan ganimeti: <b class="r4">${it.name}</b>`;
     }, KARA_HAN, "Kara Tamga ordusu");
   }
 
@@ -1998,7 +2079,7 @@ export class Game {
     const gold = 40 * tier + Math.round(Math.random() * 60 * tier);
     this.gain({ gold });
     const up = this.addXp(20 * tier);
-    const it = this.drop(tier, 0.7);
+    const it = this.legendDrop(0.03 * tier) ?? this.drop(tier, 0.7);
     return `Harabelerde eski bir hazine buldun: +${gold} altın, +${20 * tier} TP${it ? ` · ${it.name}` : ""}${up ? " — Seviye atladın!" : ""}`;
   }
 

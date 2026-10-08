@@ -243,6 +243,22 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #1c120a; col
 .slots { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin: 4px 0 8px; }
 .slot { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 6px 2px; min-height: 84px; border-radius: 10px; background: #0005; border: 1px solid #5a3a1a; cursor: pointer; text-align: center; }
 .slot.r1 { border-color: #8fe07a; } .slot.r2 { border-color: #6ab8ff; } .slot.r3 { border-color: #d58cff; box-shadow: 0 0 10px #d58cff55; }
+.slot.leg { --sc: #ff9a3c; border-color: var(--sc); box-shadow: 0 0 14px color-mix(in srgb, var(--sc) 60%, transparent), inset 0 0 12px color-mix(in srgb, var(--sc) 25%, transparent); animation: legpulse 2.6s ease-in-out infinite; }
+@keyframes legpulse { 50% { box-shadow: 0 0 22px color-mix(in srgb, var(--sc) 85%, transparent), inset 0 0 16px color-mix(in srgb, var(--sc) 35%, transparent); } }
+.grow.leg { border-color: #ff9a3c88; background: linear-gradient(90deg, #ff9a3c1c, #0003 60%); }
+.grow.leg .gimg { filter: drop-shadow(0 0 6px #ff9a3caa); }
+.ltag { font-weight: 700; color: #ffc27a; letter-spacing: .02em; }
+.setb { --sc: #ff9a3c; display: flex; flex-direction: column; gap: 2px; padding: 7px 10px; margin-bottom: 6px; border-radius: 10px; background: #0004; border: 1px solid color-mix(in srgb, var(--sc) 55%, transparent); border-left: 4px solid var(--sc); }
+.setb b { color: var(--sc); }
+.setb small { opacity: .5; }
+.setb small.on { opacity: 1; color: #e8f6d8; }
+.row.tiers .btn[style*="--sc"].go { background: var(--sc); color: #1a0f05; }
+.codex { --sc: #ff9a3c; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-bottom: 6px; }
+.cxn { width: 100%; font-size: 11px; font-weight: 700; color: var(--sc); }
+.cx { width: 36px; height: 36px; border-radius: 8px; background: #0006; border: 1px solid #3b2614; display: grid; place-items: center; }
+.cx .ic { width: 28px; height: 28px; filter: grayscale(1) brightness(.25); }
+.cx.got { border-color: var(--sc); box-shadow: 0 0 8px color-mix(in srgb, var(--sc) 50%, transparent); }
+.cx.got .ic { filter: none; }
 .slot small { font-size: 10px; line-height: 1.15; opacity: .9; color: inherit; }
 .slot .empty { font-size: 11px; opacity: .45; margin-top: 16px; }
 .simg2 { width: 44px; height: 44px; object-fit: contain; }

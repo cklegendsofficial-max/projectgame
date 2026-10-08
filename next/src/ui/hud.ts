@@ -12,6 +12,9 @@ import { COMPANIONS, COMP_BY_ID, COMP_MAX, FORT_GUARD, KARA_HAN, type CompId } f
 import { CITIES, H, NH, NW, W } from "../world/gen";
 import { assetUrl } from "../render/worldView";
 import { audio } from "../audio";
+import { SETS, SET_FORGE, SET_KEYS, SET_SLOTS, UNIQUES, modsText, type SetId } from "../game/legend";
+
+const WEAPON_ICON: Record<string, string> = { kilic: "it_sword_", balta: "it_axe_", hancer: "it_dagger_", ok: "it_bow_", asa: "it_staff_" };
 
 const ic = (k: string, cls = "ic") => `<img class="${cls}" src="${assetUrl(k)}" alt="">`;
 const CAP_I = CITIES.findIndex((c) => c.id === "samarkand");
@@ -69,6 +72,7 @@ export class Hud {
   private storyOpen = false;
   private sagaOpen = false;
   private craftTier = 1;
+  private forgePick: SetId = "gokkurt";
 
   private sideEl!: HTMLElement;
 
@@ -244,7 +248,60 @@ export class Hud {
   private itemRow(it: Item, right: string): string {
     const why = this.g.canUse(it);
     const req = `Sv ${it.lvReq}${it.req ? ` · ${STAT_INFO[it.req.stat].short} ${it.req.v}` : ""}`;
-    return `<div class="grow">${ic(it.icon, "gimg")}<div class="bi2"><b class="r${it.rar}">${it.name}</b><small>${kindName(it)} · ${itemStats(it)}</small><small class="${why ? "why" : "dim"}">${why ?? "Gerekli: " + req}</small></div>${right}</div>`;
+    return `<div class="grow ${it.set || it.uq ? "leg" : ""}">${ic(it.icon, "gimg")}<div class="bi2"><b class="r${it.rar}">${it.name}</b>${this.legendTag(it)}<small>${kindName(it)} · ${itemStats(it)}</small><small class="${why ? "why" : "dim"}">${why ?? "Gerekli: " + req}</small></div>${right}</div>`;
+  }
+
+  private legendTag(it: Item): string {
+    if (it.uq) return `<small class="ltag">Destan eşyası</small>`;
+    if (!it.set) return "";
+    const st = SETS[it.set];
+    return `<small class="ltag" style="color:${st.color}">${st.name} (${this.g.setCount(it.set)}/4)</small>`;
+  }
+
+  private forgeHtml(): string {
+    const g = this.g;
+    const st = SETS[this.forgePick];
+    const why = g.forgeReason();
+    const cl = g.cls();
+    return (
+      `<h3>${ic("trophy")} Efsane Ocağı</h3><p class="dim">Seviye ${SET_FORGE.lv}'ten itibaren efsanevi set parçası dövebilirsin. Aynı setten 2 ve 4 parça giyince gizli güçler uyanır.</p>` +
+      `<div class="row tiers">${SET_KEYS.map((k) => `<button class="btn sm ${k === this.forgePick ? "go" : ""}" style="--sc:${SETS[k].color}" data-a="${this.act(() => (this.forgePick = k))}">${SETS[k].name.replace(" Takımı", "")}</button>`).join("")}</div>` +
+      `<div class="setb" style="--sc:${st.color}"><b>${st.name}</b><small class="dim"><i>${st.lore}</i></small><small class="on">(2) ${modsText(st.b2)}</small><small class="on">(4) ${modsText(st.b4)}</small><small>${this.matsHtml(g.forgeCost())}</small>${why && why !== "Malzeme eksik" ? `<small class="why">${why}</small>` : ""}</div>` +
+      SET_SLOTS.map((sl) => {
+        const icon = sl === "silah" ? (WEAPON_ICON[cl.weapons[0]] ?? "it_sword_") + "5" : sl === "zirh" ? (cl.armor === "agir" ? "it_armor_5" : "it_light_5") : sl === "at" ? "mount_3" : "tr_star";
+        const got = g.s.codex.includes(`set:${this.forgePick}:${sl}`);
+        return `<div class="grow leg">${ic(icon, "gimg")}<div class="bi2"><b class="r4">${st.pieces[sl]}</b><small>${SLOT_NAME[sl]}${got ? " · koleksiyonda" : ""}</small></div><button class="btn sm ${why ? "off" : ""}" data-a="${this.act(() => g.forgeSet(this.forgePick, sl))}">Döv</button></div>`;
+      }).join("")
+    );
+  }
+
+  private setsHtml(): string {
+    const g = this.g;
+    const on = SET_KEYS.filter((k) => g.setCount(k) > 0);
+    if (!on.length) return "";
+    return (
+      `<h3>${ic("trophy")} Set bonusları</h3>` +
+      on
+        .map((k) => {
+          const st = SETS[k];
+          const n = g.setCount(k);
+          return `<div class="setb" style="--sc:${st.color}"><b>${st.name} <em>${n}/4</em></b><small class="${n >= 2 ? "on" : ""}">(2) ${modsText(st.b2)}</small><small class="${n >= 4 ? "on" : ""}">(4) ${modsText(st.b4)}</small></div>`;
+        })
+        .join("")
+    );
+  }
+
+  private codexHtml(): string {
+    const g = this.g;
+    const s = g.s;
+    const cl = g.cls();
+    const pieceIcon = (sl: Slot) => (sl === "silah" ? (WEAPON_ICON[cl.weapons[0]] ?? "it_sword_") + "5" : sl === "zirh" ? (cl.armor === "agir" ? "it_armor_5" : "it_light_5") : sl === "at" ? "mount_3" : "tr_star");
+    const cell = (key: string, icon: string, name: string) => `<div class="cx ${s.codex.includes(key) ? "got" : ""}" title="${s.codex.includes(key) ? name : "???"}">${ic(icon)}</div>`;
+    return (
+      `<h3>${ic("parsomen")} Destan Koleksiyonu ${s.codex.length}/${g.codexMax()}</h3><p class="dim">Kurgan boss'ları, güçlü kamplar, harabeler ve şehir görevleri efsane eşya düşürür. Set parçalarını Atölye'deki Efsane Ocağı'nda da dövebilirsin.</p>` +
+      `<div class="codex">${UNIQUES.map((u) => cell(`uq:${u.id}`, u.slot === "silah" ? pieceIcon("silah") : u.slot === "zirh" ? pieceIcon("zirh") : u.slot === "kalkan" ? "it_shield_5" : u.slot === "at" ? "mount_3" : "tr_jadeeye", u.name)).join("")}</div>` +
+      SET_KEYS.map((k) => `<div class="codex" style="--sc:${SETS[k].color}"><span class="cxn">${SETS[k].name}</span>${SET_SLOTS.map((sl) => cell(`set:${k}:${sl}`, pieceIcon(sl), SETS[k].pieces[sl])).join("")}</div>`).join("")
+    );
   }
 
   private act(fn: () => void): string {
@@ -593,7 +650,8 @@ export class Hud {
         REFINES.map((r) => {
           const why = g.craftReason(r.cost);
           return `<div class="grow">${ic(r.icon, "gimg")}<div class="bi2"><b>${r.name}</b><small>${this.matsHtml(g.craftCost(r.cost))}</small></div><button class="btn sm ${why ? "off" : ""}" data-a="${this.act(() => g.refine(r.id))}">Yap</button></div>`;
-        }).join("");
+        }).join("") +
+        this.forgeHtml();
     } else if (this.tab === "ors") {
       body = `${nearNote}${ic("anvil", "banner")}<p class="dim">Silah, zırh ve kalkanını +9'a kadar güçlendir. +4'ten sonra başarısızlık eşyayı bir seviye düşürür; +7'den sonra eşya parçalanabilir. Kutsal Parşömen eşyayı korur.</p>
         <div class="stats"><div>${ic("ruh")}Ruh Taşı: <b>${s.mats.ruh}</b></div><div>${ic("parsomen")}Parşömen: <b>${s.mats.parsomen}</b></div><button class="btn sm ${!near || s.res.gold < g.scrollPrice() ? "off" : ""}" data-a="${this.act(() => g.buyScroll())}">Parşömen al ${ic("coins")}${g.scrollPrice()}</button></div>` +
@@ -794,8 +852,8 @@ export class Hud {
       const inCity = g.nearCity() >= 0;
       body = `<div class="slots">` + SLOTS.map((sl) => {
         const it = h.equip[sl];
-        return `<div class="slot ${it ? "r" + it.rar : ""}" ${it ? `data-a="${this.act(() => g.unequip(sl))}" title="Çıkar"` : ""}>${it ? ic(it.icon, "simg2") : `<span class="empty">${SLOT_NAME[sl]}</span>`}<small>${it ? it.name : "Boş"}</small></div>`;
-      }).join("") + `</div><p class="dim">Kuşanılmış bir eşyaya dokunarak çıkarabilirsin. Eşyaları şehirlerde satabilirsin.</p>` +
+        return `<div class="slot ${it ? "r" + it.rar : ""} ${it?.set || it?.uq ? "leg" : ""}" ${it?.set ? `style="--sc:${SETS[it.set].color}"` : ""} ${it ? `data-a="${this.act(() => g.unequip(sl))}" title="Çıkar"` : ""}>${it ? ic(it.icon, "simg2") : `<span class="empty">${SLOT_NAME[sl]}</span>`}<small>${it ? it.name : "Boş"}</small></div>`;
+      }).join("") + `</div><p class="dim">Kuşanılmış bir eşyaya dokunarak çıkarabilirsin. Eşyaları şehirlerde satabilirsin.</p>` + this.setsHtml() +
         (CONSUMABLES.some((c) => s.cons[c.id]) || Object.keys(s.buffs).length
           ? `<h3>${ic("healer")} Çanta</h3>` +
             (Object.keys(s.buffs).length ? `<div class="odds good">Etkin: ${Object.entries(s.buffs).map(([k, n]) => `${CONS_BY_ID[k]?.name ?? k} (${n} savaş)`).join(" · ")}</div>` : "") +
@@ -809,7 +867,8 @@ export class Hud {
           return this.itemRow(it, `<div class="col2">${ok && better ? `<em class="cheap">▲</em>` : ""}<button class="btn sm ${ok ? "" : "off"}" data-a="${this.act(() => g.equip(it.id))}">Kuşan</button>${inCity ? `<button class="btn sm" data-a="${this.act(() => g.sellItem(it.id))}">${g.itemSellPrice(it)}</button>` : ""}</div>`);
         }).join("") || `<p class="dim">Heyben boş. Haramiler, kamplar ve harabeler eşya düşürür.</p>`) +
         `<h3>${ic("j_caravan")} Yük (${g.cargoUsed()}/${g.carryCap()})</h3>` +
-        (GOOD_KEYS.filter((k) => (h.cargo[k] ?? 0) > 0).map((k) => `<div class="qrow">${ic(GOODS[k].icon)} ${GOODS[k].name}<span>${h.cargo[k]} adet · ort. ${Math.round((h.paid[k] ?? 0) / (h.cargo[k] ?? 1))} altın</span></div>`).join("") || `<p class="dim">Yükün boş.</p>`);
+        (GOOD_KEYS.filter((k) => (h.cargo[k] ?? 0) > 0).map((k) => `<div class="qrow">${ic(GOODS[k].icon)} ${GOODS[k].name}<span>${h.cargo[k]} adet · ort. ${Math.round((h.paid[k] ?? 0) / (h.cargo[k] ?? 1))} altın</span></div>`).join("") || `<p class="dim">Yükün boş.</p>`) +
+        (s.free ? this.codexHtml() : "");
     } else {
       body = `<div class="stats"><div>${ic("tug")}Birlik: <b>${armySize(h.army)}/${g.heroCap()}</b></div><div>${ic("coins")}Ücret: <b>${g.wagePerMin().toFixed(1)}/dk</b></div><div>${ic("shield")}Toplam güç: <b>${Math.round(g.heroPower())}</b></div></div>
         ${armyHtml(h.army)}

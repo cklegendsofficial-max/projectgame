@@ -181,6 +181,7 @@ export interface GameState {
   buffs: Record<string, number>;
   sideQ: SideQuest[];
   board: Record<string, { day: number; list: SideQuest[] }>;
+  codex: string[];
 }
 
 export interface MarketEvent {
@@ -377,6 +378,7 @@ export function newGame(w: World): GameState {
     buffs: {},
     sideQ: [],
     board: {},
+    codex: [],
   };
 }
 

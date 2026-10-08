@@ -1,4 +1,5 @@
 import { WEAPON_NAME, WEAPON_STAT, type ArmorKind, type ClassDef, type WeaponKind } from "./classes";
+import { SETS, modsText, type GearMods, type SetId, type Unique } from "./legend";
 
 export type Stat = "guc" | "cev" | "day" | "lid" | "kar";
 export const STAT_KEYS: Stat[] = ["guc", "cev", "day", "lid", "kar"];
@@ -51,6 +52,25 @@ export interface Item {
   req: { stat: Stat; v: number } | null;
   plus?: number;
   base?: { atk: number; def: number; hp: number; name: string };
+  set?: SetId;
+  uq?: string;
+  mods?: GearMods;
+}
+
+export function setPiece(id: number, cls: ClassDef, set: SetId, slot: Slot, tier: number): Item {
+  const it = classItem(id, cls, slot, tier, 4);
+  it.name = SETS[set].pieces[slot];
+  it.set = set;
+  return it;
+}
+
+export function uniqueItem(id: number, cls: ClassDef, u: Unique, tier: number): Item {
+  const slot = u.slot === "kalkan" && !cls.shield ? "tilsim" : u.slot;
+  const it = classItem(id, cls, slot, tier, 4);
+  it.name = u.name;
+  it.uq = u.id;
+  it.mods = { ...u.mods };
+  return it;
 }
 
 export const PLUS_MAX = 9;
@@ -170,7 +190,7 @@ export function rollItem(id: number, tier: number, cls: ClassDef | null, luck = 
 }
 
 export function itemPrice(it: Item): number {
-  return Math.round(30 * Math.pow(it.tier, 2.1) * RARITY[it.rar].mult * (it.slot === "at" ? 1.6 : 1) * (1 + 0.3 * (it.plus ?? 0)));
+  return Math.round(30 * Math.pow(it.tier, 2.1) * RARITY[it.rar].mult * (it.slot === "at" ? 1.6 : 1) * (1 + 0.3 * (it.plus ?? 0)) * (it.set || it.uq ? 2.5 : 1));
 }
 
 export function kindName(it: Item): string {
@@ -189,6 +209,7 @@ export function itemStats(it: Item): string {
   if (it.carry) p.push(`Yük +${it.carry}`);
   if (it.lid) p.push(`Liderlik +${it.lid}`);
   if (it.kar) p.push(`Karizma +${it.kar}`);
+  if (it.mods) p.push(modsText(it.mods));
   return p.join(" · ");
 }
 
