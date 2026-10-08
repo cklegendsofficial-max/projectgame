@@ -215,6 +215,11 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #1c120a; col
 .clsrow { display: flex; align-items: center; gap: 8px; padding: 8px; margin-bottom: 8px; border-radius: 10px; background: #0004; border: 1px solid var(--cc); }
 .clsrow b em { font-style: normal; font-size: 11px; opacity: .75; margin-left: 4px; }
 .srow.prim { border-color: #8a6a2a; background: #ffd56a12; }
+.brow.skill.locked .bimg { filter: grayscale(.85) brightness(.7); }
+.brow.skill .bimg { border-radius: 10px; }
+.bar.boss { height: 16px; }
+.bar.boss i { background: linear-gradient(#c58cff, #6a2a9a); }
+.bp.boss { border-color: #c58cff !important; box-shadow: 0 0 18px #c58cff88; }
 .gimg.round, .bimg.round { border-radius: 50%; object-fit: cover; }
 
 @media (max-width: 760px) {

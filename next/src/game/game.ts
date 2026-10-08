@@ -2,14 +2,14 @@ import { astar, CITIES, NAV, NH, NW, type World } from "../world/gen";
 import type { Camera } from "../render/camera";
 import type { WorldView } from "../render/worldView";
 import type { Hud } from "../ui/hud";
-import { fight, odds, type BattleResult, type Champion } from "./battle";
+import { fight, odds, type BattleResult, type Boss, type Champion } from "./battle";
 import { BUILDINGS, BUILDING_BY_ID, CITY_NAME, DAY_SEC, RES_KEYS, UNITS, UNIT_KEYS, army, armyPower, armySize, buildCost, buildTime, prodPerMin, storageCap, trainSpeed, unitUnlocked, xpNeed, type Army, type BuildingId, type Res, type Unit } from "./data";
-import { CITY_TRADE, GOODS, GOOD_KEYS, STAT_INFO, classItem, goodMult, itemPrice, makeItem, rollItem, skillLv, type Good, type Item, type Skill, type Slot, type Stat } from "./rpg";
-import { CLASS_BY_ID, WEAPON_NAME, WEAPON_STAT, type ClassDef, type ClassId, type WeaponKind } from "./classes";
-import { CAPITAL, SLAVE_RADIUS, banditArmy, campGarrison, loadGame, saveGame, type Bandit, type Bounty, type GameState } from "./state";
+import { CITY_TRADE, GOODS, GOOD_KEYS, PLUS_CHANCE, STAT_INFO, canPlus, classItem, goodMult, itemPrice, makeItem, plusCost, rollItem, setPlus, skillLv, type Good, type Item, type Skill, type Slot, type Stat } from "./rpg";
+import { CLASS_BY_ID, CLASS_SKILLS, SKILL_MAX, WEAPON_NAME, WEAPON_STAT, skillPow, skillRank, type ClassDef, type ClassId, type ClassSkill, type WeaponKind } from "./classes";
+import { CAPITAL, SLAVE_RADIUS, banditArmy, campGarrison, kurganBoss, kurganGuard, loadGame, saveGame, type Bandit, type Bounty, type GameState } from "./state";
 
 export type Target =
-  | { kind: "village" | "camp" | "node" | "ruin" | "city" | "bandit"; i: number }
+  | { kind: "village" | "camp" | "node" | "ruin" | "city" | "bandit" | "kurgan"; i: number }
   | { kind: "capital" }
   | { kind: "point"; x: number; y: number };
 
@@ -143,7 +143,39 @@ export class Game {
       heal: m.heal,
       rage: m.rage,
       firstStrike: m.firstStrike,
+      skills: this.classSkills()
+        .map((sk) => ({ name: sk.name, kind: sk.kind, pow: skillPow(sk, this.s.hero.cskill[sk.id] ?? 0) }))
+        .filter((x) => x.pow > 0),
     };
+  }
+
+  classSkills(): ClassSkill[] {
+    return CLASS_SKILLS[this.s.cls ?? "alp"];
+  }
+
+  skillLvOf(id: string): number {
+    return this.s.hero.cskill[id] ?? 0;
+  }
+
+  learnReason(sk: ClassSkill): string | null {
+    const h = this.s.hero;
+    if (h.lv < sk.unlock) return `Seviye ${sk.unlock} gerekir`;
+    if (this.skillLvOf(sk.id) >= SKILL_MAX) return "Ustalaştın";
+    if (h.spts <= 0) return "Beceri puanın yok";
+    return null;
+  }
+
+  learn(id: string): void {
+    const sk = this.classSkills().find((x) => x.id === id);
+    if (!sk || this.learnReason(sk)) return;
+    const h = this.s.hero;
+    h.spts--;
+    h.cskill[id] = this.skillLvOf(id) + 1;
+    this.hud.toast(`${sk.name} ${skillRank(h.cskill[id])}`, "good");
+  }
+
+  stealMult(): number {
+    return 1 + this.classSkills().filter((s) => s.kind === "steal").reduce((t, s) => t + skillPow(s, this.skillLvOf(s.id)), 0);
   }
 
   heroBonus(): number {
@@ -284,6 +316,11 @@ export class Game {
       }
     }
     for (const n of s.nodes) if (n.left < n.max && now >= n.regenAt) n.left = n.max;
+    for (const k of s.kurgans)
+      if (!k.alive && now >= k.respawnAt) {
+        k.alive = true;
+        k.guard = kurganGuard(k.tier);
+      }
   }
 
   volMax(rep: number): number {
@@ -660,6 +697,62 @@ export class Game {
     h.hp = Math.min(h.hp, this.maxHp());
   }
 
+  findItem(id: number): Item | undefined {
+    const h = this.s.hero;
+    return h.bag.find((x) => x.id === id) ?? Object.values(h.equip).find((x) => x?.id === id);
+  }
+
+  scrollPrice(): number {
+    return 140;
+  }
+
+  buyScroll(): void {
+    if (this.nearCity() < 0) return;
+    if (!this.pay({ gold: this.scrollPrice() })) return this.hud.toast("Altın yetersiz", "bad");
+    this.s.mats.parsomen++;
+    this.hud.toast("Kutsal Parşömen alındı", "good");
+  }
+
+  plusReason(it: Item, protect: boolean): string | null {
+    if (!canPlus(it)) return "Daha fazla güçlendirilemez";
+    if (this.nearCity() < 0) return "Demirci yok";
+    const c = plusCost(it);
+    if (this.s.res.gold < c.gold) return "Altın yetersiz";
+    if (this.s.mats.ruh < c.ruh) return `${c.ruh} Ruh Taşı gerekir`;
+    if (protect && this.s.mats.parsomen < 1) return "Kutsal Parşömen gerekir";
+    return null;
+  }
+
+  upgradeItem(id: number, protect: boolean): void {
+    const it = this.findItem(id);
+    if (!it || this.plusReason(it, protect) || this.busy()) return;
+    const c = plusCost(it);
+    this.pay({ gold: c.gold });
+    this.s.mats.ruh -= c.ruh;
+    if (protect) this.s.mats.parsomen--;
+    const p = it.plus ?? 0;
+    const h = this.s.hero;
+    this.start(`Demirci +${p + 1} basıyor`, 2, () => {
+      if (Math.random() < PLUS_CHANCE[p]) {
+        setPlus(it, p + 1);
+        this.s.c.plus = Math.max(this.s.c.plus, p + 1);
+        h.hp = Math.min(h.hp, this.maxHp());
+        this.hud.toast(`Başarılı! ${it.name}`, "good");
+        if (p + 1 >= 7) this.hud.story("Usta işi!", it.icon, `Örsün başında kıvılcımlar yağdı ve ${it.name} parıldadı. Bu kadar güçlü bir eşya İpek Yolu'nda nadir görülür.`, "Harika");
+        return;
+      }
+      if (protect || p < 4) return this.hud.toast(protect ? "Başarısız. Parşömen eşyayı korudu." : "Başarısız. Eşya zarar görmedi.", "bad");
+      if (p < 7) {
+        setPlus(it, p - 1);
+        return this.hud.toast(`Başarısız! Eşya +${p - 1} seviyesine düştü.`, "bad");
+      }
+      h.bag = h.bag.filter((x) => x !== it);
+      for (const sl of Object.keys(h.equip) as Slot[]) if (h.equip[sl] === it) delete h.equip[sl];
+      h.hp = Math.min(h.hp, this.maxHp());
+      this.hud.toast(`${it.name} örste parçalandı!`, "bad");
+    });
+  }
+
   private drop(tier: number, chance: number): Item | null {
     if (Math.random() > chance * this.cls().mods.loot) return null;
     const it = rollItem(this.s.nextId++, tier, this.cls(), Math.min(0.1, this.stat("kar") * 0.005));
@@ -782,6 +875,8 @@ export class Game {
         return s.nodes[t.i];
       case "ruin":
         return s.ruins[t.i];
+      case "kurgan":
+        return s.kurgans[t.i];
       case "bandit":
         return s.bandits.find((b) => b.id === t.i) ?? null;
     }
@@ -850,6 +945,7 @@ export class Game {
     s.camps.forEach((c, i) => c.alive && test({ kind: "camp", i }, c.x, c.y, 1.3));
     s.nodes.forEach((n, i) => test({ kind: "node", i }, n.x, n.y));
     s.ruins.forEach((n, i) => !n.looted && test({ kind: "ruin", i }, n.x, n.y));
+    s.kurgans.forEach((k, i) => k.alive && test({ kind: "kurgan", i }, k.x, k.y, 1.3));
     return best;
   }
 
@@ -983,16 +1079,18 @@ export class Game {
     this.battle(ambush ? `${c.name} pusu kurdu!` : `${c.name} çetesi`, b.army, 0, (win) => {
       this.s.bandits = this.s.bandits.filter((x) => x.id !== b.id);
       if (!win) return "";
-      const gold = Math.round((armyPower(b.army) * 0.9 + 8 * b.tier) * this.cls().mods.loot);
+      const gold = Math.round((armyPower(b.army) * 0.9 + 8 * b.tier) * this.cls().mods.loot * this.stealMult());
       this.gain({ gold });
       this.s.renown += b.tier * 2;
       this.s.c.wins++;
       const it = this.drop(b.tier, 0.3 + b.tier * 0.1);
-      return `+${gold} altın · +${b.tier * 2} şöhret${it ? `<br>Ganimet: <b class="r${it.rar}">${it.name}</b>` : ""}`;
+      const ruh = Math.random() < 0.15 + b.tier * 0.05 ? 1 : 0;
+      this.s.mats.ruh += ruh;
+      return `+${gold} altın · +${b.tier * 2} şöhret${ruh ? " · +1 Ruh Taşı" : ""}${it ? `<br>Ganimet: <b class="r${it.rar}">${it.name}</b>` : ""}`;
     });
   }
 
-  battle(title: string, enemy: Army, enemyBonus: number, after: (win: boolean) => string): void {
+  battle(title: string, enemy: Army, enemyBonus: number, after: (win: boolean) => string, boss: Boss | null = null, foe = "Haramiler"): void {
     const h = this.s.hero;
     if (this.act) this.act = null;
     if (armySize(h.army) === 0 && h.hp < this.maxHp() * 0.15) {
@@ -1004,7 +1102,7 @@ export class Game {
       }
     }
     const champ = this.champion();
-    const res: BattleResult = fight(h.army, this.heroBonus(), enemy, enemyBonus, champ);
+    const res: BattleResult = fight(h.army, this.heroBonus(), enemy, enemyBonus, champ, boss);
     this.battleLock = true;
     h.path = null;
     this.target = null;
@@ -1021,7 +1119,7 @@ export class Game {
         h.army[u] += k;
         revived += k;
       }
-    const xp = Math.round(armyPower(enemy) * (res.win ? 0.7 : 0.15)) + 3;
+    const xp = Math.round((armyPower(enemy) + (boss ? boss.atk * Math.sqrt(boss.hp) * 0.8 : 0)) * (res.win ? 0.7 : 0.15)) + 3;
     const lvUp = this.addXp(xp);
     this.s.kills += armySize(res.lostB);
     const extra = after(res.win);
@@ -1035,7 +1133,7 @@ export class Game {
       fled = `${res.heroDown ? "Ağır yaralandın. " : ""}Kalanlar seni ${CITY_NAME[c.id]} şehrine taşıdı.`;
     }
     const note = [extra || fled, revived ? `Ruh Çağrısı: ${revived} asker hayata döndü` : ""].filter(Boolean).join("<br>");
-    this.hud.showBattle(title, before, enemy, res, { hpBefore, maxHp: this.maxHp() }, xp, lvUp, note, () => {
+    this.hud.showBattle(title, before, enemy, res, { hpBefore, maxHp: this.maxHp() }, xp, lvUp, note, boss, foe, () => {
       this.battleLock = false;
       saveGame(this.s);
     });
@@ -1049,14 +1147,15 @@ export class Game {
       h.xp -= xpNeed(h.lv);
       h.lv++;
       h.points += 3;
+      if (h.lv >= 3) h.spts++;
       h.hp = this.maxHp();
       up = true;
     }
     return up;
   }
 
-  odds(enemy: Army, bonus = 0): number {
-    return odds(this.s.hero.army, this.heroBonus(), enemy, bonus, this.champion());
+  odds(enemy: Army, bonus = 0, boss: Boss | null = null): number {
+    return odds(this.s.hero.army, this.heroBonus(), enemy, bonus, this.champion(), boss);
   }
 
   attackCamp(i: number): void {
@@ -1067,11 +1166,12 @@ export class Game {
       c.alive = false;
       c.respawnAt = this.now + 15 * 60000;
       this.s.bandits = this.s.bandits.filter((b) => b.camp !== i);
-      const loot = { gold: Math.round((60 * c.tier * c.tier + 40) * this.cls().mods.loot), wood: 60 * c.tier, stone: 40 * c.tier };
+      const loot = { gold: Math.round((60 * c.tier * c.tier + 40) * this.cls().mods.loot * this.stealMult()), wood: 60 * c.tier, stone: 40 * c.tier };
       this.gain(loot);
       this.s.renown += c.tier * 8;
       this.s.c.camps++;
-      let txt = `Kamp yerle bir edildi! +${loot.gold} altın, +${c.tier * 8} şöhret`;
+      this.s.mats.ruh += c.tier;
+      let txt = `Kamp yerle bir edildi! +${loot.gold} altın, +${c.tier * 8} şöhret, +${c.tier} Ruh Taşı`;
       for (const b of this.s.bounties.filter((x) => x.camp === i && x.taken)) {
         this.s.res.gold += b.gold;
         this.s.renown += b.renown;
@@ -1082,6 +1182,37 @@ export class Game {
       for (const it of items) txt += `<br>Ganimet: <b class="r${it.rar}">${it.name}</b>`;
       return txt;
     });
+  }
+
+  attackKurgan(i: number): void {
+    const k = this.s.kurgans[i];
+    if (!k.alive) return;
+    const boss = kurganBoss(k.tier);
+    this.battle(`Kurgan Taşı · ${boss.name}`, k.guard, 0.1 * k.tier, (win) => {
+      if (!win) return "Lanetli taş seni geri püskürttü. Daha güçlü dön.";
+      k.alive = false;
+      k.respawnAt = this.now + 20 * 60000;
+      this.s.c.kurgans++;
+      const ruh = 2 * k.tier + Math.floor(Math.random() * 3);
+      const gold = Math.round((50 * k.tier * k.tier + 30) * this.stealMult());
+      this.s.mats.ruh += ruh;
+      this.gain({ gold });
+      this.s.renown += k.tier * 5;
+      let txt = `Taş çatladı, ruhlar serbest kaldı! +${ruh} Ruh Taşı, +${gold} altın, +${k.tier * 5} şöhret`;
+      if (Math.random() < 0.25 + k.tier * 0.05) {
+        this.s.mats.parsomen++;
+        txt += "<br>+1 Kutsal Parşömen";
+      }
+      const it = rollItem(this.s.nextId++, Math.min(5, k.tier + 1), this.cls(), 0.25);
+      this.s.hero.bag.push(it);
+      txt += `<br>Ganimet: <b class="r${it.rar}">${it.name}</b>`;
+      return txt;
+    }, boss, boss.name);
+  }
+
+  kurganOdds(i: number): number {
+    const k = this.s.kurgans[i];
+    return this.odds(k.guard, 0.1 * k.tier, kurganBoss(k.tier));
   }
 
   recruitCost(): number {

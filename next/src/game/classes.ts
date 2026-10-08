@@ -115,6 +115,53 @@ export const CLASSES: ClassDef[] = [
   },
 ];
 
+export type SkillKind = "burst" | "poison" | "evade" | "shield" | "aura" | "fury" | "steal";
+
+export interface ClassSkill {
+  id: string;
+  name: string;
+  icon: string;
+  kind: SkillKind;
+  unlock: number;
+  base: number;
+  per: number;
+  text: (p: number) => string;
+}
+
+export const SKILL_MAX = 10;
+const pct = (p: number) => `%${Math.round(p * 100)}`;
+
+export const CLASS_SKILLS: Record<ClassId, [ClassSkill, ClassSkill]> = {
+  alp: [
+    { id: "hucum", name: "Kalkan Hücumu", icon: "sk_hucum", kind: "burst", unlock: 3, base: 1.1, per: 0.15, text: (p) => `Her 3 turda bir kalkanınla düşman safına dalarsın: saldırının ${pct(p)} kadar alan hasarı.` },
+    { id: "duvar", name: "Demir Duvar", icon: "sk_duvar", kind: "shield", unlock: 6, base: 0.2, per: 0.035, text: (p) => `İlk 3 tur sen ve birliğin ${pct(p)} daha az hasar alırsınız.` },
+  ],
+  bahadir: [
+    { id: "girdap", name: "Kan Girdabı", icon: "sk_girdap", kind: "burst", unlock: 3, base: 1.5, per: 0.2, text: (p) => `Her 3 turda baltanı döndürürsün: saldırının ${pct(p)} kadar alan hasarı.` },
+    { id: "ciglik", name: "Savaş Çığlığı", icon: "sk_ciglik", kind: "fury", unlock: 6, base: 0.1, per: 0.03, text: (p) => `Savaş boyunca saldırın ${pct(p)} artar.` },
+  ],
+  suikastci: [
+    { id: "zehir", name: "Zehirli Hançer", icon: "sk_zehir", kind: "poison", unlock: 3, base: 0.25, per: 0.06, text: (p) => `Zehir her tur düşmana saldırının ${pct(p)} kadar hasar verir.` },
+    { id: "golge", name: "Gölge Adımı", icon: "sk_golge", kind: "evade", unlock: 6, base: 0.08, per: 0.02, text: (p) => `Kaçınma şansın ${pct(p)} artar.` },
+  ],
+  hirsiz: [
+    { id: "kese", name: "Kese Kesme", icon: "sk_kese", kind: "steal", unlock: 3, base: 0.2, per: 0.08, text: (p) => `Zaferlerden ${pct(p)} fazla altın çalarsın.` },
+    { id: "duman", name: "Duman Bombası", icon: "sk_duman", kind: "shield", unlock: 6, base: 0.25, per: 0.04, text: (p) => `İlk 3 tur duman içinde düşman ${pct(p)} daha az isabet ettirir.` },
+  ],
+  kam: [
+    { id: "gazap", name: "Tengri'nin Gazabı", icon: "sk_gazap", kind: "burst", unlock: 3, base: 1.3, per: 0.18, text: (p) => `Her 3 turda gökten yıldırım indirirsin: saldırının ${pct(p)} kadar alan hasarı.` },
+    { id: "kurt", name: "Kurt Ruhu", icon: "sk_kurt", kind: "aura", unlock: 6, base: 0.06, per: 0.025, text: (p) => `Atalarının kurt ruhu birliğinin gücünü ${pct(p)} artırır.` },
+  ],
+};
+
+export function skillPow(sk: ClassSkill, lv: number): number {
+  return lv <= 0 ? 0 : sk.base + sk.per * (lv - 1);
+}
+
+export function skillRank(lv: number): string {
+  return lv >= SKILL_MAX ? "Usta" : lv <= 0 ? "Kapalı" : `Sv ${lv}`;
+}
+
 export const CLASS_BY_ID = Object.fromEntries(CLASSES.map((c) => [c.id, c])) as Record<ClassId, ClassDef>;
 
 export const WEAPON_STAT: Record<WeaponKind, Stat> = { kilic: "guc", balta: "guc", hancer: "cev", ok: "cev", asa: "kar" };

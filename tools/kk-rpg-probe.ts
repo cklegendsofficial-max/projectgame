@@ -84,6 +84,22 @@ await ev(`g.addXp(1);`);
 await shot(page, "15-hero", 1200);
 await page.locator(".tab", { hasText: "Teçhizat" }).click();
 await shot(page, "16-gear", 400);
+await page.locator(".tab", { hasText: "Beceriler" }).click();
+await ev(`g.learn(g.classSkills()[0].id); g.learn(g.classSkills()[0].id); g.learn(g.classSkills()[1].id);`);
+await shot(page, "17-skills", 400);
+// anvil
+await ev(`g.s.mats.ruh = 20; g.s.res.gold += 3000; const c = g.targetPos({kind:"capital"}); g.s.hero.x = c.x; g.s.hero.y = c.y; g.hud.close(); g.hud.openPlace({kind:"capital"});`);
+await page.locator(".tab", { hasText: "Örs" }).click();
+for (let k = 0; k < 5; k++) { await ev(`const w = g.s.hero.equip.silah; if (w && !g.act) g.upgradeItem(w.id, false); if (g.act) g.act.t = g.act.dur;`); await page.waitForTimeout(150); }
+await shot(page, "18-anvil", 400);
+// kurgan
+await ev(`g.hud.close(); g.s.hero.army = {spear: 20, archer: 8, horse: 4}; g.s.hero.hp = g.maxHp(); const mt = Math.min(...g.s.kurgans.map(k => k.tier)); console.log("kurgan tiers", JSON.stringify(g.s.kurgans.map(k => k.tier))); const i = g.s.kurgans.findIndex(k => k.tier === mt); const k = g.s.kurgans[i]; g.reveal(k.x, k.y, 8); g.s.hero.x = k.x + 30; g.s.hero.y = k.y + 20; g.cam.flyTo(k.x, k.y, 0.9); g.hud.openPlace({kind:"kurgan", i});`);
+await shot(page, "19-kurgan", 1200);
+await page.locator(".panel .btn.red").click();
+await shot(page, "20-kurgan-fight", 2500);
+await page.waitForSelector(".battle .result .btn", { timeout: 20000 });
+await shot(page, "21-kurgan-end", 300);
+await page.locator(".battle .result .btn").click();
 await log("end");
 console.log("errors:", errs);
 await browser.close();

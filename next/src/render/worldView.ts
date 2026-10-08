@@ -141,6 +141,7 @@ export class WorldView {
   private campM: Marker[] = [];
   private nodeM: Marker[] = [];
   private ruinM: Marker[] = [];
+  private kurganM: Marker[] = [];
   private cityM: Marker[] = [];
   private hero!: Container;
   private heroCount!: Text;
@@ -258,7 +259,9 @@ export class WorldView {
     this.campM = s.camps.map((c) => this.place("map/camp", c.x, c.y, 84, c.name, 0.62));
     this.nodeM = s.nodes.map((n) => this.place("map/" + NODE_SPRITE[n.kind], n.x, n.y, 70));
     this.ruinM = s.ruins.map((r) => this.place("map/ruins", r.x, r.y, 72));
+    this.kurganM = s.kurgans.map((k) => this.place("map/kurgan", k.x, k.y, 62, `Kurgan Taşı Sv ${k.tier}`, 0.62));
     for (const m of [...this.campM]) if (m.label) m.label.style.fill = "#ffb0a0";
+    for (const m of this.kurganM) if (m.label) m.label.style.fill = "#e0b8ff";
     this.places.children.sort((a, b) => a.y - b.y);
     this.heroPortrait(game.face());
   }
@@ -436,16 +439,22 @@ export class WorldView {
       this.campM.forEach((m, i) => vis(m, s.camps[i].alive));
       this.nodeM.forEach((m) => vis(m));
       this.ruinM.forEach((m, i) => vis(m, !s.ruins[i].looted));
+      this.kurganM.forEach((m, i) => vis(m, s.kurgans[i].alive));
       this.cityM.forEach((m) => {
         m.sp.visible = true;
         if (m.label) m.label.visible = true;
       });
       const ls = Math.min(2.4, Math.max(0.9, 0.7 / cam.zoom));
-      for (const m of [...this.villageM, ...this.campM, ...this.cityM]) if (m.label) m.label.scale.set(ls);
+      for (const m of [...this.villageM, ...this.campM, ...this.kurganM, ...this.cityM]) if (m.label) m.label.scale.set(ls);
     }
 
     this.fxG.clear();
     if (!s.free) this.fxG.circle(CAPITAL.x, CAPITAL.y, SLAVE_RADIUS).stroke({ color: 0xff6a4a, width: 4, alpha: 0.35 + Math.sin(this.time * 2) * 0.1 });
+    for (const k of s.kurgans) {
+      if (!k.alive || !game.isExplored(k.x, k.y)) continue;
+      const pr = (this.time * 0.6 + k.x * 0.001) % 1;
+      this.fxG.circle(k.x, k.y - 8, 26 + pr * 34).stroke({ color: 0xb46aff, width: 3, alpha: 0.55 * (1 - pr) });
+    }
     for (const b of s.bounties) {
       if (!b.taken) continue;
       const c = s.camps[b.camp];

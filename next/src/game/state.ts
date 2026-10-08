@@ -40,6 +40,15 @@ export interface Ruin {
   looted: boolean;
 }
 
+export interface Kurgan {
+  x: number;
+  y: number;
+  tier: number;
+  alive: boolean;
+  respawnAt: number;
+  guard: Army;
+}
+
 export interface Hero {
   name: string;
   lv: number;
@@ -52,6 +61,8 @@ export interface Hero {
   stats: Record<Stat, number>;
   points: number;
   skills: Record<Skill, number>;
+  cskill: Record<string, number>;
+  spts: number;
   hp: number;
   energy: number;
   equip: Partial<Record<Slot, Item>>;
@@ -114,6 +125,8 @@ export interface Counters {
   trained: number;
   marched: number;
   spent: number;
+  plus: number;
+  kurgans: number;
 }
 
 export interface GameState {
@@ -130,6 +143,7 @@ export interface GameState {
   camps: Camp[];
   nodes: ResNode[];
   ruins: Ruin[];
+  kurgans: Kurgan[];
   bandits: Bandit[];
   quest: number;
   time: number;
@@ -145,6 +159,7 @@ export interface GameState {
   bounties: Bounty[];
   bountyDay: number;
   wageDebt: number;
+  mats: { ruh: number; parsomen: number };
 }
 
 export const CAPITAL = CITIES.find((c) => c.id === "samarkand")!;
@@ -165,7 +180,7 @@ function terrainAt(w: World, x: number, y: number): { h: number; m: number } {
   return { h: w.height[i], m: w.moist[i] };
 }
 
-export function placeWorld(w: World): Pick<GameState, "villages" | "camps" | "nodes" | "ruins"> {
+export function placeWorld(w: World): Pick<GameState, "villages" | "camps" | "nodes" | "ruins" | "kurgans"> {
   const R = rng(4242);
   const taken: { x: number; y: number; r: number }[] = CITIES.map((c) => ({ x: c.x, y: c.y, r: 150 }));
   const free = (x: number, y: number, r: number) => taken.every((t) => Math.hypot(t.x - x, t.y - y) > t.r + r);
@@ -218,7 +233,26 @@ export function placeWorld(w: World): Pick<GameState, "villages" | "camps" | "no
   addNodes("stone", 18, (h) => h > 0.26 && h < 0.5);
   addNodes("gold", 10, (h) => h > 0.3 && h < 0.55);
   const ruins: Ruin[] = pick(10, 80, () => true).map((p) => ({ x: p.x, y: p.y, looted: false }));
-  return { villages, camps, nodes, ruins };
+  const kurgans: Kurgan[] = pick(10, 90, (x, y) => Math.hypot(x - CAPITAL.x, y - CAPITAL.y) > 520).map((p) => {
+    const tier = Math.min(5, 1 + Math.floor(Math.hypot(p.x - CAPITAL.x, p.y - CAPITAL.y) / 700));
+    return { x: p.x, y: p.y, tier, alive: true, respawnAt: 0, guard: kurganGuard(tier) };
+  });
+  return { villages, camps, nodes, ruins, kurgans };
+}
+
+export function kurganGuard(tier: number): Army {
+  const n = Math.round(5 * Math.pow(1.7, tier - 1));
+  return army(Math.round(n * 0.6), Math.round(n * 0.4), 0);
+}
+
+export const KURGAN_BOSS = [
+  { name: "Taş Muhafız", icon: "heroes/boss_golem" },
+  { name: "Albastı", icon: "heroes/boss_albasti" },
+];
+
+export function kurganBoss(tier: number) {
+  const b = KURGAN_BOSS[tier >= 3 ? 1 : 0];
+  return { name: b.name, icon: b.icon, hp: Math.round(115 * Math.pow(tier, 1.55)), atk: Math.round(6 * Math.pow(tier, 1.45)), def: 2 + tier * 3 };
 }
 
 export function campGarrison(tier: number, R: () => number = Math.random): Army {
@@ -237,7 +271,7 @@ export function banditArmy(tier: number): Army {
 }
 
 export function newCounters(): Counters {
-  return { shifts: 0, trains: 0, profit: 0, wins: 0, recruits: 0, bought: 0, moved: 0, camps: 0, built: 0, trained: 0, marched: 0, spent: 0 };
+  return { shifts: 0, trains: 0, profit: 0, wins: 0, recruits: 0, bought: 0, moved: 0, camps: 0, built: 0, trained: 0, marched: 0, spent: 0, plus: 0, kurgans: 0 };
 }
 
 export function newGame(w: World): GameState {
@@ -263,6 +297,8 @@ export function newGame(w: World): GameState {
       stats: { guc: 2, cev: 2, day: 2, lid: 1, kar: 1 },
       points: 0,
       skills: { silah: 0, ticaret: 0, emek: 0 },
+      cskill: {},
+      spts: 0,
       hp: 999,
       energy: 999,
       equip: {},
@@ -288,6 +324,7 @@ export function newGame(w: World): GameState {
     bounties: [],
     bountyDay: 0,
     wageDebt: 0,
+    mats: { ruh: 0, parsomen: 0 },
   };
 }
 
@@ -338,6 +375,7 @@ export function loadGame(w: World): GameState {
       buildings: { ...fresh.buildings, ...(r.buildings ?? {}) },
       hero: { ...fresh.hero, ...(r.hero ?? {}), path: null, pathI: 0 },
       c: { ...fresh.c, ...(r.c ?? {}) },
+      mats: { ...fresh.mats, ...(r.mats ?? {}) },
       explored: typeof r.explored === "string" ? decodeBits(r.explored, NW * NH) : fresh.explored,
       bandits: [],
       marches: Array.isArray(r.marches) ? r.marches : [],

@@ -48,6 +48,30 @@ export interface Item {
   crit: number;
   lvReq: number;
   req: { stat: Stat; v: number } | null;
+  plus?: number;
+  base?: { atk: number; def: number; hp: number; name: string };
+}
+
+export const PLUS_MAX = 9;
+export const PLUS_CHANCE = [1, 0.95, 0.9, 0.8, 0.7, 0.55, 0.42, 0.3, 0.2];
+
+export function canPlus(it: Item): boolean {
+  return (it.slot === "silah" || it.slot === "zirh" || it.slot === "kalkan") && (it.plus ?? 0) < PLUS_MAX;
+}
+
+export function plusCost(it: Item): { gold: number; ruh: number } {
+  const p = it.plus ?? 0;
+  return { gold: Math.round(itemPrice(it) * 0.25 * (p + 1)), ruh: p >= 3 ? p - 2 : 0 };
+}
+
+export function setPlus(it: Item, p: number): void {
+  it.base ??= { atk: it.atk, def: it.def, hp: it.hp, name: it.name };
+  it.plus = Math.max(0, Math.min(PLUS_MAX, p));
+  const m = 1 + 0.13 * it.plus;
+  it.atk = Math.round(it.base.atk * m + (it.base.atk ? it.plus : 0));
+  it.def = Math.round(it.base.def * m + (it.base.def ? it.plus * 0.5 : 0));
+  it.hp = Math.round(it.base.hp * m);
+  it.name = it.plus ? `${it.base.name} +${it.plus}` : it.base.name;
 }
 
 export const RARITY = [
@@ -144,7 +168,7 @@ export function rollItem(id: number, tier: number, cls: ClassDef | null, luck = 
 }
 
 export function itemPrice(it: Item): number {
-  return Math.round(30 * Math.pow(it.tier, 2.1) * RARITY[it.rar].mult * (it.slot === "at" ? 1.6 : 1));
+  return Math.round(30 * Math.pow(it.tier, 2.1) * RARITY[it.rar].mult * (it.slot === "at" ? 1.6 : 1) * (1 + 0.3 * (it.plus ?? 0)));
 }
 
 export function kindName(it: Item): string {
