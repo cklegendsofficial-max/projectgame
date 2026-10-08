@@ -12,6 +12,7 @@ import { CITY_TRADE, GOODS, GOOD_KEYS, PLUS_CHANCE, SLOTS, STAT_INFO, canPlus, c
 import { SETS, SET_FORGE, SET_KEYS, SET_SLOTS, UNIQUES, addMods, type GearMods, type SetId } from "./legend";
 import { TITLE_CATS, titleKey, titleOf, titleReward } from "./titles";
 import { DAILY_POOL, today, yesterday, type Daily, type DailyTask } from "./daily";
+import { LAST_WORDS, NEM_MAX, NEM_TRAITS, REVENGE, SCAR_EPITHETS, TAUNTS, makeNemesis, nemBoss, nemName, type Nemesis } from "./nemesis";
 import { DEEP_LORE, DOORS, DOOR_KEYS, RIDDLES, deepBoss, deepGuard, deepTier, type DeepRun, type DoorKind } from "./deep";
 import { FACTIONS, FACTION_KEYS, HOSTILE, REP_RANKS, RANK_PERKS, factionOf, repRank, type FactionId } from "./factions";
 import { CLASS_BY_ID, CLASS_SKILLS, SKILL_MAX, WEAPON_NAME, WEAPON_STAT, skillPow, skillRank, type ClassDef, type ClassId, type ClassSkill, type WeaponKind } from "./classes";
@@ -442,6 +443,7 @@ export class Game {
       this.bandits(dt, now);
       this.caravanTick(dt);
       this.wantedTick(dt);
+      this.nemTick();
       this.stormTick(dt);
       this.marches(dt, now);
     }
@@ -1627,7 +1629,10 @@ export class Game {
       const at = this.spawnAt.get(i) ?? 0;
       if (mine < max && now >= at) {
         this.spawnAt.set(i, now + 90000 + Math.random() * 60000);
-        s.bandits.push({ id: s.nextId++, camp: i, tier: c.tier, x: c.x + (Math.random() - 0.5) * 40, y: c.y + (Math.random() - 0.5) * 40, army: banditArmy(c.tier), tx: c.x, ty: c.y, wait: 1, chase: false });
+        const nb: Bandit = { id: s.nextId++, camp: i, tier: c.tier, x: c.x + (Math.random() - 0.5) * 40, y: c.y + (Math.random() - 0.5) * 40, army: banditArmy(c.tier), tx: c.x, ty: c.y, wait: 1, chase: false };
+        const nm = s.nemeses.find((n) => n.alive && n.camp === i && !s.bandits.some((x) => x.nem === n.id));
+        if (nm && Math.random() < 0.6) this.nemGang(nb, nm);
+        s.bandits.push(nb);
       }
     });
     for (const b of s.bandits) {
@@ -1654,9 +1659,10 @@ export class Game {
       const c = s.camps[b.camp];
       const pow = armyPower(b.army);
       const raiding = s.caravans.some((cv) => cv.raid === b.id);
-      b.chase = b.amb ? !safe && dh < 450 : !raiding && !safe && !this.act && dh < 230 && pow > heroPow * 0.75 && Math.hypot(h.x - c.x, h.y - c.y) < 700;
+      const nm = b.nem ? s.nemeses.find((n) => n.id === b.nem) : undefined;
+      b.chase = b.amb ? !safe && dh < 450 : nm ? !raiding && !safe && dh < (nm.trait === "kurnaz" ? 440 : 320) && Math.hypot(h.x - c.x, h.y - c.y) < 1100 : !raiding && !safe && !this.act && dh < 230 && pow > heroPow * 0.75 && Math.hypot(h.x - c.x, h.y - c.y) < 700;
       if (b.amb && dh > 600) b.army = { spear: 0, archer: 0, horse: 0 };
-      const flee = !raiding && dh < 200 && pow < heroPow * 0.45;
+      const flee = !nm && !raiding && dh < 200 && pow < heroPow * 0.45;
       let tx = b.tx;
       let ty = b.ty;
       const prey = !b.chase && !flee && !raiding && !b.amb ? s.caravans.find((cv) => !cv.raid && Math.hypot(cv.x - b.x, cv.y - b.y) < 220 && Math.hypot(cv.x - c.x, cv.y - c.y) < 900) : undefined;
@@ -1696,7 +1702,7 @@ export class Game {
       }
       const d = Math.hypot(tx - b.x, ty - b.y);
       if (d > 1) {
-        const sp = (BANDIT_SPEED * (b.chase ? 1.15 : 1) * dt) / Math.max(0.6, Math.min(3, this.cellCost(b.x, b.y)));
+        const sp = (BANDIT_SPEED * (b.chase ? 1.15 : 1) * (nm?.trait === "akinci" ? 1.3 : 1) * dt) / Math.max(0.6, Math.min(3, this.cellCost(b.x, b.y)));
         const nx = b.x + ((tx - b.x) / d) * Math.min(sp, d);
         const ny = b.y + ((ty - b.y) / d) * Math.min(sp, d);
         if (this.cellCost(nx, ny) !== Infinity) {
@@ -1716,12 +1722,17 @@ export class Game {
 
   private engageBandit(b: Bandit, ambush: boolean): void {
     if (b.posse) return this.fightPosse(b);
+    const nm = b.nem ? this.s.nemeses.find((n) => n.id === b.nem && n.alive) : undefined;
+    if (nm) return this.fightNemesis(b, nm);
     const c = this.s.camps[b.camp];
     this.battle(ambush ? `${c.name} pusu kurdu!` : `${c.name} çetesi`, b.army, 0, (win) => {
       this.s.bandits = this.s.bandits.filter((x) => x.id !== b.id);
       const cv = this.s.caravans.find((x) => x.raid === b.id);
       if (cv) cv.raid = 0;
-      if (!win) return "";
+      if (!win) {
+        this.newNemesis(b.camp, "loss");
+        return "";
+      }
       const saved = cv ? this.rescueCaravan(cv) : "";
       const gold = Math.round((armyPower(b.army) * 0.9 + 8 * b.tier) * this.cls().mods.loot * this.stealMult());
       this.gain({ gold });
@@ -1732,6 +1743,108 @@ export class Game {
       this.s.mats.ruh += ruh;
       return `+${gold} altın · +${b.tier * 2} şöhret${ruh ? " · +1 Ruh Taşı" : ""}${it ? `<br>Ganimet: <b class="r${it.rar}">${it.name}</b>` : ""}${saved}`;
     });
+  }
+
+  // ---------- nemesis ----------
+
+  private nemGang(b: Bandit, n: Nemesis): void {
+    b.nem = n.id;
+    const a = banditArmy(b.tier);
+    const m = 1.3 + n.lv * 0.3;
+    let sp = Math.round(a.spear * m);
+    let ar = Math.round(a.archer * m);
+    let ho = Math.round(a.horse * m) + n.lv;
+    if (n.trait === "okcu") [sp, ar] = [Math.round(sp * 0.4), ar + Math.round(sp * 0.6)];
+    if (n.trait === "akinci") [sp, ho] = [Math.round(sp * 0.4), ho + Math.round(sp * 0.6)];
+    b.army = { spear: sp, archer: ar, horse: ho };
+  }
+
+  nemesisOut(n: Nemesis): Bandit | undefined {
+    return this.s.bandits.find((b) => b.nem === n.id);
+  }
+
+  private newNemesis(camp: number, why: "loss" | "camp"): void {
+    const s = this.s;
+    if (!s.free || s.hero.lv < 3 || camp < 0 || s.nemeses.filter((n) => n.alive).length >= NEM_MAX) return;
+    if (why === "camp" && Math.random() > 0.35) return;
+    const n = makeNemesis(s.nextId++, camp, why, s.nemeses.map((x) => x.name));
+    if (why === "loss") n.wins = 1;
+    s.nemeses.push(n);
+    s.nemDay = Math.max(s.nemDay, this.dayOf().day);
+    const pick = <T,>(a: T[]) => a[Math.floor(Math.random() * a.length)];
+    const line = (why === "loss" ? pick(TAUNTS) : pick(REVENGE)).replace("{hero}", s.hero.name);
+    const t = NEM_TRAITS[n.trait];
+    this.hud.story(
+      `Kan Davası: ${nemName(n)}`,
+      "icons/j_bandit",
+      `${why === "loss" ? "Çetenin başındaki adam, yere düşmüş sana tepeden baktı ve tükürdü:" : "Yanan kampın dumanları arasından bir atlı kaçtı. Uzaktan sesi yankılandı:"}<br><br><i>"${line}"</i><br><br><b class="dear">${nemName(n)}</b> artık senin can düşmanın. <b>${t.name}</b>: ${t.desc}<br>${s.camps[camp].name} çevresinde dolaşıyor. Her geçen gün güçlenecek; seni gördüğü yerde saldıracak.`,
+      "Hesaplaşacağız",
+    );
+  }
+
+  private fightNemesis(b: Bandit, n: Nemesis): void {
+    const s = this.s;
+    const boss = nemBoss(n, b.tier);
+    const t = NEM_TRAITS[n.trait];
+    this.battle(`Kan Davası · ${nemName(n)}`, b.army, t.bonus + n.lv * 0.03, (win) => {
+      s.bandits = s.bandits.filter((x) => x.id !== b.id);
+      const cv = s.caravans.find((x) => x.raid === b.id);
+      if (cv) cv.raid = 0;
+      const pick = <T,>(a: T[]) => a[Math.floor(Math.random() * a.length)];
+      if (!win) {
+        n.wins++;
+        n.lv = Math.min(15, n.lv + 1);
+        let stole = 0;
+        if (n.trait === "yagmaci") {
+          stole = Math.round(s.res.gold * 0.1);
+          s.res.gold -= stole;
+        }
+        this.hud.story(`${nemName(n)} güldü`, "icons/j_bandit", `<i>"${pick(TAUNTS).replace("{hero}", s.hero.name)}"</i><br><br>${nemName(n)} seni ${n.wins}. kez yendi ve güçlendi (seviye ${n.lv}).${stole ? `<br>Kesenden <b class="dear">${stole} altın</b> aldı.` : ""}`, "İntikam alacağım");
+        return "";
+      }
+      const escape = n.trait === "korkusuz" ? 0 : n.scars >= 2 ? 0.1 : 0.3;
+      const gold = Math.round((120 + 90 * n.lv) * b.tier * this.stealMult());
+      if (Math.random() < escape) {
+        n.scars++;
+        n.lv = Math.min(15, n.lv + 1);
+        n.epithet = SCAR_EPITHETS[Math.min(SCAR_EPITHETS.length - 1, n.scars - 1)];
+        this.gain({ gold: Math.round(gold * 0.4) });
+        s.renown += 3 * n.lv;
+        return `<b class="dear">${n.name} son anda atına atlayıp kaçtı!</b> Yüzünde senin kılıcının izi kaldı; artık ona <b>${nemName(n)}</b> diyorlar.<br>+${Math.round(gold * 0.4)} altın · +${3 * n.lv} şöhret`;
+      }
+      n.alive = false;
+      s.c.slain++;
+      s.c.wins++;
+      this.gain({ gold });
+      const renown = 10 + 8 * n.lv;
+      s.renown += renown;
+      const it = rollItem(s.nextId++, Math.min(5, b.tier + 1), this.cls(), 0.2 + 0.03 * n.lv);
+      s.hero.bag.push(it);
+      this.repNear(b.x, b.y, 15 + 5 * n.lv, `${nemName(n)} öldürüldü`);
+      const lg = this.legendDrop(0.08 + 0.04 * n.lv);
+      this.hud.story(`${nemName(n)} öldü`, "icons/trophy", `Can düşmanın dizlerinin üstüne çöktü. Son sözleri:<br><br><i>${pick(LAST_WORDS)}</i><br><br>Bozkırda adın bir kez daha duyuldu. <b>+${gold} altın · +${renown} şöhret</b><br>Ganimet: <b class="r${it.rar}">${it.name}</b>${lg ? `<br>Efsane: <b class="r4">${lg.name}</b>` : ""}`, "Kan davası bitti");
+      return `<b class="cheap">${nemName(n)} öldü!</b>`;
+    }, boss, nemName(n));
+  }
+
+  private nemTick(): void {
+    const s = this.s;
+    const day = this.dayOf().day;
+    if (day <= s.nemDay) return;
+    s.nemDay = day;
+    let rumor: Nemesis | null = null;
+    for (const n of s.nemeses) {
+      if (!n.alive) continue;
+      if (!s.camps[n.camp]?.alive) {
+        const alive = s.camps.map((c, i) => ({ c, i })).filter((x) => x.c.alive);
+        if (alive.length) n.camp = alive[Math.floor(Math.random() * alive.length)].i;
+      }
+      if (n.lv < 12 && Math.random() < 0.3) {
+        n.lv++;
+        rumor = n;
+      }
+    }
+    if (rumor) this.hud.toast(`Söylenti: ${nemName(rumor)} yeni adamlar topladı (seviye ${rumor.lv}).`, "bad");
   }
 
   // ---------- weather ----------
@@ -2128,6 +2241,7 @@ export class Game {
       this.s.renown += c.tier * 8;
       this.s.c.camps++;
       this.s.mats.ruh += c.tier;
+      if (!this.s.nemeses.some((n) => n.alive && n.camp === i)) this.newNemesis(i, "camp");
       this.repNear(c.x, c.y, 5 * c.tier, "haramileri temizledin");
       let txt = `Kamp yerle bir edildi! +${loot.gold} altın, +${c.tier * 8} şöhret, +${c.tier} Ruh Taşı`;
       for (const b of this.s.bounties.filter((x) => x.camp === i && x.taken)) {

@@ -5,6 +5,7 @@ import type { Good, Item, Skill, Slot, Stat } from "./rpg";
 import type { ClassId } from "./classes";
 import type { SideQuest } from "./sidequests";
 import type { Daily } from "./daily";
+import type { Nemesis } from "./nemesis";
 
 export interface Village {
   name: string;
@@ -89,6 +90,7 @@ export interface Bandit {
   tier: number;
   amb?: boolean;
   posse?: boolean;
+  nem?: number;
 }
 
 export interface Caravan {
@@ -169,6 +171,7 @@ export interface Counters {
   robbed: number;
   rescued: number;
   floors: number;
+  slain: number;
 }
 
 export interface GameState {
@@ -226,6 +229,8 @@ export interface GameState {
   wanted: number;
   wantedT: number;
   deepBest: number;
+  nemeses: Nemesis[];
+  nemDay: number;
 }
 
 export interface MarketEvent {
@@ -353,7 +358,7 @@ export function banditArmy(tier: number): Army {
 }
 
 export function newCounters(): Counters {
-  return { shifts: 0, trains: 0, profit: 0, wins: 0, recruits: 0, bought: 0, moved: 0, camps: 0, built: 0, trained: 0, marched: 0, spent: 0, plus: 0, kurgans: 0, contracts: 0, crafted: 0, raids: 0, sides: 0, robbed: 0, rescued: 0, floors: 0 };
+  return { shifts: 0, trains: 0, profit: 0, wins: 0, recruits: 0, bought: 0, moved: 0, camps: 0, built: 0, trained: 0, marched: 0, spent: 0, plus: 0, kurgans: 0, contracts: 0, crafted: 0, raids: 0, sides: 0, robbed: 0, rescued: 0, floors: 0, slain: 0 };
 }
 
 export function newGame(w: World): GameState {
@@ -433,6 +438,8 @@ export function newGame(w: World): GameState {
     wanted: 0,
     wantedT: 0,
     deepBest: 0,
+    nemeses: [],
+    nemDay: 0,
   };
 }
 

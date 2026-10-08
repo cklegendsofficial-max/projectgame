@@ -14,6 +14,7 @@ import { assetUrl } from "../render/worldView";
 import { audio } from "../audio";
 import { SETS, SET_FORGE, SET_KEYS, SET_SLOTS, UNIQUES, modsText, type SetId } from "../game/legend";
 import { FACTIONS, FACTION_KEYS, HOSTILE, REP_RANKS, RANK_PERKS, factionOf } from "../game/factions";
+import { NEM_TRAITS, nemName } from "../game/nemesis";
 import { TITLE_CATS, titleKey, titleOf } from "../game/titles";
 import { DAILY_POOL } from "../game/daily";
 
@@ -305,8 +306,26 @@ export class Hud {
           return `<div class="grow ${t.done ? "dim" : ""}">${ic(p.icon, "gimg")}<div class="bi2"><b>${t.need} ${p.what}</b><div class="fbar" style="--fc:${ok ? "#7fd36a" : "#e0b04a"}"><i style="width:${(v / t.need) * 100}%"></i></div><small>${v}/${t.need} · ${ic("coins")}${g.dailyGold()}</small></div>${t.done ? `<em class="cheap">✓</em>` : `<button class="btn sm ${ok ? "go" : "off"}" data-a="${this.act(() => g.claimDaily(i))}">Al</button>`}</div>`;
         })
         .join("") +
-      (d.chest ? `<div class="odds good">Bugünün sandığı açıldı. Yarın yeni fermanlar gelecek.</div>` : `<button class="btn big ${g.chestReady() ? "go" : "off"}" style="width:100%" data-a="${this.act(() => g.openChest())}">${ic("chest")} Ferman sandığını aç</button>`) +
-      `<h3>${ic("trophy")} Unvanlar</h3>`
+      (d.chest ? `<div class="odds good">Bugünün sandığı açıldı. Yarın yeni fermanlar gelecek.</div>` : `<button class="btn big ${g.chestReady() ? "go" : "off"}" style="width:100%" data-a="${this.act(() => g.openChest())}"> ${ic("chest")} Ferman sandığını aç</button>`)
+    );
+  }
+
+  private nemesisHtml(): string {
+    const g = this.g;
+    const s = g.s;
+    if (!s.nemeses.length) return `<h3>${ic("j_bandit")} Kan Davası</h3><p class="dim">Henüz can düşmanın yok. Seni yenen ya da kampını yaktığın harami reisleri intikam yemini eder; isim, lakap ve güç kazanıp peşine düşerler.</p>`;
+    const list = [...s.nemeses].sort((a, b) => Number(b.alive) - Number(a.alive) || b.lv - a.lv);
+    return (
+      `<h3>${ic("j_bandit")} Kan Davası <em class="dim">· ${s.c.slain} reis öldürüldü</em></h3>` +
+      list
+        .map((n) => {
+          const t = NEM_TRAITS[n.trait];
+          const out = g.nemesisOut(n);
+          const where = n.alive ? (out ? `<b class="dear">Bozkırda seni arıyor</b>` : `${s.camps[n.camp]?.name ?? "?"} çevresinde`) : "Öldürüldü";
+          const btn = n.alive ? `<button class="btn sm" data-a="${this.act(() => { this.close(); const p = out ?? s.camps[n.camp]; g.cam.flyTo(p.x, p.y, 0.8); })}">Bul</button>` : `<em class="cheap">✓</em>`;
+          return `<div class="grow nem ${n.alive ? "" : "dim dead"}">${ic("j_bandit", "gimg")}<div class="bi2"><b>${nemName(n)}</b> <small>Sv ${n.lv}</small><small>${t.name} · ${t.desc}</small><small>${where}${n.wins ? ` · seni ${n.wins} kez yendi` : ""}${n.scars ? ` · ${n.scars} yara izi` : ""}</small></div>${btn}</div>`;
+        })
+        .join("")
     );
   }
 
@@ -315,7 +334,7 @@ export class Hud {
     const s = g.s;
     const cur = s.title ? titleOf(s.title) : null;
     return (
-      `<div class="odds ${cur ? "good" : "mid"}">${cur ? `Aktif unvan: <b>${cur.name}</b> · ${modsText(cur.mods)}` : "Henüz aktif bir unvanın yok."}</div><p class="dim">Her başarım bir unvan ve ödül kazandırır. Kazandığın unvanlardan birini taşıyabilirsin; taşıdığın unvanın gücü sana geçer. ${s.titles.length}/${TITLE_CATS.length * 3} unvan.</p>` +
+      `<h3>${ic("trophy")} Unvanlar</h3><div class="odds ${cur ? "good" : "mid"}">${cur ? `Aktif unvan: <b>${cur.name}</b> · ${modsText(cur.mods)}` : "Henüz aktif bir unvanın yok."}</div><p class="dim">Her başarım bir unvan ve ödül kazandırır. Kazandığın unvanlardan birini taşıyabilirsin; taşıdığın unvanın gücü sana geçer. ${s.titles.length}/${TITLE_CATS.length * 3} unvan.</p>` +
       TITLE_CATS.map((cat) => {
         const v = cat.value(s);
         const next = cat.tiers.find((t) => v < t.need);
@@ -950,7 +969,7 @@ export class Hud {
           return `<div class="brow skill ${lv ? "" : "locked"}">${ic(sk.icon, "bimg")}<div class="bi2"><b>${sk.name} <em>${skillRank(lv)}</em></b><small>${cur}</small>${next}${why && why !== "Beceri puanın yok" ? `<small class="why">${why}</small>` : ""}</div><button class="btn sm plus ${why ? "off" : ""}" data-a="${this.act(() => g.learn(sk.id))}">+</button></div>`;
         }).join("");
     } else if (this.tab === "unvan") {
-      body = this.dailyHtml() + this.titlesHtml();
+      body = this.dailyHtml() + this.nemesisHtml() + this.titlesHtml();
     } else if (this.tab === "techizat") {
       const inCity = g.nearCity() >= 0;
       body = `<div class="slots">` + SLOTS.map((sl) => {
@@ -1175,8 +1194,11 @@ export class Hud {
       c.lineTo(cv.x * sx - 2.5, cv.y * sy);
       c.fill();
     }
-    c.fillStyle = "#6aa8ff";
-    for (const b of g.s.bandits) if (b.posse) c.fillRect(b.x * sx - 1.5, b.y * sy - 1.5, 3, 3);
+    for (const b of g.s.bandits) {
+      if (!b.posse && !b.nem) continue;
+      c.fillStyle = b.posse ? "#6aa8ff" : "#c27bff";
+      c.fillRect(b.x * sx - 2, b.y * sy - 2, b.posse ? 3 : 4, b.posse ? 3 : 4);
+    }
     c.fillStyle = "#fff";
     c.beginPath();
     c.arc(g.s.hero.x * sx, g.s.hero.y * sy, 3, 0, Math.PI * 2);

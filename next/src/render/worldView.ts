@@ -5,6 +5,7 @@ import type { Game } from "../game/game";
 import { CITY_NAME, NODE_SPRITE, armySize } from "../game/data";
 import { CAPITAL, SLAVE_RADIUS } from "../game/state";
 import { FACTIONS, type FactionId } from "../game/factions";
+import { nemName } from "../game/nemesis";
 
 const urls: Record<string, string> = {};
 for (const [p, u] of Object.entries(import.meta.glob<string>("../assets/**/*.webp", { eager: true, query: "?url", import: "default" }))) {
@@ -449,12 +450,22 @@ export class WorldView {
     return c;
   }
 
-  private bandit(id: number, posse = false): Container {
+  private bandit(id: number, posse = false, nem = ""): Container {
     let c = this.bandits.get(id);
     if (c) return c;
     c = new Container();
     const sh = new Graphics().ellipse(0, 22, 18, 6).fill({ color: 0x000000, alpha: 0.35 });
-    const p = posse ? this.portrait("soldier", 18, 0x4a8cff) : this.portrait("j_bandit", 18, 0xd2452c);
+    const p = posse ? this.portrait("soldier", 18, 0x4a8cff) : nem ? this.portrait("j_bandit", 22, 0xa64dff) : this.portrait("j_bandit", 18, 0xd2452c);
+    if (nem) {
+      const glow = new Graphics().circle(0, 0, 30).fill({ color: 0xa64dff, alpha: 0.22 });
+      glow.label = "glow";
+      c.addChild(glow);
+      const nl = new Text({ text: nem, style: { ...LABEL_STYLE, fontSize: 14, fill: "#e6c4ff" } });
+      nl.anchor.set(0.5, 0);
+      nl.position.set(0, 40);
+      nl.resolution = 2;
+      c.addChild(nl);
+    }
     const t = new Text({ text: "", style: { ...LABEL_STYLE, fontSize: 16, fill: "#ffc4b4" } });
     t.anchor.set(0.5, 0);
     t.position.set(0, 21);
@@ -596,7 +607,10 @@ export class WorldView {
     const live = new Set<number>();
     for (const b of s.bandits) {
       live.add(b.id);
-      const c = this.bandit(b.id, b.posse);
+      const nm = b.nem ? s.nemeses.find((n) => n.id === b.nem) : undefined;
+      const c = this.bandit(b.id, b.posse, nm ? nemName(nm) : "");
+      const glow = c.getChildByLabel("glow");
+      if (glow) glow.scale.set(1 + Math.sin(this.time * 4) * 0.12);
       const vis = game.isExplored(b.x, b.y);
       c.visible = vis;
       c.position.set(b.x, b.y);
