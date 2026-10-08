@@ -10,6 +10,7 @@ import { TACTICS, TACTIC_KEYS, fight, odds, stanceWeights, tacticDelta, type Bat
 import { BUILDINGS, BUILDING_BY_ID, CITY_NAME, DAY_SEC, RES_KEYS, UNITS, UNIT_KEYS, army, armyPower, armySize, buildCost, buildTime, prodPerMin, storageCap, trainSpeed, unitUnlocked, xpNeed, type Army, type BuildingId, type Res, type Unit } from "./data";
 import { CITY_TRADE, GOODS, GOOD_KEYS, PLUS_CHANCE, SLOTS, STAT_INFO, canPlus, classItem, goodMult, itemPrice, makeItem, plusCost, rollItem, setPiece, setPlus, skillLv, uniqueItem, type Good, type Item, type Skill, type Slot, type Stat } from "./rpg";
 import { SETS, SET_FORGE, SET_KEYS, SET_SLOTS, UNIQUES, addMods, type GearMods, type SetId } from "./legend";
+import { TITLE_CATS, titleKey, titleOf, titleReward } from "./titles";
 import { FACTIONS, FACTION_KEYS, HOSTILE, REP_RANKS, RANK_PERKS, factionOf, repRank, type FactionId } from "./factions";
 import { CLASS_BY_ID, CLASS_SKILLS, SKILL_MAX, WEAPON_NAME, WEAPON_STAT, skillPow, skillRank, type ClassDef, type ClassId, type ClassSkill, type WeaponKind } from "./classes";
 import { CHAPTERS, COMP_BY_ID, COMP_MAX, FORT_GUARD, KARA_HAN, KASIM, type Chapter, type CompId, type CompMods, type Companion } from "./story";
@@ -53,6 +54,7 @@ export class Game {
   target: Target | null = null;
   private repath = 0;
   private cvT = 2;
+  private titleT = 1;
   private posseT = 20;
   private fogT = 0;
   private saveT = 0;
@@ -123,7 +125,44 @@ export class Game {
       if (n >= 2) addMods(m, SETS[k].b2);
       if (n >= 4) addMods(m, SETS[k].b4);
     }
+    const t = this.s.title ? titleOf(this.s.title) : null;
+    if (t) addMods(m, t.mods);
     return m;
+  }
+
+  setTitle(key: string): void {
+    if (key && !this.s.titles.includes(key)) return;
+    this.s.title = key;
+    const t = titleOf(key);
+    if (t) this.hud.toast(`Unvan: ${t.name}`, "good");
+  }
+
+  private titleTick(dt: number): void {
+    this.titleT -= dt;
+    if (this.titleT > 0 || !this.s.free) return;
+    this.titleT = 1;
+    const s = this.s;
+    const got: string[] = [];
+    let gold = 0;
+    let renown = 0;
+    for (const cat of TITLE_CATS) {
+      const v = cat.value(s);
+      cat.tiers.forEach((t, i) => {
+        const key = titleKey(cat.id, i);
+        if (v < t.need || s.titles.includes(key)) return;
+        s.titles.push(key);
+        const r = titleReward(i);
+        gold += r.gold;
+        renown += r.renown;
+        got.push(t.name);
+        if (!s.title || (titleOf(s.title)?.tier ?? -1) < i) s.title = key;
+      });
+    }
+    if (!got.length) return;
+    s.res.gold += gold;
+    s.renown += renown;
+    this.hud.questDone({ title: got.length === 1 ? got[0] : `${got.length} yeni unvan`, text: "", done: () => true, reward: { gold } }, "Unvan kazandın");
+    this.hud.toast(`${got.join(", ")} · +${renown} şöhret`, "good");
   }
 
   tal(id: string): number {
@@ -347,6 +386,7 @@ export class Game {
       for (const m of s.marches) this.reveal(m.x, m.y, 5);
     }
     this.quests();
+    this.titleTick(dt);
     this.storyTick();
     this.worldEvents(dt, now);
     this.checkContract();

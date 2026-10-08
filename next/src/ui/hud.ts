@@ -14,6 +14,7 @@ import { assetUrl } from "../render/worldView";
 import { audio } from "../audio";
 import { SETS, SET_FORGE, SET_KEYS, SET_SLOTS, UNIQUES, modsText, type SetId } from "../game/legend";
 import { FACTIONS, FACTION_KEYS, HOSTILE, REP_RANKS, RANK_PERKS, factionOf } from "../game/factions";
+import { TITLE_CATS, titleKey, titleOf } from "../game/titles";
 
 const WEAPON_ICON: Record<string, string> = { kilic: "it_sword_", balta: "it_axe_", hancer: "it_dagger_", ok: "it_bow_", asa: "it_staff_" };
 
@@ -276,6 +277,27 @@ export class Hud {
     );
   }
 
+  private titlesHtml(): string {
+    const g = this.g;
+    const s = g.s;
+    const cur = s.title ? titleOf(s.title) : null;
+    return (
+      `<div class="odds ${cur ? "good" : "mid"}">${cur ? `Aktif unvan: <b>${cur.name}</b> · ${modsText(cur.mods)}` : "Henüz aktif bir unvanın yok."}</div><p class="dim">Her başarım bir unvan ve ödül kazandırır. Kazandığın unvanlardan birini taşıyabilirsin; taşıdığın unvanın gücü sana geçer. ${s.titles.length}/${TITLE_CATS.length * 3} unvan.</p>` +
+      TITLE_CATS.map((cat) => {
+        const v = cat.value(s);
+        const next = cat.tiers.find((t) => v < t.need);
+        return `<div class="tcat"><div class="tch">${ic(cat.icon, "gimg")}<div class="bi2"><b>${next ? `${Math.min(v, next.need)}/${next.need} ${cat.what}` : `Tamamlandı · ${cat.what}`}</b>${next ? `<div class="fbar" style="--fc:#e0b04a"><i style="width:${Math.min(100, (v / next.need) * 100)}%"></i></div>` : ""}</div></div><div class="ttiers">${cat.tiers
+          .map((t, i) => {
+            const key = titleKey(cat.id, i);
+            const got = s.titles.includes(key);
+            const on = s.title === key;
+            return `<button class="tt ${got ? "got" : ""} ${on ? "on" : ""}" ${got ? `data-a="${this.act(() => g.setTitle(on ? "" : key))}"` : ""} title="${modsText(t.mods)}"><b>${t.name}</b><small>${got ? modsText(t.mods) : `${t.need}`}</small></button>`;
+          })
+          .join("")}</div></div>`;
+      }).join("")
+    );
+  }
+
   private repHtml(): string {
     const g = this.g;
     return (
@@ -425,11 +447,12 @@ export class Hud {
     if (n) this.story(...n);
   }
 
-  questDone(q: Quest): void {
+  questDone(q: Quest, label = "Görev tamamlandı"): void {
     audio.play("quest");
+    this.root.querySelectorAll(".qdone").forEach((x) => x.remove());
     const el = document.createElement("div");
     el.className = "qdone";
-    el.innerHTML = `${ic("quest", "qi")}<div><small>Görev tamamlandı</small><b>${q.title}</b><span>${costHtml(q.reward, this.g)}</span></div>`;
+    el.innerHTML = `${ic(label === "Görev tamamlandı" ? "quest" : "trophy", "qi")}<div><small>${label}</small><b>${q.title}</b><span>${costHtml(q.reward, this.g)}</span></div>`;
     this.root.appendChild(el);
     setTimeout(() => el.classList.add("out"), 3200);
     setTimeout(() => el.remove(), 3800);
@@ -828,7 +851,7 @@ export class Hud {
     const s = g.s;
     const h = s.hero;
     const need = xpNeed(h.lv);
-    const tabs = this.tabs([["karakter", "Karakter"], ["beceri", `Beceriler${h.spts ? ` (${h.spts})` : ""}`], ["yetenek", `Yetenekler${h.tpts ? ` (${h.tpts})` : ""}`], ["techizat", `Teçhizat${h.bag.length ? ` (${h.bag.length})` : ""}`], ["ordu", "Birlik"]]);
+    const tabs = this.tabs([["karakter", "Karakter"], ["beceri", `Beceriler${h.spts ? ` (${h.spts})` : ""}`], ["yetenek", `Yetenekler${h.tpts ? ` (${h.tpts})` : ""}`], ["techizat", `Teçhizat${h.bag.length ? ` (${h.bag.length})` : ""}`], ["ordu", "Birlik"], ...(s.free ? ([["unvan", "Unvanlar"]] as [string, string][]) : [])]);
     let body = "";
     if (this.tab === "karakter") {
       const cl = g.cls();
@@ -890,6 +913,8 @@ export class Hud {
           const next = lv > 0 && lv < SKILL_MAX ? `<small class="dim">Sonraki seviye: ${sk.text(skillPow(sk, lv + 1))}</small>` : "";
           return `<div class="brow skill ${lv ? "" : "locked"}">${ic(sk.icon, "bimg")}<div class="bi2"><b>${sk.name} <em>${skillRank(lv)}</em></b><small>${cur}</small>${next}${why && why !== "Beceri puanın yok" ? `<small class="why">${why}</small>` : ""}</div><button class="btn sm plus ${why ? "off" : ""}" data-a="${this.act(() => g.learn(sk.id))}">+</button></div>`;
         }).join("");
+    } else if (this.tab === "unvan") {
+      body = this.titlesHtml();
     } else if (this.tab === "techizat") {
       const inCity = g.nearCity() >= 0;
       body = `<div class="slots">` + SLOTS.map((sl) => {
@@ -921,7 +946,8 @@ export class Hud {
         <p class="dim">${s.free ? "Köylerden gönüllü topla ya da şehir hanlarından paralı asker tut. Askerlerin ücretini altınla ödersin; altının biterse terk ederler. Liderlik birlik sınırını ve askerlerin gücünü artırır." : "Henüz bir kölesin. Hürriyetini kazanınca birlik kurabilirsin."}</p>
         <h3>Toplam</h3><div class="stats"><div>${ic("j_bandit")}Yenilen düşman: <b>${s.kills}</b></div><div>${ic("quest")}Görev: <b>${s.quest}/${g.QUESTS.length}</b></div><div>Ticaret kârı: <b>${s.c.profit}</b></div></div>`;
     }
-    return this.frame(h.name, s.free ? `Seviye ${h.lv} · ${s.beylik ? "Bey" : "Hür yiğit"}` : `Seviye ${h.lv} · Köle`, assetUrl(g.face()), tabs + body);
+    const tl = s.title ? titleOf(s.title) : null;
+    return this.frame(h.name, s.free ? `Seviye ${h.lv} · ${tl ? `<b class="ttl">${tl.name}</b>` : s.beylik ? "Bey" : "Hür yiğit"}` : `Seviye ${h.lv} · Köle`, assetUrl(g.face()), tabs + body);
   }
 
   showBattle(title: string, before: Army, enemy: Army, res: BattleResult, hero: { hpBefore: number; maxHp: number }, xp: number, lvUp: boolean, extra: string, boss: Boss | null, foe: string, onClose: () => void): void {

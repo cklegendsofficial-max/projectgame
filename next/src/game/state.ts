@@ -204,6 +204,8 @@ export interface GameState {
   rep: Record<string, number>;
   repGift: string[];
   caravans: Caravan[];
+  titles: string[];
+  title: string;
   wanted: number;
   wantedT: number;
 }
@@ -406,6 +408,8 @@ export function newGame(w: World): GameState {
     rep: {},
     repGift: [],
     caravans: [],
+    titles: [],
+    title: "",
     wanted: 0,
     wantedT: 0,
   };

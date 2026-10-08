@@ -154,8 +154,8 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #1c120a; col
 .btn.big { width: 100%; padding: 12px; font-size: 16px; }
 .btn.sm { padding: 4px 8px; font-size: 12px; }
 
-.tabs { display: flex; gap: 4px; margin-bottom: 8px; }
-.tab { flex: 1; padding: 7px 4px; border-radius: 8px; cursor: pointer; color: #f4e6c6; font: 600 13px "Segoe UI", sans-serif; background: #0004; border: 1px solid #5a3a1a; }
+.tabs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+.tab { flex: 1 1 0; min-width: 22%; padding: 7px 4px; border-radius: 8px; cursor: pointer; color: #f4e6c6; font: 600 13px "Segoe UI", sans-serif; background: #0004; border: 1px solid #5a3a1a; }
 .tab.on { background: linear-gradient(#8a5d2a, #5a3a1a); border-color: #ffd56a; color: #fff3d6; }
 
 .brow { display: flex; align-items: center; gap: 8px; padding: 8px; margin-bottom: 6px; border-radius: 10px; background: #0003; border: 1px solid #3b2614; }
@@ -251,6 +251,16 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #1c120a; col
 @keyframes wantedblink { 50% { opacity: .55; } }
 .bbox.choice .btn.big { width: 100%; margin-top: 8px; }
 .bbox.choice .btn.bad { background: linear-gradient(#a8402c, #6e2216); color: #ffe2d8; border-color: #ff7a5c; }
+.ttl { color: #ffc27a; }
+.tcat { padding: 7px 9px; margin-bottom: 6px; border-radius: 10px; background: #0004; border: 1px solid #3b2614; }
+.tch { display: flex; align-items: center; gap: 8px; }
+.tch .bi2 { flex: 1; }
+.ttiers { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; margin-top: 6px; }
+.tt { display: flex; flex-direction: column; gap: 1px; padding: 5px 4px; border-radius: 8px; background: #0006; border: 1px solid #3b2614; color: #8a7a62; font: 600 11px "Segoe UI", sans-serif; text-align: center; }
+.tt b { font-size: 12px; }
+.tt small { font-size: 10px; opacity: .8; }
+.tt.got { color: #f4e6c6; border-color: #a07a3a; cursor: pointer; }
+.tt.on { background: linear-gradient(#8a5d2a, #5a3a1a); border-color: #ffd56a; color: #fff3d6; box-shadow: 0 0 10px #ffd56a55; }
 .ftag { --fc: #e0b04a; display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; color: var(--fc); border: 1px solid color-mix(in srgb, var(--fc) 60%, transparent); background: color-mix(in srgb, var(--fc) 14%, transparent); }
 .frep { --fc: #e0b04a; padding: 7px 10px; margin-bottom: 6px; border-radius: 10px; background: #0004; border: 1px solid #3b2614; border-left: 4px solid var(--fc); }
 .frep .frh { display: flex; align-items: center; gap: 8px; }
