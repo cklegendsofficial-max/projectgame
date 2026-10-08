@@ -6,6 +6,7 @@ import { CITY_NAME, NODE_SPRITE, armySize } from "../game/data";
 import { CAPITAL, SLAVE_RADIUS } from "../game/state";
 import { FACTIONS, type FactionId } from "../game/factions";
 import { nemName } from "../game/nemesis";
+import { TOMBS, tombOf } from "../game/deep";
 
 const urls: Record<string, string> = {};
 for (const [p, u] of Object.entries(import.meta.glob<string>("../assets/**/*.webp", { eager: true, query: "?url", import: "default" }))) {
@@ -781,7 +782,7 @@ export class WorldView {
         const k = s.kurgans[i];
         vis(m);
         m.sp.alpha = k.alive ? 1 : k.delved ? 0.35 : 0.6;
-        if (m.label) m.label.text = k.alive ? `Kurgan Taşı Sv ${k.tier}` : k.delved ? "Boş Mezar" : "Mezar Kapısı";
+        if (m.label) m.label.text = k.alive ? `Kurgan Taşı Sv ${k.tier}` : k.delved ? "Boş Mezar" : TOMBS[tombOf(i)].name;
       });
       this.cityM.forEach((m) => {
         m.sp.visible = true;

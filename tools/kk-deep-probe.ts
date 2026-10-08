@@ -71,5 +71,21 @@ console.log("after", JSON.stringify(await ev(`return { deep: g.deep, best: g.s.d
 await ev(`g.hud.openPlace({ kind: "kurgan", i: 0 });`);
 await page.evaluate(() => document.querySelector(".panel .odds.mid")?.scrollIntoView());
 await shot("05-panel");
+console.log("seals", await ev(`return g.s.seals;`), "theme", await ev(`return g.s.kurgans.slice(0, 5).map((k, i) => i);`));
+await ev(`g.s.seals = 300; g.s.deepBest = Math.max(g.s.deepBest, 12); const k = g.s.kurgans[0]; k.delved = false; g.hud.render();`);
+for (let k = 0; k < 30; k++) {
+  const b = page.locator(".panel .grow .btn:not(.off)", { hasText: "mühür" });
+  if (!(await b.count())) break;
+  await b.first().click();
+  await page.waitForTimeout(100);
+}
+await page.evaluate(() => [...document.querySelectorAll("h3")].find((h) => h.textContent?.includes("Derinlik Sırları"))?.scrollIntoView());
+await shot("06-perks");
+console.log("perks", JSON.stringify(await ev(`return { perks: g.s.deepPerks, seals: g.s.seals, starts: g.deepStarts(), torches: g.deepTorches() };`)));
+await page.locator(".panel .btn.big", { hasText: "11. kata" }).click();
+await page.waitForTimeout(400);
+await dismiss();
+console.log("deep start", JSON.stringify(await ev(`return g.deep && { floor: g.deep.floor, theme: g.deep.theme, bless: g.deep.bless, torch: g.deep.torch };`)));
+await shot("07-skip");
 console.log("errors:", errs);
 await browser.close();

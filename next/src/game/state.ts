@@ -245,6 +245,8 @@ export interface GameState {
   counterAt: number;
   rivals: Rival[];
   rivalDay: number;
+  seals: number;
+  deepPerks: Record<string, number>;
 }
 
 export interface MarketEvent {
@@ -463,6 +465,8 @@ export function newGame(w: World): GameState {
     counterAt: 0,
     rivals: [],
     rivalDay: 0,
+    seals: 0,
+    deepPerks: {},
   };
 }
 

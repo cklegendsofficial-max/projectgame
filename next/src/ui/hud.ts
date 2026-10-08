@@ -20,6 +20,7 @@ import { BREEDS, BREED_GOLD, BREED_TIME } from "../game/horse";
 import { TITLE_CATS, titleKey, titleOf } from "../game/titles";
 import { DAILY_POOL } from "../game/daily";
 import { RIVAL_TRAITS, STATUS_NAME } from "../game/rivals";
+import { DEEP_PERKS, TOMBS, tombOf } from "../game/deep";
 import { ENGINE_GOLD as ENGINE_GOLD_UI, FEAST_GOLD as FEAST_GOLD_UI, TAX as TAX_UI } from "../game/conquest";
 
 const WEAPON_ICON: Record<string, string> = { kilic: "it_sword_", balta: "it_axe_", hancer: "it_dagger_", ok: "it_bow_", asa: "it_staff_" };
@@ -301,8 +302,27 @@ export class Hud {
     return `<p>Taş paramparça. Kara büyü ${dur(k.respawnAt - g.now)} sonra yeniden toplanacak.</p>
       <h3>${ic("map/kurgan")} Kurgan Derinlikleri</h3>
       <p>Kırık taşın altında mezara inen bir merdiven açıldı. Kat kat aşağı in: her katta üç kapıdan birini seç. Savaş, hazine, şifa pınarı, Taş Ozan'ın bilmeceleri, Erlik'in teklifleri… Her 5 katta bir bekçi. Ne kadar derine inersen ganimet o kadar büyür.</p>
+      ${this.tombHtml(i)}
       <div class="odds mid">Meşale: <b>${g.deepTorches()}</b> · En derin inişin: <b>${s.deepBest ? `${s.deepBest}. kat` : "—"}</b> · Toplam kat: <b>${s.c.floors}</b></div>
-      ${why ? `<p class="dim">${why}</p>` : near ? `<button class="btn red big" data-a="${this.act(() => { this.close(); g.enterDeep(i); })}">${ic("map/kurgan")} Derinliklere in</button>` : this.walkBtn(t, "Mezara yürü")}`;
+      ${why ? `<p class="dim">${why}</p>` : near ? `<div class="col">${g.deepStarts().map((f) => `<button class="btn red big" data-a="${this.act(() => { this.close(); g.enterDeep(i, f); })}">${ic("map/kurgan")} ${f === 1 ? "Derinliklere in" : `Kestirmeden ${f}. kata in`}</button>`).join("")}</div>` : this.walkBtn(t, "Mezara yürü")}
+      ${this.perksHtml()}`;
+  }
+
+  private tombHtml(i: number): string {
+    const tb = TOMBS[tombOf(i)];
+    return `<div class="brow"><img class="bimg" src="${assetUrl(tb.boss.icon)}" alt=""><div class="bi2"><b>${tb.name}</b><small>${tb.desc}</small><small class="dim">Bekçisi: ${tb.boss.name}</small></div></div>`;
+  }
+
+  private perksHtml(): string {
+    const g = this.g;
+    const s = g.s;
+    return `<h3>${ic("ruh")} Derinlik Sırları <em>${s.seals} Kemik Mühür</em></h3><p class="dim">Her inilen kat 1, her bekçi 3 Kemik Mühür kazandırır. Mühürlerle kalıcı zindan yetenekleri açılır.</p>` +
+      DEEP_PERKS.map((p) => {
+        const lv = g.dperk(p.id);
+        const max = lv >= p.max;
+        const cost = p.cost(lv);
+        return `<div class="grow">${ic(p.icon, "gimg")}<div class="bi2"><b>${p.name} <em>${lv}/${p.max}</em></b><small>${p.desc(Math.max(1, max ? lv : lv + 1))}</small></div>${max ? `<em class="cheap">✓</em>` : `<button class="btn sm ${s.seals < cost ? "off" : ""}" data-a="${this.act(() => g.buyDeepPerk(p.id))}">Aç<br>${cost} mühür</button>`}</div>`;
+      }).join("");
   }
 
   private dailyHtml(): string {
