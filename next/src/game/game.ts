@@ -36,6 +36,7 @@ const MARCH_SPEED = 26;
 const CAP_I = CITIES.findIndex((c) => c.id === "samarkand");
 const RES_SELL: Record<keyof Res, number> = { gold: 1, wood: 3, stone: 4, food: 2 };
 const WAGE: Record<Unit, number> = { spear: 0.5, archer: 0.8, horse: 1.4 };
+export const LORD_SERAIS = 8;
 let wiped = false;
 const saveGame = (s: GameState) => wiped || rawSave(s);
 
@@ -1528,6 +1529,18 @@ export class Game {
   private storyTick(): void {
     const ch = this.chapter();
     if (ch?.auto && this.chapterReady() && !this.battleLock && ch.auto(this)) this.storyAdvance();
+    const s = this.s;
+    if (s.story.done && !s.story.lord && this.seraiCount() >= LORD_SERAIS && !this.battleLock) {
+      s.story.lord = true;
+      s.renown += 100;
+      this.gain({ gold: 5000 });
+      this.hud.story(
+        "İpek Yolu'nun Efendisi",
+        "map/serai",
+        `Konstantinopolis'ten Kaşgar'a kadar her kervan senin tamganın altında konaklıyor. Tüccarlar adını dualarına katıyor, hanlar senin ekmeğini yiyor.<br><br>Bir zamanlar boynunda demir halka taşıyan ${s.hero.name}, artık bozkırın değil, yolun kendisinin sahibi.<br><br><b>+5000 altın · +100 şöhret · Unvan: İpek Yolu'nun Efendisi</b>`,
+        "Yol hiç bitmez",
+      );
+    }
   }
 
   private placeFort(): void {
@@ -1564,7 +1577,7 @@ export class Game {
       this.hud.story(
         "Destan tamamlandı: Kara Tamga yıkıldı",
         this.face(),
-        `Kara Han'ın kılıcı elinden düştü. Kalenin zindanlarında annenle küçük Ertuğrul'u buldun; zincirlerini kendi ellerinle kırdın. Esirlerin ruhları mor bir ışık selinde göğe yükseldi ve bozkırdaki bütün Kurgan Taşları bir an için sustu.<br><br>Ozanlar artık senin adını söylüyor: <b>${s.hero.name}, İpek Yolu'nun Kurtarıcısı</b>.<br><br>Ama Kara Han'ın kılıcını alan herkes bilir: bozkırda boşalan taht uzun süre boş kalmaz. Yolların, beyliğin ve ordun seni bekliyor.`,
+        `Kara Han'ın kılıcı elinden düştü. Kalenin zindanlarında annenle küçük Ertuğrul'u buldun; zincirlerini kendi ellerinle kırdın. Esirlerin ruhları mor bir ışık selinde göğe yükseldi ve bozkırdaki bütün Kurgan Taşları bir an için sustu.<br><br>Ozanlar artık senin adını söylüyor: <b>${s.hero.name}, İpek Yolu'nun Kurtarıcısı</b>.<br><br>Ama Kara Han'ın kılıcını alan herkes bilir: bozkırda boşalan taht uzun süre boş kalmaz. Yolların, beyliğin ve ordun seni bekliyor.<br><br><b>Yeni hedef:</b> İpek Yolu'nun ${LORD_SERAIS} şehrinde kervansaray kurarak yolun efendisi ol.`,
         "Yola devam",
       );
       return `Kara Han yenildi! +5000 altın, +100 şöhret, +25 Ruh Taşı, +3 Parşömen<br>Efsanevi ganimet: <b class="r3">${it.name}</b>`;

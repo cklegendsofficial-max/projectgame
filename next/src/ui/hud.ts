@@ -1,4 +1,4 @@
-import type { Game, Quest, Target } from "../game/game";
+import { LORD_SERAIS, type Game, type Quest, type Target } from "../game/game";
 import { BUILDINGS, NODE_NAME, RES_ICON, RES_KEYS, RES_NAME, UNITS, UNIT_KEYS, armySize, buildCost, buildTime, prodPerMin, unitUnlocked, xpNeed, type Army, type Res, type Unit } from "../game/data";
 import { TACTICS, TACTIC_KEYS, type BattleResult, type Boss, type Tactic } from "../game/battle";
 import { GOODS, GOOD_KEYS, PLUS_CHANCE, SKILL_INFO, SKILL_KEYS, SLOTS, SLOT_NAME, STAT_INFO, STAT_KEYS, canPlus, itemStats, kindName, plusCost, skillLv, skillNext, type Item } from "../game/rpg";
@@ -825,10 +825,14 @@ export class Hud {
       : `${ic("crown", "qi")}<div><b>Tüm görevler bitti</b><span>Kampları temizle, beyliğini büyüt, batıya doğru keşfet.</span></div>`;
     const ch = g.chapter();
     this.questEl.classList.toggle("hidden", !q && !!ch && s.free);
-    this.sagaEl.classList.toggle("hidden", !ch || !s.free);
+    const lordGoal = s.story.done && !s.story.lord;
+    this.sagaEl.classList.toggle("hidden", !(ch && s.free) && !lordGoal);
     if (ch && s.free) {
       const why = ch.req?.(g);
       const html = `${ic(ch.img, "qi round")}<div><small>Kara Tamga Destanı · Bölüm ${s.story.ch + 1}/5</small><b>${ch.title}</b><span>${ch.goal}${why ? ` <i class="why">(${why})</i>` : ""}</span></div>`;
+      if (this.sagaEl.innerHTML !== html) this.sagaEl.innerHTML = html;
+    } else if (lordGoal) {
+      const html = `${ic("map/serai", "qi round")}<div><small>Destan sonrası</small><b>İpek Yolu'nun Efendisi</b><span>Semerkant dışındaki ${LORD_SERAIS} şehrin hepsinde kervansaray kur (${g.seraiCount()}/${LORD_SERAIS}).</span></div>`;
       if (this.sagaEl.innerHTML !== html) this.sagaEl.innerHTML = html;
     }
     const r = s.raid;

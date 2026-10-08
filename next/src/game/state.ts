@@ -162,7 +162,7 @@ export interface GameState {
   bountyDay: number;
   wageDebt: number;
   mats: { ruh: number; parsomen: number };
-  story: { ch: number; fort: { x: number; y: number } | null; done: boolean };
+  story: { ch: number; fort: { x: number; y: number } | null; done: boolean; lord: boolean };
   comps: string[];
   events: MarketEvent[];
   evDay: number;
@@ -352,7 +352,7 @@ export function newGame(w: World): GameState {
     bountyDay: 0,
     wageDebt: 0,
     mats: { ruh: 0, parsomen: 0 },
-    story: { ch: 0, fort: null, done: false },
+    story: { ch: 0, fort: null, done: false, lord: false },
     comps: [],
     events: [],
     evDay: 0,
