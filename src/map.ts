@@ -9,6 +9,7 @@ import { TITAN_MS, TITAN_POS } from "./quests";
 import { TW_BONUS, TW_PENALTY } from "./saga";
 import { HAN_T } from "./caravanserai";
 import { CAMP_BONUS, activeFestival, campWanted, type Camp } from "./perks";
+import { isOpen } from "./unlocks";
 import { REGIONS, duskAmount, nightAmount, regionConquered, regionVisible } from "./province";
 import { GATHER_MS, NODES, NODE_ICON, RUIN_MS, nodeOpen, nodeReady } from "./frontier";
 import type { MapEvent } from "./events";
@@ -2531,7 +2532,7 @@ export class MapView {
   }
 
   private drawNodes(g: CanvasRenderingContext2D, s: GameState, u: number, time: number, now: number): void {
-    if (s.tutorial < 5) return;
+    if (!isOpen(s, "realm")) return;
     for (let k = 0; k < NODES.length; k++) {
       if (!nodeOpen(s, k)) continue;
       const n = NODES[k];
@@ -2576,7 +2577,7 @@ export class MapView {
   }
 
   private drawRegions(g: CanvasRenderingContext2D, s: GameState, u: number, time: number, now: number): void {
-    if (s.tutorial < 5) return;
+    if (!isOpen(s, "realm")) return;
     for (let k = 0; k < REGIONS.length; k++) {
       if (!regionVisible(s, k)) continue;
       const def = REGIONS[k];
@@ -2673,7 +2674,7 @@ export class MapView {
   }
 
   private drawCourt(g: CanvasRenderingContext2D, s: GameState, u: number, time: number): void {
-    if (s.tutorial < 5) return;
+    if (!isOpen(s, "court")) return;
     const p = this.px(COURT_POS.x, COURT_POS.y);
     if (p.x < -40 || p.x > this.w + 40 || p.y < -40 || p.y > this.h + 40) return;
     const waiting = !!s.court;
@@ -2757,7 +2758,7 @@ export class MapView {
       const q = this.travelerPoint(u, performance.now() / 1000);
       if (Math.hypot(q.x - x, q.y - y) < 28 * u) return { type: "traveler" };
     }
-    if (s && s.tutorial >= 5) {
+    if (s && isOpen(s, "realm")) {
       if (this.merchant >= 0) {
         const m = this.merchantPos(u);
         if (m && Math.hypot(m.x - x, m.y - y) < 24 * u) return { type: "merchant" };
@@ -2773,7 +2774,7 @@ export class MapView {
         if (Math.hypot(p.x - x, p.y - y) < 20 * u) return { type: "node", k };
       }
     }
-    if (s && s.tutorial >= 5) {
+    if (s && isOpen(s, "court")) {
       const p = this.px(COURT_POS.x, COURT_POS.y);
       if (Math.hypot(p.x - x, p.y - y) < 28 * u) return { type: "court" };
     }

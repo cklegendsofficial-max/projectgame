@@ -209,6 +209,7 @@ import {
   youthTick,
   type Rarity,
 } from "./province";
+import { isOpen, pendingFeature } from "./unlocks";
 import { buyOffer, buybackPrice, nextMerchantDelay, offerPrice, rollMerchant, sellTrophy, sellable } from "./merchant";
 import { GATHER_MS, GOV_STEP, NODES, RUIN_MS, gatherMat, gatherYield, governorCity, governorOf, nodeOpen, nodeReady, ruinNeed } from "./frontier";
 import {
@@ -394,6 +395,7 @@ class Game implements GameApi {
       }
       this.warTick(now, dt);
       this.tutorialTick(now);
+      this.unlockTick();
       this.chronicleTick();
       this.cityTick(now);
       this.worldTick(now);
@@ -1127,7 +1129,10 @@ class Game implements GameApi {
       if (this.pendingRelics.length > 0) this.showRelic(this.pendingRelics.shift()!);
       else this.letterTick(now);
     }
-    if (!modalOpen() && this.bardQueue.length > 0 && !this.bardShowing) this.showBard(this.bardQueue.shift()!);
+    if (!modalOpen() && this.bardQueue.length > 0 && !this.bardShowing && Date.now() >= this.bardNext) {
+      this.bardNext = Date.now() + 25_000;
+      this.showBard(this.bardQueue.shift()!);
+    }
     arenaTickets(s, now);
     const season = closeSeason(s, now);
     if (season) {
@@ -1434,8 +1439,9 @@ class Game implements GameApi {
     const v = Math.floor(Math.random() * BARD_VARIANTS);
     s.sagaLog.push({ ev, v, vars, gen: s.ruler.gen, at: Date.now() });
     if (s.sagaLog.length > MAX_SAGA) s.sagaLog.shift();
-    if (this.bardQueue.length < 3) this.bardQueue.push({ ev, vars, v });
+    if (this.bardQueue.length < 1) this.bardQueue.push({ ev, vars, v });
   }
+  private bardNext = 0;
 
   private showBard(b: { ev: BardEvent; vars: Record<string, string | number>; v: number }): void {
     let box = document.getElementById("bard");
@@ -1459,7 +1465,7 @@ class Game implements GameApi {
       if (i >= line.length) clearInterval(this.bardTyping);
     }, 28);
     clearTimeout(this.bardTimer);
-    this.bardTimer = window.setTimeout(() => this.hideBard(), 4500 + line.length * 40);
+    this.bardTimer = window.setTimeout(() => this.hideBard(), 3000 + line.length * 30);
     sfx.kopuz();
   }
 
@@ -1584,7 +1590,7 @@ class Game implements GameApi {
       }
       return;
     }
-    if (now < s.nextTradeWar || s.tutorial < 5 || document.hidden || modalOpen()) return;
+    if (now < s.nextTradeWar || !isOpen(s, "war") || document.hidden || modalOpen()) return;
     if (s.spies > 0 && Math.random() < SPY_FOIL * s.spies) {
       s.nextTradeWar = now + (9 + Math.random() * 5) * 60_000;
       s.stats.foiled++;
@@ -1833,7 +1839,7 @@ class Game implements GameApi {
 
   private campTick(now: number): void {
     const s = this.s;
-    if (s.tutorial < 5) return;
+    if (!isOpen(s, "events")) return;
     const k = campSeasonIndex(now);
     if (!s.camp) {
       s.camp = campWanted(now);
@@ -2038,7 +2044,7 @@ class Game implements GameApi {
       this.offerRival(bank);
     }
     const s = this.s;
-    if (now < this.nextRival || s.tutorial < 5 || modalOpen() || document.hidden || this.map.stormLive(now)) return;
+    if (now < this.nextRival || !isOpen(s, "events") || modalOpen() || document.hidden || this.map.stormLive(now)) return;
     const owned = s.routes.map((r, i) => (r.owned > 0 ? i : -1)).filter((i) => i >= 0);
     if (owned.length === 0) return;
     const route = owned[Math.floor(Math.random() * owned.length)];
@@ -2088,7 +2094,7 @@ class Game implements GameApi {
   }
 
   startSilkStorm(route: number, now = Date.now()): void {
-    if (this.s.tutorial < 5 || this.map.stormLive(now) || modalOpen()) return;
+    if (!isOpen(this.s, "events") || this.map.stormLive(now) || modalOpen()) return;
     this.stormBank = 0;
     this.map.beginStorm(route, now);
     sfx.event();
@@ -2208,7 +2214,7 @@ class Game implements GameApi {
       return;
     }
     this.map.merchant = -1;
-    if (now < s.nextMerchant || document.hidden || s.tutorial < 5) return;
+    if (now < s.nextMerchant || document.hidden || !isOpen(s, "realm")) return;
     s.nextMerchant = now + nextMerchantDelay();
     const m = rollMerchant(s, now);
     if (!m) return;
@@ -2292,7 +2298,7 @@ class Game implements GameApi {
       if (now >= inc.until) this.loseIncursion(false);
       return;
     }
-    if (now < s.nextIncursion || document.hidden || s.tutorial < 5) return;
+    if (now < s.nextIncursion || document.hidden || !isOpen(s, "realm")) return;
     const open = s.regions.map((r, k) => (r.open && s.revolt !== k ? k : -1)).filter((k) => k >= 0);
     s.nextIncursion = now + nextIncursionDelay();
     if (open.length === 0) return;
@@ -2767,7 +2773,7 @@ class Game implements GameApi {
 
   private courtTick(now: number): void {
     const s = this.s;
-    if (s.tutorial < 5 || s.court || now < s.nextCourt || modalOpen() || document.hidden) return;
+    if (!isOpen(s, "court") || s.court || now < s.nextCourt || modalOpen() || document.hidden) return;
     const p = pickPetition(s);
     s.court = p.id;
     s.storiesSeen.push("court_" + p.id);
@@ -3129,7 +3135,7 @@ class Game implements GameApi {
 
   private festTick(now: number): void {
     const s = this.s;
-    if (s.tutorial < 5 || modalOpen() || document.hidden) return;
+    if (!isOpen(s, "events") || modalOpen() || document.hidden) return;
     const f = activeFestival(now);
     if (!f) return;
     const key = festivalKey(f, now);
@@ -3306,7 +3312,7 @@ class Game implements GameApi {
   private heroPrompted = false;
 
   private heroTick(): void {
-    if (this.s.hero || this.heroPrompted || this.s.tutorial < 4 || modalOpen()) return;
+    if (this.s.hero || this.heroPrompted || !isOpen(this.s, "army") || modalOpen()) return;
     this.heroPrompted = true;
     this.openHeroCreator();
   }
@@ -3478,11 +3484,42 @@ class Game implements GameApi {
     this.ui.dirty = true;
   }
 
+  private unlockTick(): void {
+    const s = this.s;
+    if (modalOpen() || document.hidden) return;
+    const f = pendingFeature(s);
+    if (!f) return;
+    s.unlocked.push(f.id);
+    sfx.fanfare();
+    this.ui.dirty = true;
+    this.ui.renderStatic();
+    this.save();
+    showModal(
+      t("unlockTitle"),
+      `<div class="unlockArt">${icon(f.icon, "ico big")}</div><h3 class="unlockName">${tk("feat_" + f.id)}</h3><p>${tk("featd_" + f.id)}</p>`,
+      [
+        { label: t("close"), cls: "secondary" },
+        { label: t("unlockGo"), cls: "primary", onClick: () => this.gotoFeature(f.tab, f.sub) },
+      ],
+      { icon: icon("chest"), dismissable: true },
+    );
+  }
+
+  private gotoFeature(tab: "army" | "dynasty" | "routes", sub?: string): void {
+    if (sub) this.ui.armySub = sub as typeof this.ui.armySub;
+    this.ui.setTab(tab);
+  }
+
   private tutorialTick(now: number): void {
     const s = this.s;
     switch (s.tutorial) {
       case 0:
-        if (s.routes[0].trips >= 1) s.tutorial = 1;
+        if (s.routes[0].trips >= 1) {
+          s.tutorial = 1;
+          this.map.celebrateCity(ROUTES[0].to, performance.now());
+          this.toasts.show(`${icon("coins")} ${t("firstTrip")}`, "gold", 3200);
+          sfx.fanfare();
+        }
         break;
       case 1:
         if (s.routes[0].owned >= 5) s.tutorial = 2;

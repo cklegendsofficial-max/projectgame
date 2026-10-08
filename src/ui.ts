@@ -1,5 +1,6 @@
 import { ACHIEVEMENTS, achievementMult } from "./achievements";
 import { isPlatformMuted } from "./audio";
+import { isOpen } from "./unlocks";
 import { ARTIFACTS, ART_SLOTS, canForgeArt, weatherAt, weatherEnds, HAPPY_MOOD, REGIONS, REGION_MAX, REVOLT_MOOD, TAXES, TROPHY_IDS, TROPHY_RARITY, anyRegionAction, mercPower, monthWage, provinceMult, questDone, realmNam, regionConquered, regionCost, regionVisible, trophyMult } from "./province";
 import { COMPANION_IDS, COMPANION_MAX, compEffect, compLevel, compText, compUpgradeCost, type CompanionId } from "./companions";
 import { CHAPTERS, chronicleGlobalMult, currentChapter, goalDone, goalValue, story, travelerName, type Chapter, type TravelerId } from "./chronicle";
@@ -520,6 +521,7 @@ export class UI {
     const s = this.g.s;
     return [
       this.tab,
+      s.unlocked.join(","),
       s.settings.lang,
       s.settings.notation,
       s.routes.map((r) => (r.owned > 0 ? 1 : 0)).join(""),
@@ -566,7 +568,10 @@ export class UI {
       ["dynasty", t("tabDynasty")],
       ["stats", t("tabStats")],
     ];
+    const s = this.g.s;
+    if ((this.tab === "army" && !isOpen(s, "army")) || (this.tab === "dynasty" && !isOpen(s, "dynasty"))) this.tab = "routes";
     for (const [id, label] of defs) {
+      if ((id === "army" && !isOpen(s, "army")) || (id === "dynasty" && !isOpen(s, "dynasty"))) continue;
       const b = el("button", "tab" + (this.tab === id ? " active" : ""));
       b.dataset.tab = id;
       b.innerHTML = `<span>${label}</span><i class="badge"></i>`;
@@ -669,7 +674,7 @@ export class UI {
   private buildBazaar(): void {
     const g = this.g;
     const s = g.s;
-    if (s.tutorial < 5) return;
+    if (!isOpen(s, "bazaar")) return;
     this.body.appendChild(el("h4", "sect", `${icon("bedesten", "ico sm")} ${t("bazaarTitle")}`));
     this.body.appendChild(el("p", "muted small", t("bazaarIntro", { n: BAZAAR_MIN_OWNED, f: Math.round(BAZAAR_FEE * 100) })));
     const box = el("div", "bazaar");
@@ -959,14 +964,15 @@ export class UI {
   private buildArmy(): void {
     const g = this.g;
     const s = g.s;
-    const subs: [ArmySub, string, string][] = [
+    const subs = ([
       ["hero", t("subHero"), "it_sword"],
       ["army", t("subArmy"), "soldier"],
       ["realm", t("subRealm"), "village"],
       ["war", t("subWar"), "fortress"],
       ["arena", t("subArena"), "arena"],
       ["guild", t("subGuild"), "guild"],
-    ];
+    ] as [ArmySub, string, string][]).filter(([id]) => id === "hero" || id === "army" || isOpen(s, id));
+    if (!subs.some(([id]) => id === this.armySub)) this.armySub = "hero";
     const bar = el("div", "subtabs");
     for (const [id, label, ic] of subs) {
       const b = el("button", "sub" + (this.armySub === id ? " active" : ""), `${icon(ic, "ico sm")}<span>${label}</span><i class="badge"></i>`);
@@ -2116,15 +2122,38 @@ export class Toasts {
   constructor() {
     this.root = $("toasts");
   }
+  private queue: { text: string; kind: string; ms: number }[] = [];
+  private live = 0;
+  private recent = new Map<string, number>();
+
   show(text: string, kind: "info" | "gold" | "good" | "bad" = "info", ms = 2600): void {
-    const e = el("div", "toast " + kind, text);
-    this.root.appendChild(e);
-    while (this.root.children.length > 3) this.root.firstElementChild?.remove();
-    requestAnimationFrame(() => e.classList.add("in"));
-    window.setTimeout(() => {
-      e.classList.remove("in");
-      window.setTimeout(() => e.remove(), 300);
-    }, ms);
+    const now = Date.now();
+    if ((this.recent.get(text) ?? 0) > now) return;
+    if (this.queue.some((q) => q.text === text)) return;
+    this.recent.set(text, now + 4000);
+    if (this.recent.size > 40) for (const [k, v] of this.recent) if (v < now) this.recent.delete(k);
+    if (kind === "info" && this.queue.length >= 2) return;
+    this.queue.push({ text, kind, ms: Math.min(ms, 3200) });
+    if (this.queue.length > 4) this.queue.splice(Math.max(0, this.queue.findIndex((q) => q.kind === "info")), 1);
+    this.pump();
+  }
+
+  private pump(): void {
+    while (this.live < 2 && this.queue.length > 0) {
+      const q = this.queue.shift()!;
+      const e = el("div", "toast " + q.kind, q.text);
+      this.root.appendChild(e);
+      this.live++;
+      requestAnimationFrame(() => e.classList.add("in"));
+      window.setTimeout(() => {
+        e.classList.remove("in");
+        window.setTimeout(() => {
+          e.remove();
+          this.live--;
+          this.pump();
+        }, 300);
+      }, q.ms);
+    }
   }
 }
 

@@ -10,6 +10,7 @@ import { BARD_EVENTS, GUILD_TIERS, MAX_SAGA, RAID_TICKETS, RAID_TIERS, SEASON_ST
 import { isPetition } from "./court";
 import { NODES, freshNodes, isCity } from "./frontier";
 import { cleanOffers, isMerchant, type Merchant } from "./merchant";
+import { migrateUnlocks, type Feature } from "./unlocks";
 import { ARTIFACTS, ART_SLOTS, MONTH_MS, QUEST_STEPS, REGIONS, REGION_MAX, TAXES, TROPHY_IDS, freshRegion, type Incursion, type RegionState } from "./province";
 import { EXP_HP, EXP_ROWS, EXP_TICKETS, freshBazaar, type Expedition, type Relation, type Stock } from "./realm";
 import { AGES, CREST_COLORS, CREST_SYMBOLS, RIVALS, TRAITS, WONDERS, WONDER_STAGES, type Ruler, type TraitId } from "./empire";
@@ -108,6 +109,7 @@ export interface GameState {
   nextIncursion: number;
   merchant: Merchant | null;
   nextMerchant: number;
+  unlocked: Feature[];
   stats: {
     clicks: number;
     bandits: number;
@@ -259,6 +261,7 @@ export function newGame(): GameState {
     nextIncursion: now + 8 * 60_000,
     merchant: null,
     nextMerchant: now + 5 * 60_000,
+    unlocked: [],
     stats: {
       clicks: 0,
       bandits: 0,
@@ -608,6 +611,7 @@ export function sanitize(raw: unknown): GameState {
   s.nextIncursion = num(r.nextIncursion, base.nextIncursion);
   s.merchant = isMerchant(r.merchant) && s.regions[r.merchant.k].open ? { k: r.merchant.k, until: r.merchant.until, offers: cleanOffers(r.merchant.offers) } : null;
   s.nextMerchant = num(r.nextMerchant, base.nextMerchant);
+  s.unlocked = migrateUnlocks(s, r.unlocked);
   s.governors = {};
   if (r.governors && typeof r.governors === "object") {
     const used = new Set<string>();
