@@ -182,6 +182,8 @@ export interface GameState {
   sideQ: SideQuest[];
   board: Record<string, { day: number; list: SideQuest[] }>;
   codex: string[];
+  rep: Record<string, number>;
+  repGift: string[];
 }
 
 export interface MarketEvent {
@@ -379,6 +381,8 @@ export function newGame(w: World): GameState {
     sideQ: [],
     board: {},
     codex: [],
+    rep: {},
+    repGift: [],
   };
 }
 

@@ -10,6 +10,7 @@ import { TACTICS, TACTIC_KEYS, fight, odds, stanceWeights, tacticDelta, type Bat
 import { BUILDINGS, BUILDING_BY_ID, CITY_NAME, DAY_SEC, RES_KEYS, UNITS, UNIT_KEYS, army, armyPower, armySize, buildCost, buildTime, prodPerMin, storageCap, trainSpeed, unitUnlocked, xpNeed, type Army, type BuildingId, type Res, type Unit } from "./data";
 import { CITY_TRADE, GOODS, GOOD_KEYS, PLUS_CHANCE, SLOTS, STAT_INFO, canPlus, classItem, goodMult, itemPrice, makeItem, plusCost, rollItem, setPiece, setPlus, skillLv, uniqueItem, type Good, type Item, type Skill, type Slot, type Stat } from "./rpg";
 import { SETS, SET_FORGE, SET_KEYS, SET_SLOTS, UNIQUES, addMods, type GearMods, type SetId } from "./legend";
+import { FACTIONS, FACTION_KEYS, HOSTILE, REP_RANKS, RANK_PERKS, factionOf, repRank, type FactionId } from "./factions";
 import { CLASS_BY_ID, CLASS_SKILLS, SKILL_MAX, WEAPON_NAME, WEAPON_STAT, skillPow, skillRank, type ClassDef, type ClassId, type ClassSkill, type WeaponKind } from "./classes";
 import { CHAPTERS, COMP_BY_ID, COMP_MAX, FORT_GUARD, KARA_HAN, KASIM, type Chapter, type CompId, type CompMods, type Companion } from "./story";
 import { CAPITAL, SLAVE_RADIUS, banditArmy, campGarrison, kurganBoss, kurganGuard, loadGame, saveGame as rawSave, wipeGame, type Bandit, type Bounty, type Contract, type GameState } from "./state";
@@ -258,7 +259,7 @@ export class Game {
   }
 
   heroBonus(): number {
-    return 0.025 * this.stat("lid") + 0.02 * (this.s.hero.lv - 1) + this.cls().mods.army + this.compMods().army + 0.03 * this.tal("nara") + (this.buff("davul") ? 0.15 : 0) + (this.gearMods().army ?? 0);
+    return 0.025 * this.stat("lid") + 0.02 * (this.s.hero.lv - 1) + this.cls().mods.army + this.compMods().army + 0.03 * this.tal("nara") + (this.buff("davul") ? 0.15 : 0) + (this.gearMods().army ?? 0) + this.heroRankBonus();
   }
 
   heroCap(): number {
@@ -651,11 +652,77 @@ export class Game {
   }
 
   buyPrice(city: string, g: Good): number {
-    return Math.max(1, Math.round(this.price(city, g) * this.buyFactor() * (1 - 0.02 * (this.s.serais[city]?.lv ?? 0))));
+    return Math.max(1, Math.round(this.price(city, g) * this.buyFactor() * (1 - 0.02 * (this.s.serais[city]?.lv ?? 0) - this.repTrade(city))));
   }
 
   sellPrice(city: string, g: Good): number {
-    return Math.max(1, Math.round(this.price(city, g) * this.sellFactor() * (1 + 0.02 * (this.s.serais[city]?.lv ?? 0))));
+    return Math.max(1, Math.round(this.price(city, g) * this.sellFactor() * (1 + 0.02 * (this.s.serais[city]?.lv ?? 0) + this.repTrade(city))));
+  }
+
+  // ---------- factions ----------
+
+  rep(f: FactionId): number {
+    return this.s.rep[f] ?? 0;
+  }
+
+  rank(f: FactionId): number {
+    return repRank(this.rep(f));
+  }
+
+  cityRank(city: string): number {
+    return this.rank(factionOf(city));
+  }
+
+  hostile(city: string): boolean {
+    return this.rep(factionOf(city)) <= HOSTILE;
+  }
+
+  repTrade(city: string): number {
+    if (this.hostile(city)) return -0.08;
+    return [0, 0.03, 0.03, 0.06, 0.06][this.cityRank(city)];
+  }
+
+  heroRankBonus(): number {
+    return FACTION_KEYS.filter((f) => this.rank(f) >= 4).length * 0.05;
+  }
+
+  addRep(f: FactionId, n: number, why = ""): void {
+    const s = this.s;
+    if (!s.free || n <= 0) return;
+    const r0 = this.rank(f);
+    s.rep[f] = Math.min(2000, this.rep(f) + n);
+    const rv = FACTIONS[f].rival;
+    const wasHostile = this.rep(rv) <= HOSTILE;
+    s.rep[rv] = Math.max(-500, this.rep(rv) - Math.ceil(n * 0.25));
+    if (!wasHostile && this.rep(rv) <= HOSTILE) this.hud.toast(`${FACTIONS[rv].name} seni artık düşman sayıyor! Pazarları pahalı, görev panoları kapalı.`, "bad");
+    const r1 = this.rank(f);
+    if (r1 <= r0) return;
+    const fac = FACTIONS[f];
+    audio.play("quest");
+    this.hud.toast(`${fac.name} gözünde artık ${REP_RANKS[r1].you}${why ? ` (${why})` : ""}`, "good");
+    if (r1 >= 3 && !s.repGift.includes(f)) {
+      s.repGift.push(f);
+      const it = setPiece(s.nextId++, this.cls(), fac.gift, "tilsim", this.legendTier());
+      this.hud.story(
+        `${fac.rulerGen} armağanı`,
+        "icons/seal",
+        `${fac.name} sarayına çağrıldın. ${fac.ruler} tahtından kalkıp seni kucakladı: "Adını yollarda, hanlarda, savaş meydanlarında duydum. Bundan böyle ${fac.name} senin de yurdundur."<br><br>Elçiler önüne kadife bir kese koydu.<br><br><b>${RANK_PERKS[3]}</b>`,
+        "Armağanı al",
+      );
+      this.gainLegend(it);
+    } else if (r1 >= 4) {
+      this.hud.story(`${fac.name} Kahramanı`, "icons/trophy", `${fac.name} şehirlerinde artık adın türkülerde geçiyor. Çocuklar oyunlarında seni oynuyor, beyler sofrasında yer açıyor.<br><br><b>${RANK_PERKS[4]}</b>`, "Devam");
+    }
+  }
+
+  repNear(x: number, y: number, n: number, why: string): void {
+    const c = CITIES.map((c) => ({ c, d: Math.hypot(c.x - x, c.y - y) })).sort((a, b) => a.d - b.d)[0];
+    this.addRep(factionOf(c.c.id), n, why);
+  }
+
+  eliteCost(city: string, u: Unit): number {
+    const f = FACTIONS[factionOf(city)];
+    return Math.round(this.hireCost(u) * (f.unit === u && this.cityRank(city) >= 2 ? 0.7 : 1));
   }
 
   buyGood(city: string, g: Good, n: number): void {
@@ -695,6 +762,7 @@ export class Game {
     this.s.res.gold += got;
     const profit = Math.round(got - basis);
     if (profit > 0) this.s.c.profit += profit;
+    if (profit >= 120) this.addRep(factionOf(city), Math.floor(profit / 120), "ticaret");
     h.skills.ticaret += Math.ceil(got / 20);
     this.addXp(Math.max(0, Math.floor(profit / 15)));
     this.hud.toast(`${k0} ${GOODS[g].name} satıldı: +${got} altın (${profit >= 0 ? "kâr" : "zarar"} ${Math.abs(profit)})`, profit >= 0 ? "good" : "bad");
@@ -954,14 +1022,15 @@ export class Game {
     return q;
   }
 
-  sideReason(): string | null {
+  sideReason(city = ""): string | null {
     if (!this.s.free) return "Önce hürriyetini kazan";
+    if (city && this.hostile(city)) return `${FACTIONS[factionOf(city)].name} sana iş vermiyor`;
     if (this.s.sideQ.length >= 3) return "En fazla 3 görev alabilirsin";
     return null;
   }
 
   takeSide(city: string, id: number): void {
-    if (this.sideReason()) return;
+    if (this.sideReason(city)) return;
     const b = this.sideBoard(city);
     const i = b.findIndex((q) => q.id === id);
     if (i < 0) return;
@@ -993,7 +1062,8 @@ export class Game {
       }
       if (q.kind === "ruh") s.mats.ruh -= q.need;
       s.sideQ = s.sideQ.filter((x) => x.id !== q.id);
-      s.res.gold += q.gold;
+      s.res.gold += Math.round(q.gold * (this.cityRank(city) >= 2 ? 1.15 : 1));
+      this.addRep(factionOf(city), 12 + q.renown * 3, "şehir görevi");
       s.renown += q.renown;
       s.c.sides++;
       const up = this.addXp(q.xp);
@@ -1648,6 +1718,7 @@ export class Game {
       this.s.renown += c.tier * 8;
       this.s.c.camps++;
       this.s.mats.ruh += c.tier;
+      this.repNear(c.x, c.y, 5 * c.tier, "haramileri temizledin");
       let txt = `Kamp yerle bir edildi! +${loot.gold} altın, +${c.tier * 8} şöhret, +${c.tier} Ruh Taşı`;
       for (const b of this.s.bounties.filter((x) => x.camp === i && x.taken)) {
         this.s.res.gold += b.gold;
@@ -1672,6 +1743,7 @@ export class Game {
       k.alive = false;
       k.respawnAt = this.now + 20 * 60000;
       this.s.c.kurgans++;
+      this.repNear(k.x, k.y, 3 * k.tier, "ruhları özgür bıraktın");
       const ruh = 2 * k.tier + Math.floor(Math.random() * 3);
       const gold = Math.round((50 * k.tier * k.tier + 30) * this.stealMult());
       this.s.mats.ruh += ruh;
@@ -1805,6 +1877,7 @@ export class Game {
     this.s.res.gold += gold;
     this.s.renown += 4;
     this.s.c.contracts++;
+    this.addRep(factionOf(c.to), 10, "emanet");
     const up = this.addXp(Math.round(c.gold / 3));
     this.hud.toast(`Emanet teslim edildi: +${gold} altın, +4 şöhret${this.s.serais[c.to] ? " (kervansaray primi)" : ""}${up ? " · Seviye atladın!" : ""}`, "good");
     this.s.contract = null;
@@ -1890,6 +1963,7 @@ export class Game {
       v.rep = Math.min(100, v.rep + 20);
       v.rec = this.volMax(v.rep);
       this.s.c.raids++;
+      this.repNear(v.x, v.y, 15, "köy savunması");
       const gold = Math.round((30 + armyPower(r.army)) * this.stealMult());
       this.gain({ gold, food: 80 });
       this.s.renown += 6;
@@ -2058,12 +2132,12 @@ export class Game {
     return Math.round(base * (1 - Math.min(0.3, this.stat("kar") * 0.02)));
   }
 
-  hire(u: Unit, n: number): void {
+  hire(u: Unit, n: number, city = ""): void {
     if (!this.s.free) return;
     const room = this.heroCap() - armySize(this.s.hero.army);
     const k = Math.min(n, room);
     if (k <= 0) return;
-    if (!this.pay({ gold: this.hireCost(u) * k })) {
+    if (!this.pay({ gold: (city ? this.eliteCost(city, u) : this.hireCost(u)) * k })) {
       this.hud.toast("Altın yetersiz", "bad");
       return;
     }

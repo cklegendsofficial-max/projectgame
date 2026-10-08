@@ -13,6 +13,7 @@ import { CITIES, H, NH, NW, W } from "../world/gen";
 import { assetUrl } from "../render/worldView";
 import { audio } from "../audio";
 import { SETS, SET_FORGE, SET_KEYS, SET_SLOTS, UNIQUES, modsText, type SetId } from "../game/legend";
+import { FACTIONS, FACTION_KEYS, HOSTILE, REP_RANKS, RANK_PERKS, factionOf } from "../game/factions";
 
 const WEAPON_ICON: Record<string, string> = { kilic: "it_sword_", balta: "it_axe_", hancer: "it_dagger_", ok: "it_bow_", asa: "it_staff_" };
 
@@ -94,7 +95,7 @@ export class Hud {
     const s = g.s;
     if (!s.free) return "";
     const mine = s.sideQ.filter((q) => q.city === city || g.sideTurnIn(q) === city);
-    const why = g.sideReason();
+    const why = g.sideReason(city);
     return (
       `<h3>${ic("quest")} Şehir görevleri <em>${s.sideQ.length}/3</em></h3>` +
       mine.map((q) => this.sideRow(q, `<button class="btn sm" data-a="${this.act(() => g.dropSide(q.id))}">Bırak</button>`)).join("") +
@@ -271,6 +272,22 @@ export class Hud {
         const icon = sl === "silah" ? (WEAPON_ICON[cl.weapons[0]] ?? "it_sword_") + "5" : sl === "zirh" ? (cl.armor === "agir" ? "it_armor_5" : "it_light_5") : sl === "at" ? "mount_3" : "tr_star";
         const got = g.s.codex.includes(`set:${this.forgePick}:${sl}`);
         return `<div class="grow leg">${ic(icon, "gimg")}<div class="bi2"><b class="r4">${st.pieces[sl]}</b><small>${SLOT_NAME[sl]}${got ? " · koleksiyonda" : ""}</small></div><button class="btn sm ${why ? "off" : ""}" data-a="${this.act(() => g.forgeSet(this.forgePick, sl))}">Döv</button></div>`;
+      }).join("")
+    );
+  }
+
+  private repHtml(): string {
+    const g = this.g;
+    return (
+      `<h3>${ic("seal")} İtibar</h3><p class="dim">Şehir görevleri, emanetler, köy savunmaları, kamp ve kurgan zaferleri ile kârlı ticaret, o bölgenin hükümdarı gözünde itibarını artırır. Dikkat: birine yaranmak rakibini kızdırır.</p>` +
+      FACTION_KEYS.map((f) => {
+        const fac = FACTIONS[f];
+        const v = g.rep(f);
+        const r = g.rank(f);
+        const next = REP_RANKS[r + 1];
+        const lo = REP_RANKS[r].need;
+        const pct = next ? Math.max(0, Math.min(100, ((v - lo) / (next.need - lo)) * 100)) : 100;
+        return `<div class="frep" style="--fc:${fac.color}"><div class="frh">${ic(fac.icon, "gimg")}<div class="bi2"><b>${fac.name} <em>${v <= HOSTILE ? "Düşman" : REP_RANKS[r].name}</em></b><small class="dim">${fac.ruler} · rakibi ${FACTIONS[fac.rival].short} · özel birlik: ${UNITS[fac.unit].name}</small></div><span class="rv ${v < 0 ? "dear" : ""}">${v}</span></div><div class="fbar"><i style="width:${pct}%"></i></div><small>${next ? `Sonraki (${next.name}, ${next.need}): ${RANK_PERKS[r + 1]}` : "En yüksek rütbe"}</small></div>`;
       }).join("")
     );
   }
@@ -679,7 +696,7 @@ export class Hud {
       const room = g.heroCap() - armySize(s.hero.army);
       const hire = (u: Unit) => {
         const k = Math.max(0, Math.min(5, room));
-        return `<button class="btn ${!near || k <= 0 || !s.free ? "off" : ""}" data-a="${this.act(() => g.hire(u, k))}">${ic(UNITS[u].icon)} ${k} ${UNITS[u].name} · ${ic("coins")}${g.hireCost(u) * k}</button>`;
+        return `<button class="btn ${!near || k <= 0 || !s.free ? "off" : ""}" data-a="${this.act(() => g.hire(u, k, c.id))}">${ic(UNITS[u].icon)} ${k} ${UNITS[u].name} · ${ic("coins")}${g.eliteCost(c.id, u) * k}${g.eliteCost(c.id, u) < g.hireCost(u) ? ` <em class="cheap">−30%</em>` : ""}</button>`;
       };
       const bl = g.cityBounties(c.id);
       const off2 = g.contractOffer(c.id);
@@ -719,7 +736,9 @@ export class Hud {
         <button class="btn go big ${ok ? "" : "off"}" data-a="${this.act(() => g.foundBeylik())}">${ic("crown")} Beyliği kur</button>
         <p class="dim">Şöhret; haramileri yenerek, kampları yıkarak ve ödül ilanlarını tamamlayarak kazanılır.</p>`;
     } else body = this.beylikTabs();
-    const sub = isCap ? (s.beylik ? `Beyliğinin merkezi · Saray Sv ${g.bld("saray")}` : !s.free ? "Efendinin şehri" : "İpek Yolu şehri") : "İpek Yolu şehri";
+    const fac = FACTIONS[factionOf(c.id)];
+    const facTag = `<span class="ftag" style="--fc:${g.hostile(c.id) ? "#ff6a5a" : fac.color}">${fac.name} · ${g.hostile(c.id) ? "Düşman" : REP_RANKS[g.cityRank(c.id)].name}</span>`;
+    const sub = (isCap && s.beylik ? `Beyliğinin merkezi · Saray Sv ${g.bld("saray")} · ` : isCap && !s.free ? "Efendinin şehri · " : "") + facTag;
     return this.frame(g.cityName(ci), sub, assetUrl("cities/" + c.id), this.sagaBox(c.id, near) + tabs + body);
   }
 
@@ -807,6 +826,7 @@ export class Hud {
           const lv = skillLv(xp);
           return `<div class="srow">${ic(SKILL_INFO[k].icon, "gimg")}<div class="bi2"><b>${SKILL_INFO[k].name} <em>Sv ${lv}</em></b>${bar(xp - 20 * lv * lv, skillNext(lv) - 20 * lv * lv, "", `${xp}/${skillNext(lv)}`)}<small>${SKILL_INFO[k].desc}</small></div></div>`;
         }).join("") +
+        (s.free ? this.repHtml() : "") +
         (g.seraiCount()
           ? `<h3>${ic("map/serai")} Kervansarayların · dakikada ${g.seraiIncome().toFixed(1)} altın</h3>` +
             Object.entries(s.serais)
