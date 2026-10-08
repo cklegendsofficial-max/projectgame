@@ -430,6 +430,57 @@ export class WorldView {
     this.units.addChild(c);
   }
 
+  private birdC: Container | null = null;
+  private birdKind = "";
+
+  private drawBird(game: Game, inv: number): void {
+    const b = game.s.bird;
+    if (!b) {
+      this.birdC?.destroy({ children: true });
+      this.birdC = null;
+      return;
+    }
+    if (!this.birdC || this.birdKind !== b.kind) {
+      this.birdC?.destroy({ children: true });
+      const c = new Container();
+      const sh = new Graphics().ellipse(0, 0, 10, 3.5).fill({ color: 0x000000, alpha: 0.3 });
+      sh.label = "sh";
+      const sp = new Sprite(this.t("bird_" + b.kind));
+      sp.anchor.set(0.5);
+      sp.scale.set(30 / Math.max(sp.texture.width, sp.texture.height));
+      sp.label = "sp";
+      c.addChild(sh, sp);
+      this.units.addChild(c);
+      this.birdC = c;
+      this.birdKind = b.kind;
+    }
+    const c = this.birdC;
+    const f = game.birdFly;
+    const h = game.s.hero;
+    const sp = c.getChildByLabel("sp") as Sprite;
+    const sh = c.getChildByLabel("sh")!;
+    let x: number, y: number, lift: number;
+    if (f) {
+      x = f.x;
+      y = f.y;
+      lift = 46;
+      sp.scale.x = Math.abs(sp.scale.x) * ((f.back ? h.x - f.x : f.tx - f.x) < 0 ? 1 : -1);
+    } else {
+      const a = this.time * 1.3;
+      x = h.x + Math.cos(a) * 34;
+      y = h.y + Math.sin(a) * 14;
+      lift = 52 + Math.sin(this.time * 2.1) * 4;
+      sp.scale.x = Math.abs(sp.scale.x) * (Math.sin(a) > 0 ? 1 : -1);
+    }
+    c.position.set(x, y);
+    c.scale.set(inv);
+    sp.y = -lift;
+    sp.scale.y = Math.abs(sp.scale.x) * (1 + Math.sin(this.time * 14) * 0.08);
+    sh.alpha = f ? 0.6 : 1;
+    c.visible = game.isExplored(x, y);
+    c.zIndex = y;
+  }
+
   marker(x: number, y: number): void {
     this.mark = { x, y, t: 0 };
   }
@@ -509,6 +560,7 @@ export class WorldView {
     this.hero.scale.set(inv);
     this.trail.push(h.x, h.y);
     if (this.trail.length > 400) this.trail.splice(0, this.trail.length - 400);
+    this.drawBird(game, inv);
     s.comps.forEach((id, i) => {
       let c = this.compM.get(id);
       if (!c) {
@@ -666,7 +718,12 @@ export class WorldView {
       this.campM.forEach((m, i) => vis(m, s.camps[i].alive));
       this.nodeM.forEach((m) => vis(m));
       this.ruinM.forEach((m, i) => vis(m, !s.ruins[i].looted));
-      this.kurganM.forEach((m, i) => vis(m, s.kurgans[i].alive));
+      this.kurganM.forEach((m, i) => {
+        const k = s.kurgans[i];
+        vis(m);
+        m.sp.alpha = k.alive ? 1 : k.delved ? 0.35 : 0.6;
+        if (m.label) m.label.text = k.alive ? `Kurgan Taşı Sv ${k.tier}` : k.delved ? "Boş Mezar" : "Mezar Kapısı";
+      });
       this.cityM.forEach((m) => {
         m.sp.visible = true;
         if (m.label) m.label.visible = true;
@@ -698,9 +755,10 @@ export class WorldView {
       this.fxG.circle(s.story.fort.x, s.story.fort.y - 20, 60 + pr * 50).stroke({ color: 0xff3a3a, width: 4, alpha: 0.6 * (1 - pr) });
     }
     for (const k of s.kurgans) {
-      if (!k.alive || !game.isExplored(k.x, k.y)) continue;
+      if (!game.isExplored(k.x, k.y) || (!k.alive && k.delved)) continue;
       const pr = (this.time * 0.6 + k.x * 0.001) % 1;
-      this.fxG.circle(k.x, k.y - 8, 26 + pr * 34).stroke({ color: 0xb46aff, width: 3, alpha: 0.55 * (1 - pr) });
+      if (k.alive) this.fxG.circle(k.x, k.y - 8, 26 + pr * 34).stroke({ color: 0xb46aff, width: 3, alpha: 0.55 * (1 - pr) });
+      else this.fxG.ellipse(k.x, k.y + 4, 22 + Math.sin(this.time * 3) * 3, 8).fill({ color: 0xffc860, alpha: 0.35 });
     }
     for (const b of s.bounties) {
       if (!b.taken) continue;

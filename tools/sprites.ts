@@ -12,7 +12,7 @@ const dataUrl = "data:image/jpeg;base64," + readFileSync(input).toString("base64
 const browser = await chromium.launch({ channel: "msedge", headless: true });
 const page = await browser.newPage();
 const results: { name: string; data: string; w: number; h: number }[] = await page.evaluate(
-  async ({ dataUrl, names, cols, rows, maxSize, magenta }) => {
+  async ({ dataUrl, names, cols, rows, maxSize, magenta, webp }) => {
     const img = new Image();
     img.src = dataUrl;
     await img.decode();
@@ -111,14 +111,14 @@ const results: { name: string; data: string; w: number; h: number }[] = await pa
       const og = o.getContext("2d")!;
       og.imageSmoothingQuality = "high";
       og.drawImage(c, minX, minY, bw, bh, 0, 0, o.width, o.height);
-      out.push({ name, data: o.toDataURL("image/png"), w: o.width, h: o.height });
+      out.push({ name, data: webp ? o.toDataURL("image/webp", 0.88) : o.toDataURL("image/png"), w: o.width, h: o.height });
     });
     return out;
   },
-  { dataUrl, names: names.split(","), cols: +cols, rows: +rows, maxSize: +maxSize, magenta: key === "magenta" },
+  { dataUrl, names: names.split(","), cols: +cols, rows: +rows, maxSize: +maxSize, magenta: key === "magenta", webp: !!process.env.WEBP },
 );
 for (const r of results) {
-  writeFileSync(`${outDir}/${r.name}.png`, Buffer.from(r.data.split(",")[1], "base64"));
+  writeFileSync(`${outDir}/${r.name}.${process.env.WEBP ? "webp" : "png"}`, Buffer.from(r.data.split(",")[1], "base64"));
   console.log(`${r.name}: ${r.w}x${r.h}`);
 }
 await browser.close();

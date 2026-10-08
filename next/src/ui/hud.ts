@@ -15,6 +15,7 @@ import { audio } from "../audio";
 import { SETS, SET_FORGE, SET_KEYS, SET_SLOTS, UNIQUES, modsText, type SetId } from "../game/legend";
 import { FACTIONS, FACTION_KEYS, HOSTILE, REP_RANKS, RANK_PERKS, factionOf } from "../game/factions";
 import { NEM_TRAITS, nemName } from "../game/nemesis";
+import { BIRDS, birdSight, birdXpNeed } from "../game/falcon";
 import { TITLE_CATS, titleKey, titleOf } from "../game/titles";
 import { DAILY_POOL } from "../game/daily";
 
@@ -62,6 +63,7 @@ export class Hud {
   private panel!: HTMLElement;
   private toasts!: HTMLElement;
   private mini!: HTMLCanvasElement;
+  private birdBtn!: HTMLButtonElement;
   private miniBase!: HTMLCanvasElement;
   private acts = new Map<string, () => void>();
   private actN = 0;
@@ -129,6 +131,7 @@ export class Hud {
         <button data-b="snd" class="snd ${audio.muted ? "off" : ""}"><b class="bi">♪</b><span>Ses</span></button>
       </div>
       <canvas class="mini" width="220" height="128"></canvas>
+      <button class="birdbtn hidden"><img alt=""><span></span></button>
       <div class="panel hidden"></div>`;
     this.top = this.root.querySelector(".top")!;
     this.questEl = this.root.querySelector(".quest")!;
@@ -195,8 +198,14 @@ export class Hud {
     this.mini.addEventListener("pointerdown", (e) => {
       e.stopPropagation();
       const r = this.mini.getBoundingClientRect();
-      g.cam.flyTo(((e.clientX - r.left) / r.width) * W, ((e.clientY - r.top) / r.height) * H);
+      const x = ((e.clientX - r.left) / r.width) * W;
+      const y = ((e.clientY - r.top) / r.height) * H;
+      if (g.birdAim) g.sendBird(x, y);
+      else g.cam.flyTo(x, y);
     });
+    this.birdBtn = this.root.querySelector(".birdbtn")!;
+    this.birdBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
+    this.birdBtn.addEventListener("click", () => g.aimBird());
     window.addEventListener("keydown", (e) => {
       if (e.key === "Escape") this.close();
     });
@@ -308,6 +317,32 @@ export class Hud {
         .join("") +
       (d.chest ? `<div class="odds good">Bugünün sandığı açıldı. Yarın yeni fermanlar gelecek.</div>` : `<button class="btn big ${g.chestReady() ? "go" : "off"}" style="width:100%" data-a="${this.act(() => g.openChest())}"> ${ic("chest")} Ferman sandığını aç</button>`)
     );
+  }
+
+  private birdShopHtml(city: string, near: boolean): string {
+    const g = this.g;
+    const s = g.s;
+    return (
+      `<h3>${ic("bird_dogan")} Kuşçu</h3>` +
+      g
+        .birdShop(city)
+        .map((k) => {
+          const d = BIRDS[k];
+          const mine = s.bird?.kind === k;
+          return `<div class="grow">${ic("bird_" + k, "gimg")}<div class="bi2"><b>${d.name}</b><small>${d.desc}</small><small>${modsText(d.mods(5))} (5. seviyede) · her ${d.cd} sn uçar</small></div>${mine ? `<em class="cheap">Senin</em>` : `<button class="btn sm ${!near || !s.free || s.res.gold < d.gold ? "off" : ""}" data-a="${this.act(() => g.buyBird(k, city))}">Al<br>${ic("coins")}${d.gold}</button>`}</div>`;
+        })
+        .join("") +
+      (city !== "bukhara" && city !== "kashgar" ? `<p class="dim">Ak Sungur yalnız Buhara'da, Altın Kartal yalnız Kaşgar'da satılır.</p>` : "")
+    );
+  }
+
+  private birdHtml(): string {
+    const g = this.g;
+    const b = g.s.bird;
+    if (!b) return `<h3>${ic("bird_dogan")} Av kuşu</h3><p class="dim">Henüz bir kuşun yok. Şehirlerin hanındaki kuşçudan bir doğan alabilirsin; keşif yapar, av getirir, düşmanı gözetler.</p>`;
+    const d = BIRDS[b.kind];
+    const cd = g.birdReady();
+    return `<h3>${ic("bird_" + b.kind)} Av kuşu</h3><div class="brow">${ic("bird_" + b.kind, "bimg")}<div class="bi2"><b>${b.name} <em>${d.name} · Sv ${b.lv}</em></b>${b.lv < 10 ? bar(b.xp, birdXpNeed(b.lv), "", `${b.xp}/${birdXpNeed(b.lv)}`) : ""}<small>${modsText(d.mods(b.lv))} · görüş +${birdSight(b)}${b.lv >= 3 ? " · düşman taktiğini haber verir" : " · 3. seviyede düşman taktiğini haber verir"}</small></div><button class="btn sm ${cd > 0 || g.birdFly ? "off" : "go"}" data-a="${this.act(() => { this.close(); g.aimBird(); })}">${g.birdFly ? "Uçuyor" : cd > 0 ? `${Math.ceil(cd)} sn` : "Uçur"}</button></div>`;
   }
 
   private chronAll = false;
@@ -831,7 +866,7 @@ export class Hud {
               ? `<div class="brow">${ic("map/serai", "bimg")}<div class="bi2">${bar(sr.coffer, g.seraiCap(c.id), "", `Kasa ${Math.floor(sr.coffer)}/${Math.round(g.seraiCap(c.id))}`)}<small>Dakikada ${g.seraiRate(c.id).toFixed(1)} altın · Ağında ${g.seraiCount()} kervansaray · Bedava konaklama, ticarette %${2 * sr.lv} avantaj</small>${swhy && sr.lv < 3 ? `<small class="why">${swhy}</small>` : ""}</div>${sr.lv < 3 ? `<button class="btn sm ${swhy ? "off" : ""}" data-a="${this.act(() => g.buildSerai(c.id))}">Geliştir<br>${ic("coins")}${g.seraiCost(c.id)}</button>` : ""}</div>`
               : `<div class="brow">${ic("map/serai", "bimg")}<div class="bi2"><b>${CITY_NAME[c.id]} yolunda kendi hanın</b><small>Kasası her dakika altın biriktirir, uğradığında toplarsın. Burada konaklama bedava, emanet teslimine %25 prim. Her yeni kervansaray tüm ağın gelirini %15 artırır.</small>${swhy ? `<small class="why">${swhy}</small>` : ""}</div><button class="btn sm ${swhy || !near ? "off" : ""}" data-a="${this.act(() => g.buildSerai(c.id))}">Kur<br>${ic("coins")}${g.seraiCost(c.id)}</button></div>`);
       body = `${nearNote}<div class="brow">${ic("han", "bimg")}<div class="bi2"><b>Kervansaray odası</b><small>Canını ve enerjini tamamen doldurur.</small></div><button class="btn ${!near || g.act ? "off" : ""}" data-a="${this.act(() => g.rest())}">Uyu ${g.restCost() ? `${ic("coins")}${g.restCost()}` : "· bedava"}</button></div>
-        ${this.boardHtml(c.id, near)}${serai}${rumor}
+        ${this.boardHtml(c.id, near)}${serai}${this.birdShopHtml(c.id, near)}${rumor}
         <h3>${ic("wanted")} Ödül ilanları</h3>` +
         (bl.map(({ b, i }) => {
           const cp = s.camps[b.camp];
@@ -902,7 +937,7 @@ export class Hud {
     if (this.tab === "ordu") {
       const at = g.atCapital();
       const room = g.heroCap() - armySize(s.hero.army);
-      return `<p class="dim">${at ? "Askerleri garnizon ile birliğin arasında aktar." : "Asker aktarmak için başkentte olmalısın."}</p>
+      return this.birdHtml() + `<h3>${ic("tug")} Askerler</h3><p class="dim">${at ? "Askerleri garnizon ile birliğin arasında aktar." : "Asker aktarmak için başkentte olmalısın."}</p>
         <div class="stats"><div>${ic("tug")}Birlik: <b>${armySize(s.hero.army)}/${g.heroCap()}</b></div><div>${ic("food")}Garnizon gideri: <b>${g.upkeepPerMin().toFixed(0)}/dk</b></div></div>` + UNIT_KEYS.map((u) => `
         <div class="brow">${ic(UNITS[u].icon, "bimg")}<div class="bi2"><b>${UNITS[u].name}</b><small>Garnizon ${s.garrison[u]} · Birlik ${s.hero.army[u]}</small></div>
         <div class="col2"><button class="btn ${!at || s.hero.army[u] <= 0 ? "off" : ""}" data-a="${this.act(() => g.transfer(u, -10))}">◀ 10</button><button class="btn ${!at || s.garrison[u] <= 0 || room <= 0 ? "off" : ""}" data-a="${this.act(() => g.transfer(u, 10))}">10 ▶</button></div></div>`).join("");
@@ -1157,6 +1192,19 @@ export class Hud {
     const hb = this.root.querySelector('[data-b="hero"]')!;
     (hb.querySelector("img") as HTMLImageElement).src = assetUrl(g.face());
     hb.classList.toggle("pulse", h.points > 0 || g.dailyClaimable());
+    const bird = s.bird;
+    this.birdBtn.classList.toggle("hidden", !bird || !s.free);
+    if (bird) {
+      const img = this.birdBtn.querySelector("img")!;
+      const src = assetUrl("bird_" + bird.kind);
+      if (img.getAttribute("src") !== src) img.setAttribute("src", src);
+      const cd = g.birdReady();
+      const txt = g.birdFly ? "Uçuyor" : g.birdAim ? "Hedef seç" : cd > 0 ? `${Math.ceil(cd)} sn` : "Uçur";
+      const sp = this.birdBtn.querySelector("span")!;
+      if (sp.textContent !== txt) sp.textContent = txt;
+      this.birdBtn.classList.toggle("ready", !g.birdFly && cd <= 0);
+      this.birdBtn.classList.toggle("aim", g.birdAim);
+    }
     if (this.place && !this.holding && now - this.panelT > 1000) {
       this.panelT = now;
       this.render();

@@ -6,6 +6,7 @@ import type { ClassId } from "./classes";
 import type { SideQuest } from "./sidequests";
 import type { Daily } from "./daily";
 import type { Nemesis } from "./nemesis";
+import type { Bird } from "./falcon";
 
 export interface Village {
   name: string;
@@ -232,6 +233,7 @@ export interface GameState {
   nemeses: Nemesis[];
   nemDay: number;
   chron: { d: number; t: string }[];
+  bird: Bird | null;
 }
 
 export interface MarketEvent {
@@ -442,6 +444,7 @@ export function newGame(w: World): GameState {
     nemeses: [],
     nemDay: 0,
     chron: [],
+    bird: null,
   };
 }
 

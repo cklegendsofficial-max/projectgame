@@ -13,6 +13,7 @@ import { SETS, SET_FORGE, SET_KEYS, SET_SLOTS, UNIQUES, addMods, type GearMods, 
 import { TITLE_CATS, titleKey, titleOf, titleReward } from "./titles";
 import { DAILY_POOL, today, yesterday, type Daily, type DailyTask } from "./daily";
 import { gen } from "./text";
+import { BIRDS, BIRD_KEYS, BIRD_MAX, BIRD_NAMES, HUNTS, birdSight, birdXpNeed, type BirdFlight, type BirdKind } from "./falcon";
 import { LAST_WORDS, NEM_MAX, NEM_TRAITS, REVENGE, SCAR_EPITHETS, TAUNTS, makeNemesis, nemBoss, nemName, type Nemesis } from "./nemesis";
 import { DEEP_LORE, DOORS, DOOR_KEYS, RIDDLES, deepBoss, deepGuard, deepTier, type DeepRun, type DoorKind } from "./deep";
 import { FACTIONS, FACTION_KEYS, HOSTILE, REP_RANKS, RANK_PERKS, factionOf, repRank, type FactionId } from "./factions";
@@ -71,6 +72,8 @@ export class Game {
   private spawnAt = new Map<number, number>();
   battleLock = false;
   deep: DeepRun | null = null;
+  birdFly: BirdFlight | null = null;
+  birdAim = false;
   private deepBest0 = 0;
   private afterBattle: (() => void) | null = null;
 
@@ -136,7 +139,106 @@ export class Game {
     }
     const t = this.s.title ? titleOf(this.s.title) : null;
     if (t) addMods(m, t.mods);
+    const b = this.s.bird;
+    if (b) addMods(m, BIRDS[b.kind].mods(b.lv));
     return m;
+  }
+
+  // ---------- falconry ----------
+
+  birdShop(city: string): BirdKind[] {
+    return BIRD_KEYS.filter((k) => !BIRDS[k].city || BIRDS[k].city === city);
+  }
+
+  buyBird(kind: BirdKind, city: string): void {
+    const s = this.s;
+    const d = BIRDS[kind];
+    const ci = this.nearCity();
+    if (!s.free || ci < 0 || CITIES[ci].id !== city || !this.birdShop(city).includes(kind) || (s.bird && s.bird.kind === kind) || !this.pay({ gold: d.gold })) return;
+    const old = s.bird;
+    const name = BIRD_NAMES[Math.floor(Math.random() * BIRD_NAMES.length)];
+    s.bird = { kind, name, lv: old ? Math.max(1, old.lv - 2) : 1, xp: 0, cd: 0, huntT: d.hunt };
+    audio.play("quest");
+    if (!old) this.chron(`${gen(s.hero.name)} koluna ilk kez bir ${d.name} kondu. Adını ${name} koydu.`);
+    this.hud.story(`${d.name}: ${name}`, `icons/bird_${kind}`, `Kuşçu deri eldiveni koluna geçirdi, ${d.name.toLocaleLowerCase("tr")} kanatlarını açıp bileğine kondu.<br><br><i>${d.desc}</i><br><br><b>Uçur</b> düğmesiyle haritada bir yere gönder; gittiği yolu ve çevresini sana gösterir. Boş kaldığında kendiliğinden ava çıkar. Seviyesi arttıkça görüşün genişler; <b>3. seviyede</b> düşmanın taktiğini önceden haber verir.${old ? `<br><br>Eski kuşun ${old.name} kuşçuya kaldı; tecrübesinin bir kısmını yeni kuşa aktardı.` : ""}`, "Uç, " + name + "!");
+  }
+
+  birdReady(): number {
+    const b = this.s.bird;
+    return b ? Math.max(0, (b.cd - this.now) / 1000) : Infinity;
+  }
+
+  aimBird(): void {
+    if (!this.s.bird || this.birdReady() > 0 || this.birdFly) return;
+    this.birdAim = !this.birdAim;
+    if (this.birdAim) this.hud.toast(`${this.s.bird.name} kolunda bekliyor. Haritada bir yere dokun.`, "info");
+  }
+
+  sendBird(x: number, y: number): void {
+    const s = this.s;
+    const b = s.bird;
+    this.birdAim = false;
+    if (!b || this.birdReady() > 0 || this.birdFly) return;
+    const d = BIRDS[b.kind];
+    const h = s.hero;
+    const far = 700 + b.lv * 90;
+    const dist = Math.hypot(x - h.x, y - h.y);
+    if (dist > far) {
+      x = h.x + ((x - h.x) / dist) * far;
+      y = h.y + ((y - h.y) / dist) * far;
+    }
+    x = Math.max(20, Math.min(W - 20, x));
+    y = Math.max(20, Math.min(H - 20, y));
+    this.birdFly = { x: h.x, y: h.y, tx: x, ty: y, back: false };
+    b.cd = this.now + d.cd * 1000 * (1 - b.lv * 0.03);
+    audio.play("story");
+  }
+
+  private birdXp(n: number): void {
+    const b = this.s.bird;
+    if (!b || b.lv >= BIRD_MAX) return;
+    b.xp += n;
+    while (b.lv < BIRD_MAX && b.xp >= birdXpNeed(b.lv)) {
+      b.xp -= birdXpNeed(b.lv);
+      b.lv++;
+      this.hud.toast(`${b.name} güçlendi! ${BIRDS[b.kind].name} seviye ${b.lv}${b.lv === 3 ? " · artık düşman taktiğini haber veriyor" : ""}`, "good");
+    }
+  }
+
+  private birdTick(dt: number): void {
+    const s = this.s;
+    const b = s.bird;
+    if (!b) return;
+    const f = this.birdFly;
+    if (f) {
+      const tx = f.back ? s.hero.x : f.tx;
+      const ty = f.back ? s.hero.y : f.ty;
+      const d = Math.hypot(tx - f.x, ty - f.y);
+      const sp = BIRDS[b.kind].speed * dt;
+      if (d <= sp) {
+        f.x = tx;
+        f.y = ty;
+        if (f.back) {
+          this.birdFly = null;
+          this.birdXp(10);
+        } else f.back = true;
+      } else {
+        f.x += ((tx - f.x) / d) * sp;
+        f.y += ((ty - f.y) / d) * sp;
+      }
+      this.reveal(f.x, f.y, 5 + Math.floor(b.lv / 2));
+      return;
+    }
+    if (this.battleLock || !s.free || this.nearCity() >= 0 || this.deep) return;
+    b.huntT -= dt;
+    if (b.huntT > 0) return;
+    const d = BIRDS[b.kind];
+    b.huntT = d.hunt - b.lv * 3 + Math.random() * 20;
+    const hunt = HUNTS[Math.floor(Math.random() * HUNTS.length)];
+    const gold = Math.round(hunt.gold * (8 + b.lv * 4) * (b.kind === "sungur" ? 1.5 : b.kind === "kartal" ? 1.3 : 1));
+    this.gain({ gold });
+    this.birdXp(6);
+    this.hud.toast(`${b.name} ${hunt.what} getirdi · +${gold} altın`, "info");
   }
 
   daily(): Daily | null {
@@ -445,6 +547,7 @@ export class Game {
       this.caravanTick(dt);
       this.wantedTick(dt);
       this.nemTick();
+      this.birdTick(dt);
       this.stormTick(dt);
       this.marches(dt, now);
     }
@@ -452,7 +555,7 @@ export class Game {
     if (this.fogT > 0.25) {
       this.fogT = 0;
       const hs = this.heroStorm();
-      this.reveal(s.hero.x, s.hero.y, 11 + this.compMods().sight + 2 * this.tal("kartal") - (hs ? (hs.kind === "kum" ? 6 : 3) : 0));
+      this.reveal(s.hero.x, s.hero.y, 11 + this.compMods().sight + 2 * this.tal("kartal") + (s.bird ? birdSight(s.bird) : 0) - (hs ? (hs.kind === "kum" ? 6 : 3) : 0));
       for (const m of s.marches) this.reveal(m.x, m.y, 5);
     }
     this.quests();
@@ -1511,6 +1614,7 @@ export class Game {
 
   tap(x: number, y: number): void {
     if (this.battleLock || this.hud.panelOpen()) return;
+    if (this.birdAim) return this.sendBird(x, y);
     const hit = this.pick(x, y);
     if (hit) {
       const p = this.targetPos(hit)!;
@@ -1550,7 +1654,7 @@ export class Game {
     s.camps.forEach((c, i) => c.alive && test({ kind: "camp", i }, c.x, c.y, 1.3));
     s.nodes.forEach((n, i) => test({ kind: "node", i }, n.x, n.y));
     s.ruins.forEach((n, i) => !n.looted && test({ kind: "ruin", i }, n.x, n.y));
-    s.kurgans.forEach((k, i) => k.alive && test({ kind: "kurgan", i }, k.x, k.y, 1.3));
+    s.kurgans.forEach((k, i) => test({ kind: "kurgan", i }, k.x, k.y, 1.3));
     if (s.story.fort && !s.story.done) test({ kind: "fort" }, s.story.fort.x, s.story.fort.y, 2);
     return best;
   }
@@ -2167,7 +2271,7 @@ export class Game {
   }
 
   scouts(): boolean {
-    return this.stat("cev") >= 6 || this.hasComp("ferhat") || this.s.cls === "hirsiz" || this.tal("gozcu") > 0;
+    return this.stat("cev") >= 6 || this.hasComp("ferhat") || this.s.cls === "hirsiz" || this.tal("gozcu") > 0 || (this.s.bird?.lv ?? 0) >= 3;
   }
 
   private resolveBattle(title: string, enemy: Army, enemyBonus: number, after: (win: boolean) => string, boss: Boss | null, foe: string, t: Tactic, stance: Tactic, auto: boolean): void {
