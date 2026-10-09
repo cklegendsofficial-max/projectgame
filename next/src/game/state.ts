@@ -10,6 +10,7 @@ import type { Bird } from "./falcon";
 import type { Owned } from "./conquest";
 import type { Rival } from "./rivals";
 import type { Vet } from "./vets";
+import type { Otag } from "./otag";
 
 export interface Village {
   name: string;
@@ -256,6 +257,7 @@ export interface GameState {
   kurultay: { next: number; decrees: string[]; held: number };
   fleet: { ships: number; voyage: Voyage | null; calm?: number };
   vets: Vet[];
+  otag: Otag | null;
   act3: { ch: number; ending: string; peak: { x: number; y: number } | null };
 }
 
@@ -493,6 +495,7 @@ export function newGame(w: World): GameState {
     kurultay: { next: 0, decrees: [], held: 0 },
     fleet: { ships: 0, voyage: null },
     vets: [],
+    otag: null,
     act3: { ch: 0, ending: "", peak: null },
   };
 }

@@ -13,6 +13,7 @@ import { SIDE_TEXT, type SideQuest } from "../game/sidequests";
 import { CITY_NAME } from "../game/data";
 import { COMPANIONS, COMP_BY_ID, COMP_MAX, ERLIK, FORT_GUARD, GATE_GUARD, KARA_HAN, ENDINGS, KOK_BORU, PEAK_GUARD, endingOf, type CompId } from "../game/story";
 import { LEGACY_PERKS, legacy } from "../game/legacy";
+import { HERD_BUY, HERD_GOLD, HERD_MAX, MOVE_FOOD, OTAG_GOLD, OTAG_WOOD, REST_FOOD, ZONE_DESC, ZONE_NAME, bestZone, zoneOf } from "../game/otag";
 import { VET_LV_MAX, VET_MAX, VET_RANKS, vetBonus, vetTitle } from "../game/vets";
 import { CITIES, H, NH, NW, W } from "../world/gen";
 import { assetUrl } from "../render/worldView";
@@ -859,6 +860,21 @@ export class Hud {
         html = this.frame("Tengri Dağı", "Göğün bozkıra değdiği yer · Gök Tengri Destanı", assetUrl("map/ruins"), body);
         break;
       }
+      case "otag": {
+        const o = s.otag;
+        if (!o) return this.close();
+        const near = g.nearOtag();
+        const z = zoneOf(o.y, H);
+        const y = g.otagYield();
+        const best = bestZone(g.season());
+        html = this.frame("Ak Otağ", `${ZONE_NAME[z]} · ${g.sea().icon} ${g.sea().name}`, assetUrl("map/yurts"), `
+          <p class="dim">${ZONE_DESC[z]}</p>
+          <div class="stats"><div>${ic("foal")}Sürü: <b>${o.herd}/${HERD_MAX}</b></div><div>${ic("food")}Günlük: <b>+${y.food}</b></div><div>${ic("u_cavalry")}Atlı: <b>+${y.horses}/gün</b></div></div>
+          <div class="odds ${y.q >= 1.1 ? "good" : y.q >= 0.8 ? "mid" : "bad"}">Otlak verimi: <b>%${Math.round(y.q * 100)}</b>${z === best ? " · mevsime uygun" : ` · bu mevsim <b>${ZONE_NAME[best].toLowerCase()}</b> daha bereketli`}</div>
+          <p class="dim">Göç etmek için otağı istediğin yere taşı (Kahraman › Birlik › Otağ). Mevsime uygun bölgeye göç edersen şenlik yapılır.</p>
+          ${near ? `<div class="row"><button class="btn go" data-a="${this.act(() => g.otagRest())}">${ic("healer")} Dinlen (${REST_FOOD} yiyecek)</button><button class="btn ${s.res.gold < HERD_GOLD || o.herd >= HERD_MAX ? "off" : ""}" data-a="${this.act(() => g.buyHerd())}">${ic("coins")} +${HERD_BUY} baş (${HERD_GOLD})</button></div>` : this.walkBtn(t, "Otağa yürü")}`);
+        break;
+      }
       case "kurgan": {
         const k = s.kurgans[t.i];
         const b = kurganBoss(k.tier);
@@ -1288,6 +1304,17 @@ export class Hud {
     return `<h3>${ic("trophy")} Başarımlar <em class="dim">${n}/${ACHIEVEMENTS.length}</em></h3><div class="achs">${ACHIEVEMENTS.map((a) => `<div class="ach ${g.achDone(a.id) ? "on" : ""}" title="${a.desc}">${ic(a.icon)}<b>${a.name}</b><small>${a.desc}</small></div>`).join("")}</div>`;
   }
 
+  private otagHtml(): string {
+    const g = this.g;
+    const o = g.s.otag;
+    const why = g.otagReason();
+    const here = zoneOf(g.s.hero.y, H);
+    const status = o ? `<div class="stats"><div>${ic("map/yurts")}${ZONE_NAME[zoneOf(o.y, H)]}</div><div>${ic("foal")}Sürü <b>${o.herd}</b></div><div>${ic("food")}+${g.otagYield().food}/gün</div></div>` : `<p class="dim">Göçebe bir otağ kur: sürün otlakta büyür, yiyecek ve atlı gönüllü verir. Yazın kuzeydeki yaylaklara, kışın güneydeki kışlaklara göç et.</p>`;
+    return `<h3>${ic("map/yurts")} Otağ</h3>${status}
+      <button class="btn ${why ? "off" : "go"}" title="${why}" data-a="${this.act(() => g.pitchOtag())}">${o ? `Otağı buraya göçür (${ZONE_NAME[here]} · ${MOVE_FOOD} yiyecek)` : `Otağı buraya kur (${OTAG_GOLD} altın, ${OTAG_WOOD} kereste)`}</button>${why ? `<small class="why">${why}</small>` : ""}
+      ${o ? `<button class="btn sm" data-a="${this.act(() => { this.close(); g.cam.flyTo(o.x, o.y, 0.8); })}">Otağı göster</button>` : ""}`;
+  }
+
   private vetsHtml(): string {
     const vets = this.g.s.vets ?? [];
     if (!vets.length) return `<h3>${ic("tug")} Gaziler</h3><p class="dim">Kazandığın savaşlarda saflardan yiğitler öne çıkar. Gaziler savaştıkça rütbe alır ve bütün birliğe güç verir (en fazla ${VET_MAX}).</p>`;
@@ -1432,6 +1459,7 @@ export class Hud {
       body = `<div class="stats"><div>${ic("tug")}Birlik: <b>${armySize(h.army)}/${g.heroCap()}</b></div><div>${ic("coins")}Ücret: <b>${g.wagePerMin().toFixed(1)}/dk</b></div><div>${ic("shield")}Toplam güç: <b>${Math.round(g.heroPower())}</b></div></div>
         ${armyHtml(h.army)}
         ${this.vetsHtml()}
+        ${s.beylik ? this.otagHtml() : ""}
         ${s.free ? this.birdHtml() : ""}
         <h3>${ic("tug")} Yoldaşlar (${s.comps.length})</h3>${s.comps.map((id) => {
           const cp = COMP_BY_ID[id as CompId];
@@ -1725,6 +1753,11 @@ export class Hud {
       c.beginPath();
       c.arc(gt.x * sx, gt.y * sy, 4 + Math.sin(performance.now() / 300), 0, Math.PI * 2);
       c.stroke();
+    }
+    const ot = g.s.otag;
+    if (ot) {
+      c.fillStyle = "#ffe08a";
+      c.fillRect(ot.x * sx - 3, ot.y * sy - 3, 6, 6);
     }
     const pk = g.s.act3.peak;
     if (pk && !g.s.act3.ending) {

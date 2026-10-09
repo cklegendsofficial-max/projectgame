@@ -157,6 +157,7 @@ export class WorldView {
   private fortM: Marker | null = null;
   private gateM: Marker | null = null;
   private peakM: Marker | null = null;
+  private otagM: Marker | null = null;
   private seraiF = new Map<string, Sprite>();
   private ownF = new Map<string, Sprite>();
   private rivalsM = new Map<string, { c: Container; st: string }>();
@@ -691,6 +692,18 @@ export class WorldView {
     if (this.gateM) {
       this.gateM.sp.alpha = s.act2.done ? 0.45 : 1;
       if (this.gateM.label) this.gateM.label.text = s.act2.done ? "Mühürlü Kapı" : "Erlik'in Kapısı";
+    }
+    if (s.otag) {
+      if (!this.otagM) {
+        this.otagM = this.place("map/yurts", s.otag.x, s.otag.y, 110, "Ak Otağ", 0.9);
+        if (this.otagM.label) this.otagM.label.style.fill = "#ffe08a";
+      }
+      if (this.otagM.x !== s.otag.x || this.otagM.y !== s.otag.y) {
+        this.otagM.x = s.otag.x;
+        this.otagM.y = s.otag.y;
+        this.otagM.sp.position.set(s.otag.x, s.otag.y);
+        this.otagM.label?.position.set(s.otag.x, s.otag.y + 110 * 0.18);
+      }
     }
     if (s.act3.peak && !this.peakM) {
       this.peakM = this.place("map/ruins", s.act3.peak.x, s.act3.peak.y, 150, "Tengri Dağı", 1);

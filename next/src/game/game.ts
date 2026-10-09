@@ -22,6 +22,7 @@ import { DEEP_LORE, DEEP_PERKS, DOORS, DOOR_KEYS, RIDDLES, TOMBS, deepBoss, deep
 import { BRIBE_GOLD, DECREES, KAGAN_RENOWN, KURULTAY_EVERY, KURULTAY_MAX, decreeOf } from "./kurultay";
 import { ESCORT_GOLD, PIRATE_RISK, SHIP_CAP, SHIP_GOLD, SHIP_MAX, pirateArmy, portOf, routeDays } from "./hazar";
 import { LEGACY_PERKS, hasLegacy, recordEnding } from "./legacy";
+import { HERD_GOLD, HERD_BUY, HERD_MAX, MOVE_FOOD, OTAG_GOLD, OTAG_WOOD, REST_FOOD, ZONE_NAME, bestZone, pasture, zoneOf } from "./otag";
 import { SCARS, VET_LV_MAX, VET_MAX, VET_RANKS, VET_XP, makeVet, vetBonus, vetTitle } from "./vets";
 import { ACHIEVEMENTS, steamUnlock, storeUnlocked, unlockedSet } from "./achievements";
 import { SEASONS, SEASON_DAYS, seasonOf, type Season, type SeasonId } from "./seasons";
@@ -36,6 +37,7 @@ export type Target =
   | { kind: "fort" }
   | { kind: "gate" }
   | { kind: "peak" }
+  | { kind: "otag" }
   | { kind: "point"; x: number; y: number };
 
 export interface Quest {
@@ -1845,6 +1847,8 @@ export class Game {
         return s.act2.gate;
       case "peak":
         return s.act3.peak;
+      case "otag":
+        return s.otag;
       case "bandit":
         return s.bandits.find((b) => b.id === t.i) ?? null;
       case "caravan":
@@ -1924,6 +1928,7 @@ export class Game {
     if (s.story.fort && !s.story.done) test({ kind: "fort" }, s.story.fort.x, s.story.fort.y, 2);
     if (s.act2.gate && !s.act2.done) test({ kind: "gate" }, s.act2.gate.x, s.act2.gate.y, 2.2);
     if (s.act3.peak) test({ kind: "peak" }, s.act3.peak.x, s.act3.peak.y, 2.2);
+    if (s.otag) test({ kind: "otag" }, s.otag.x, s.otag.y, 1.8);
     return best;
   }
 
@@ -2924,6 +2929,89 @@ export class Game {
     return wallBonus(o.from, 0) + 0.1 + 0.12 * this.cbl(city, "sur") + (this.cityGov(city)?.def ?? 0);
   }
 
+  // ---------- otag ----------
+
+  otagReason(): string {
+    const s = this.s;
+    const h = s.hero;
+    if (!s.beylik) return "Otağ kurmak için önce beyliğini kur.";
+    if (this.nearCity(260) >= 0) return "Otağ şehirlerden uzakta, açık bozkırda kurulur.";
+    if (this.cellCost(h.x, h.y) >= 3) return "Burası otağ için uygun değil.";
+    if (s.otag && Math.hypot(s.otag.x - h.x, s.otag.y - h.y) < 300) return "Otağın zaten yakında.";
+    if (!s.otag && (s.res.gold < OTAG_GOLD || s.res.wood < OTAG_WOOD)) return `Otağ için ${OTAG_GOLD} altın ve ${OTAG_WOOD} kereste gerek.`;
+    if (s.otag && s.res.food < MOVE_FOOD) return `Göç için ${MOVE_FOOD} yiyecek gerek.`;
+    return "";
+  }
+
+  pitchOtag(): void {
+    const s = this.s;
+    const h = s.hero;
+    const why = this.otagReason();
+    if (why) return this.hud.toast(why, "bad");
+    const first = !s.otag;
+    if (first) this.pay({ gold: OTAG_GOLD, wood: OTAG_WOOD });
+    else this.pay({ food: MOVE_FOOD });
+    const o = (s.otag ??= { x: h.x, y: h.y, herd: 60, fest: "" });
+    o.x = h.x;
+    o.y = h.y;
+    const z = zoneOf(o.y, H);
+    const se = this.season();
+    const key = String(Math.floor((this.dayOf().day - 1) / SEASON_DAYS));
+    audio.play("quest");
+    if (first) {
+      this.chron(`${h.name} bozkırın ortasında ak otağını dikti; ${ZONE_NAME[z].toLowerCase()} otlakları sürüyle doldu.`);
+      this.hud.story("Ak Otağ", "map/yurts", `Keçeler gerildi, tuğ otağın önüne dikildi. Artık bir şehre bağlı değilsin: bozkır senin yurdun.<br><br><b>Sürün</b> otlakta büyür; yiyecek ve atlı gönüllü verir. Mevsime göre <b>yaylak</b> (kuzey) ile <b>kışlak</b> (güney) arasında göç et: kışı yaylakta geçiren sürü kırılır.`, "Tuğu dik");
+    } else if (z === bestZone(se) && o.fest !== key) {
+      o.fest = key;
+      s.renown += 5;
+      this.gain({ food: 60 });
+      this.hud.toast(`Göç şenliği! Obalar ${ZONE_NAME[z].toLowerCase()} otlağına vardı: +5 şöhret, +60 yiyecek`, "good");
+    } else this.hud.toast(`Otağ ${ZONE_NAME[z].toLowerCase()} otlağına göçtü`, "info");
+  }
+
+  nearOtag(r = 110): boolean {
+    const o = this.s.otag;
+    return !!o && Math.hypot(o.x - this.s.hero.x, o.y - this.s.hero.y) < r;
+  }
+
+  otagRest(): void {
+    const h = this.s.hero;
+    if (!this.nearOtag() || !this.pay({ food: REST_FOOD })) return this.hud.toast(`Dinlenmek için otağda olmalı ve ${REST_FOOD} yiyeceğin olmalı`, "bad");
+    h.hp = this.maxHp();
+    this.hud.toast("Otağda kımız içip dinlendin: can doldu", "good");
+  }
+
+  buyHerd(): void {
+    const o = this.s.otag;
+    if (!o || !this.nearOtag()) return;
+    if (o.herd >= HERD_MAX) return this.hud.toast("Otlak daha fazla sürü kaldırmaz", "bad");
+    if (!this.pay({ gold: HERD_GOLD })) return this.hud.toast("Altın yetersiz", "bad");
+    o.herd = Math.min(HERD_MAX, o.herd + HERD_BUY);
+    this.hud.toast(`Sürüye ${HERD_BUY} baş katıldı (${o.herd})`, "good");
+  }
+
+  otagYield(): { q: number; food: number; horses: number } {
+    const o = this.s.otag;
+    if (!o) return { q: 0, food: 0, horses: 0 };
+    const q = pasture(zoneOf(o.y, H), this.season());
+    return { q, food: Math.round(o.herd * 0.35 * q), horses: Math.floor((o.herd / 150) * q) };
+  }
+
+  private otagDaily(): void {
+    const s = this.s;
+    const o = s.otag;
+    if (!o) return;
+    const { q, food, horses } = this.otagYield();
+    if (q >= 0.8) o.herd = Math.min(HERD_MAX, o.herd + Math.ceil(o.herd * 0.08 * q) + 2);
+    else {
+      const lost = Math.ceil(o.herd * (q < 0.4 ? 0.15 : 0.05));
+      o.herd = Math.max(0, o.herd - lost);
+      if (lost) this.hud.toast(`${q < 0.4 ? "Kara kış! " : "Otlak kurudu: "}sürüden ${lost} baş kırıldı. Otağı ${ZONE_NAME[bestZone(this.season())].toLowerCase()} bölgesine göçür.`, "bad");
+    }
+    if (food) this.gain({ food });
+    if (horses) s.garrison.horse += horses;
+  }
+
   // ---------- hazar ----------
 
   portHere(): string | null {
@@ -3087,6 +3175,7 @@ export class Game {
     const s = this.s;
     const day = this.dayOf().day;
     const se = this.season();
+    this.otagDaily();
     if (this.kurAnn !== s.kurultay.held && /Semerkant|^$/.test(this.kurultayReason())) {
       this.kurAnn = s.kurultay.held;
       this.hud.toast("Beyler Semerkant'ta kurultaya hazır. Hedefler sekmesinden topla.", "good");
