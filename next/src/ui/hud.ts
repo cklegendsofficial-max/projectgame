@@ -4,7 +4,8 @@ import { TACTICS, TACTIC_KEYS, type BattleResult, type Boss, type Tactic } from 
 import { GOODS, GOOD_KEYS, PLUS_CHANCE, SKILL_INFO, SKILL_KEYS, SLOTS, SLOT_NAME, STAT_INFO, STAT_KEYS, canPlus, itemStats, kindName, plusCost, skillLv, skillNext, type Item, type Slot } from "../game/rpg";
 import { ARMOR_NAME, CLASSES, SKILL_MAX, WEAPON_NAME, skillPow, skillRank, type ClassId } from "../game/classes";
 import { CAPITAL, SAVE_SLOTS, curSlot, exportSave, kurganBoss, slotInfo } from "../game/state";
-import { applyUi, saveSettings, settings } from "../settings";
+import { applyUi, saveSettings, settings, toggleFullscreen } from "../settings";
+import { ACHIEVEMENTS } from "../game/achievements";
 import { BRANCHES, BRANCH_KEYS, ROW_NEED, TALENTS, branchSpent } from "../game/talents";
 import { CONSUMABLES, CONS_BY_ID, CRAFT_SLOTS, REFINES, gearCost, type Cost, type Mat } from "../game/crafting";
 import { SIDE_TEXT, type SideQuest } from "../game/sidequests";
@@ -224,9 +225,32 @@ export class Hud {
     this.birdBtn = this.root.querySelector(".birdbtn")!;
     this.birdBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
     this.birdBtn.addEventListener("click", () => g.aimBird());
+    const PAN = ["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright"];
     window.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") this.close();
+      if ((e.target as HTMLElement).closest?.("input, textarea")) return;
+      const k = e.key.toLowerCase();
+      if (k === "escape") return this.close();
+      if (PAN.includes(k)) {
+        g.cam.keys.add(k);
+        e.preventDefault();
+        return;
+      }
+      if (e.repeat || this.battleOpen || this.storyOpen) return;
+      if (k === "h") this.place?.kind === "hero" ? this.close() : this.openHero();
+      else if (k === "c") this.openPlace({ kind: "capital" });
+      else if (k === " ") {
+        e.preventDefault();
+        g.cam.flyTo(g.s.hero.x, g.s.hero.y, Math.max(g.cam.zoom, 0.7));
+      } else if (k === "b" && g.s.bird && g.s.free) g.aimBird();
+      else if (k === "m") this.root.querySelector(".snd")!.classList.toggle("off", audio.toggle());
+      else if (k === "f" || k === "f11") {
+        e.preventDefault();
+        toggleFullscreen();
+      } else if (k === "+" || k === "=") g.cam.zoomBy(1.2);
+      else if (k === "-") g.cam.zoomBy(1 / 1.2);
     });
+    window.addEventListener("keyup", (e) => g.cam.keys.delete(e.key.toLowerCase()));
+    window.addEventListener("blur", () => g.cam.keys.clear());
     if (g.s.cls === null) setTimeout(() => this.classSelect(), 300);
     else if (!g.s.free && g.s.c.shifts === 0 && g.s.quest === 0) setTimeout(() => this.intro(), 400);
   }
@@ -1137,13 +1161,23 @@ export class Hud {
         saveSettings();
         applyUi();
       })}">%${pct(v)}</button>`).join("")}</div>
+      <div class="setrow"><span>Tam ekran</span><button class="btn sm ${document.fullscreenElement ? "on" : ""}" data-a="${this.act(() => toggleFullscreen())}">${document.fullscreenElement ? "Açık" : "Kapalı"}</button><small class="dim">F11 / F</small></div>
       ${toggle("mini", "Mini harita")}
       ${toggle("eco", "Pil tasarrufu", "Pil tasarrufu sayfa yenilenince devreye girer (30 FPS, düşük çözünürlük).")}
       <h3>Kayıt yuvaları</h3>
       <p class="dim">Oyun her birkaç saniyede bir etkin yuvaya kaydedilir. Yuva değiştirince mevcut oyunun kaydedilir ve sayfa yeniden yüklenir.</p>
       ${slots}
       <div class="setrow"><button class="btn sm" data-a="${this.act(() => this.exportFile())}">${ic("scroll")} Dışa aktar</button><button class="btn sm" data-a="${this.act(() => this.importFile())}">${ic("chest")} İçe aktar</button></div>
+      <h3>Klavye kısayolları</h3>
+      <p class="dim keys"><kbd>H</kbd> Kahraman · <kbd>C</kbd> Semerkant · <kbd>Boşluk</kbd> Birliğine dön · <kbd>B</kbd> Kuşu uçur · <kbd>M</kbd> Ses · <kbd>F</kbd> Tam ekran · <kbd>WASD</kbd>/<kbd>Oklar</kbd> Kamera · <kbd>+</kbd>/<kbd>−</kbd> Yakınlaş · <kbd>Esc</kbd> Kapat</p>
+      ${this.achHtml()}
       <button class="btn sm red reset" data-a="${this.act(() => confirm("Bu yuvadaki tüm ilerlemen silinip yeni bir oyun başlayacak. Emin misin?") && g.resetGame())}">Bu yuvada yeni oyun başlat</button>`;
+  }
+
+  private achHtml(): string {
+    const g = this.g;
+    const n = ACHIEVEMENTS.filter((a) => g.achDone(a.id)).length;
+    return `<h3>${ic("trophy")} Başarımlar <em class="dim">${n}/${ACHIEVEMENTS.length}</em></h3><div class="achs">${ACHIEVEMENTS.map((a) => `<div class="ach ${g.achDone(a.id) ? "on" : ""}" title="${a.desc}">${ic(a.icon)}<b>${a.name}</b><small>${a.desc}</small></div>`).join("")}</div>`;
   }
 
   private exportFile(): void {

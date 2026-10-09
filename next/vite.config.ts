@@ -19,5 +19,5 @@ export default defineConfig({
       },
     },
   },
-  server: { watch: { ignored: ["**/dist/**", "**/playtest/**"] } },
+  server: { watch: { ignored: ["**/dist/**", "**/playtest/**", "**/release/**", "**/electron/**", "**/android/**", "**/ios/**"] } },
 });

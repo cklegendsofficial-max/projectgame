@@ -1,18 +1,50 @@
 {
   "name": "kervan-krallik",
+  "productName": "Kervan Krallık",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite --port 5174",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview --port 4174"
+    "preview": "vite preview --port 4174",
+    "desktop": "npm run build && electron .",
+    "desktop:smoke": "set KK_SMOKE=1&& electron .",
+    "pack:win": "npm run build && electron-builder --win dir",
+    "dist:win": "npm run build && electron-builder --win nsis",
+    "mobile:sync": "npm run build && npx cap sync"
   },
   "dependencies": {
     "pixi.js": "^8.22.0"
   },
   "devDependencies": {
+    "electron": "^44.7.0",
+    "electron-builder": "^26.15.3",
     "typescript": "^5.9.3",
     "vite": "^6.4.4"
+  },
+  "build": {
+    "appId": "com.kervankrallik.game",
+    "productName": "Kervan Krallik",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**",
+      "electron/**",
+      "package.json"
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        "dir",
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
   }
 }

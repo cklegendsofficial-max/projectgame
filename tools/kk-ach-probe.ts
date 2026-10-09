@@ -1,0 +1,50 @@
+import { chromium } from "playwright-core";
+
+const mode = process.argv[2] ?? "desk";
+const browser = await chromium.launch({ channel: "msedge", headless: true, args: ["--enable-gpu", "--ignore-gpu-blocklist", "--use-angle=d3d11"] });
+const vp = mode === "mob" ? { width: 390, height: 844 } : { width: 1280, height: 720 };
+const page = await browser.newPage({ viewport: vp, deviceScaleFactor: mode === "mob" ? 2 : 1 });
+const errs: string[] = [];
+page.on("pageerror", (e) => errs.push(e.message));
+page.on("console", (m) => m.type() === "error" && errs.push(m.text()));
+await page.goto("http://localhost:5174/");
+await page.evaluate(() => localStorage.clear());
+await page.reload();
+await page.waitForFunction(() => !document.getElementById("loading"), null, { timeout: 60000 });
+const ev = <T = unknown>(fn: string) => page.evaluate(`(() => { const g = window.game; ${fn} })()`) as Promise<T>;
+const dismiss = async () => {
+  for (let k = 0; k < 10; k++) {
+    if (!(await page.locator(".battle .bbox.story .btn, .battle .bbox.choice .btn").count())) break;
+    await page.locator(".battle .bbox.story .btn, .battle .bbox.choice .btn").first().click();
+    await page.waitForTimeout(200);
+  }
+};
+await page.locator(`.ccard[data-c="alp"]`).click();
+await page.locator(".cname .btn").click();
+await dismiss();
+await ev(`g.s.res.gold = 300; const c = g.targetPos({kind:"capital"}); g.s.hero.x = c.x; g.s.hero.y = c.y; g.buyFreedom();`);
+await dismiss();
+await page.waitForTimeout(2600);
+console.log("unlocked:", await page.evaluate(() => localStorage.getItem("kk_ach")));
+const cam0 = await ev<number[]>(`return [g.cam.x, g.cam.y];`);
+await page.keyboard.down("d");
+await page.waitForTimeout(500);
+await page.keyboard.up("d");
+const cam1 = await ev<number[]>(`return [g.cam.x, g.cam.y];`);
+console.log("pan dx:", Math.round(cam1[0] - cam0[0]));
+const z0 = await ev<number>(`return g.cam.zoom;`);
+await page.keyboard.press("+");
+console.log("zoom:", z0.toFixed(2), "->", (await ev<number>(`return g.cam.zoom;`)).toFixed(2));
+await page.keyboard.press("h");
+await page.waitForTimeout(300);
+console.log("hero panel:", await page.locator(".panel:not(.hidden)").count());
+await page.locator(".tabs button", { hasText: "⚙" }).click();
+await page.locator(".achs").scrollIntoViewIfNeeded();
+await page.waitForTimeout(300);
+await page.screenshot({ path: `playtest/ach-${mode}.png` });
+await page.keyboard.press("Escape");
+await page.keyboard.press("c");
+await page.waitForTimeout(300);
+console.log("capital panel:", await page.locator(".panel:not(.hidden) h2").first().innerText());
+console.log("errors:", errs);
+await browser.close();

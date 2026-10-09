@@ -8,7 +8,12 @@ export interface Owned {
   tax: 0 | 1 | 2;
   since: number;
   from: FactionId;
+  gov?: string;
+  blds?: Partial<Record<CityBld, number>>;
+  ev?: { kind: string; until: number } | null;
 }
+
+export type CityBld = "sur" | "pazar" | "kisla" | "ambar";
 
 export const TAX = [
   { name: "Hafif", mult: 0.6, loy: 2 },

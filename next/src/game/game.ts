@@ -19,6 +19,7 @@ import { BRO_BETRAY, BRO_MAX, BRO_MODS, LAST_WORDS, NEM_MAX, NEM_TRAITS, REVENGE
 import { REQ_GOODS, REQ_INFO, RIVAL_DEFS, RIVAL_LINES, RIVAL_TRAITS, STATUS_NAME, giftCost, oneOf, reqGold, rivalArmy, rivalBoss, rivalName, tribute, type BeyReq, type Rival } from "./rivals";
 import { ENGINE_GOLD, FEAST_GOLD, SIEGE_LV, SIEGE_RENOWN, TAX, cityGarrison, cityTax, wallBonus } from "./conquest";
 import { DEEP_LORE, DEEP_PERKS, DOORS, DOOR_KEYS, RIDDLES, TOMBS, deepBoss, deepGuard, deepTier, tombOf, type DeepPerk, type DeepRun, type DoorKind } from "./deep";
+import { ACHIEVEMENTS, steamUnlock, storeUnlocked, unlockedSet } from "./achievements";
 import { SEASONS, SEASON_DAYS, seasonOf, type Season, type SeasonId } from "./seasons";
 import { FACTIONS, FACTION_KEYS, HOSTILE, REP_RANKS, RANK_PERKS, factionOf, repRank, type FactionId } from "./factions";
 import { CLASS_BY_ID, CLASS_SKILLS, SKILL_MAX, WEAPON_NAME, WEAPON_STAT, skillPow, skillRank, type ClassDef, type ClassId, type ClassSkill, type WeaponKind } from "./classes";
@@ -83,6 +84,8 @@ export class Game {
   private lastSeason: SeasonId | null = null;
   private reqT = 2;
   private starveT = 0;
+  private achT = 3;
+  private ach = unlockedSet();
   private wasNight = false;
   private deepBest0 = 0;
   private afterBattle: (() => void) | null = null;
@@ -689,6 +692,7 @@ export class Game {
     }
     this.quests();
     this.titleTick(dt);
+    this.achTick(dt);
     this.storyTick();
     this.worldEvents(dt, now);
     this.checkContract();
@@ -4135,6 +4139,31 @@ export class Game {
   seasonLeft(): number {
     const t = this.s.time / DAY_SEC;
     return (SEASON_DAYS - (t % SEASON_DAYS)) * DAY_SEC;
+  }
+
+  private achTick(dt: number): void {
+    this.achT -= dt;
+    if (this.achT > 0) return;
+    this.achT = 2;
+    for (const a of ACHIEVEMENTS) {
+      if (this.ach.has(a.id)) continue;
+      let ok = false;
+      try {
+        ok = a.done(this.s);
+      } catch {
+        ok = false;
+      }
+      if (!ok) continue;
+      this.ach.add(a.id);
+      storeUnlocked(this.ach);
+      steamUnlock(a.id);
+      audio.play("level");
+      this.hud.toast(`🏆 Başarım: ${a.name} · ${a.desc}`, "good");
+    }
+  }
+
+  achDone(id: string): boolean {
+    return this.ach.has(id);
   }
 
   private seasonTick(): void {

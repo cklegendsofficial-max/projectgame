@@ -24,6 +24,11 @@ export function saveSettings(): void {
   localStorage.setItem(KEY, JSON.stringify(settings));
 }
 
+export function toggleFullscreen(): void {
+  if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+  else void document.documentElement.requestFullscreen?.().catch(() => {});
+}
+
 export function applyUi(): void {
   document.documentElement.style.setProperty("--ui", String(settings.ui));
   document.body.classList.toggle("nomini", !settings.mini);
