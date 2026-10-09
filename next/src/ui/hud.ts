@@ -27,6 +27,7 @@ import { CITIES, H, NAV, NH, NW, W } from "../world/gen";
 import { assetUrl } from "../render/worldView";
 import { audio } from "../audio";
 import { LANGS, lang, t, type Lang } from "../i18n";
+import { ORIGINS, ORIGIN_BY_ID, type Origin, type OriginId } from "../game/origins";
 import { BOND_LIKES, BOND_LIKES_EN, BOND_QUEST, COMP_QUESTS, SWORN_MULT, bondTier } from "../game/bonds";
 import { SETS, SET_FORGE, SET_KEYS, SET_SLOTS, UNIQUES, modsText, type SetId } from "../game/legend";
 import { FACTIONS, FACTION_KEYS, HOSTILE, REP_RANKS, RANK_PERKS, factionOf } from "../game/factions";
@@ -304,11 +305,16 @@ export class Hud {
     else begin();
   }
 
+  private originIntro(): string {
+    const o = this.g.s.origin ? ORIGIN_BY_ID[this.g.s.origin] : null;
+    return o ? `<i>${lang() === "en" ? o.introEn : o.intro}</i><br><br>` : "";
+  }
+
   private intro(): void {
     this.story(
       "Kervan Krallık",
       "heroes/slave",
-      `Adın ${this.g.s.hero.name}, yolun ${this.g.cls().name} yolu. Ama önce: bir baskında ailenden koparıldın ve Semerkant'ta bir tüccara köle olarak satıldın.<br><br>Efendin sana bir söz verdi: <b>80 akçe</b> biriktirirsen hürriyetini geri alabilirsin. Şehrin yakınındaki ormanda, taş ocağında ve tarlalarda çalış, her vardiyada birkaç akçe kazan.<br><br>Özgürlüğünü kazandıktan sonra İpek Yolu seni bekliyor: ${this.g.cls().name} silahlarını al, talim yap, ticaret yap, haramileri yen ve bir gün kendi beyliğini kur.`,
+      `${this.originIntro()}Adın ${this.g.s.hero.name}, yolun ${this.g.cls().name} yolu. Ama önce: bir baskında ailenden koparıldın ve Semerkant'ta bir tüccara köle olarak satıldın.<br><br>Efendin sana bir söz verdi: <b>80 akçe</b> biriktirirsen hürriyetini geri alabilirsin. Şehrin yakınındaki ormanda, taş ocağında ve tarlalarda çalış, her vardiyada birkaç akçe kazan.<br><br>Özgürlüğünü kazandıktan sonra İpek Yolu seni bekliyor: ${this.g.cls().name} silahlarını al, talim yap, ticaret yap, haramileri yen ve bir gün kendi beyliğini kur.`,
       "Çalışmaya başla",
     );
   }
@@ -317,6 +323,13 @@ export class Hud {
     const g = this.g;
     this.storyOpen = true;
     let pick: ClassId = "alp";
+    let opick: OriginId = "oba";
+    const en = lang() === "en";
+    const oName = (o: Origin) => (en ? o.en[0] : o.name);
+    const odetail = () => {
+      const o = ORIGIN_BY_ID[opick];
+      return `<p>${en ? o.en[1] : o.desc}</p><small class="cheap">${en ? o.en[2] : o.perk}</small>`;
+    };
     const el = document.createElement("div");
     el.className = "battle csel";
     const pips = (v: number) => "●".repeat(v) + `<i>${"●".repeat(Math.max(0, 4 - v))}</i>`;
@@ -331,6 +344,9 @@ export class Hud {
     el.innerHTML = `<div class="bbox cbox"><h2>${t("Yolunu seç")}</h2><p class="dim">${t("Seçtiğin yol hangi silahları ve zırhları kullanabileceğini, hangi özelliklerin seni güçlendireceğini belirler. Daha sonra değiştirilemez.")}</p>
       <div class="ccards">${CLASSES.map((c) => `<button class="ccard ${c.id === pick ? "on" : ""}" data-c="${c.id}" style="--cc:${c.color}"><img src="${assetUrl(c.portrait)}" alt=""><b>${c.name}</b><small>${t(c.role).split(" · ")[0]}</small></button>`).join("")}</div>
       <div class="cdet">${detail()}</div>
+      <h3 class="otitle">${t("Kökenin")}</h3>
+      <div class="origins">${ORIGINS.map((o) => `<button class="ocard ${o.id === opick ? "on" : ""}" data-o="${o.id}"><img src="${assetUrl(o.icon)}" alt=""><b>${oName(o)}</b></button>`).join("")}</div>
+      <div class="odet">${odetail()}</div>
       <div class="cname"><label>${t("Adın")}</label><input maxlength="14" value="${g.s.hero.name}"><button class="btn go big">${t("Bu yolu seç")}</button></div></div>`;
     this.root.appendChild(el);
     el.querySelector(".ccards")!.addEventListener("click", (e) => {
@@ -340,9 +356,16 @@ export class Hud {
       el.querySelectorAll(".ccard").forEach((x) => x.classList.toggle("on", x === b));
       el.querySelector(".cdet")!.innerHTML = detail();
     });
+    el.querySelector(".origins")!.addEventListener("click", (e) => {
+      const b = (e.target as HTMLElement).closest("[data-o]") as HTMLElement | null;
+      if (!b) return;
+      opick = b.dataset.o as OriginId;
+      el.querySelectorAll(".ocard").forEach((x) => x.classList.toggle("on", x === b));
+      el.querySelector(".odet")!.innerHTML = odetail();
+    });
     el.querySelector(".cname .btn")!.addEventListener("click", () => {
       const name = (el.querySelector(".cname input") as HTMLInputElement).value.trim().slice(0, 14) || "Toygar";
-      g.chooseClass(pick, name);
+      g.chooseClass(pick, name, opick);
       el.remove();
       this.storyOpen = false;
       if (!g.s.free) this.intro();
@@ -1731,7 +1754,7 @@ export class Hud {
     let body = "";
     if (this.tab === "karakter") {
       const cl = g.cls();
-      body = `<div class="clsrow" style="--cc:${cl.color}">${ic(cl.portrait, "gimg round")}<div class="bi2"><b>${cl.name} <em>${cl.role}</em></b><small>${cl.passive}</small><small class="dim">${cl.weapons.map((w) => WEAPON_NAME[w]).join(", ")} · ${ARMOR_NAME[cl.armor]}${cl.shield ? " · Kalkan" : ""}</small></div></div>
+      body = `<div class="clsrow" style="--cc:${cl.color}">${ic(cl.portrait, "gimg round")}<div class="bi2"><b>${cl.name} <em>${cl.role}</em></b><small>${cl.passive}</small><small class="dim">${cl.weapons.map((w) => WEAPON_NAME[w]).join(", ")} · ${ARMOR_NAME[cl.armor]}${cl.shield ? " · Kalkan" : ""}</small>${s.origin ? `<small class="cheap">${ic(ORIGIN_BY_ID[s.origin].icon)} ${lang() === "en" ? ORIGIN_BY_ID[s.origin].en[0] : ORIGIN_BY_ID[s.origin].name}: ${lang() === "en" ? ORIGIN_BY_ID[s.origin].en[2] : ORIGIN_BY_ID[s.origin].perk}</small>` : ""}</div></div>
         ${bar(h.xp, need, "", `Seviye ${h.lv} · ${h.xp}/${need} TP`)}
         ${h.points > 0 ? `<div class="odds good">Dağıtılacak <b>${h.points}</b> stat puanın var! ★ işaretliler ${cl.name} için ana özelliklerdir.</div>` : ""}
         <h3>Özellikler</h3>` +

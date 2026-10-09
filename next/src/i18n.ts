@@ -61,6 +61,7 @@ const EN: Record<string, string> = {
   "güçler": "perks",
   "bağ": "bond",
   "Sever": "Likes",
+  Kökenin: "Your origin",
   "Bitig, yolculuğunda öğrendiklerini kaydeder. Yeni yerler gördükçe, yeni işler yaptıkça sayfalar dolar.": "The Codex records what you learn on your journey. Pages fill as you see new places and do new deeds.",
   "Oyun hızı: {n}x": "Game speed: {n}x",
   "Oyun hızı (T)": "Game speed (T)",

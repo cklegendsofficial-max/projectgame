@@ -16,6 +16,7 @@ import { DIR_DEFAULT, type DirState } from "./director";
 import { FAMILY_DEFAULT, type Family } from "./dynasty";
 import type { BoyState } from "./korkut";
 import type { CompId } from "./story";
+import type { OriginId } from "./origins";
 
 export interface Village {
   name: string;
@@ -281,6 +282,7 @@ export interface GameState {
   cq: { id: CompId; step: number } | null;
   cqDone: string[];
   cqAsk: Record<string, number>;
+  origin?: OriginId;
 }
 
 export interface Voyage {

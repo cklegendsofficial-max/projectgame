@@ -32,6 +32,7 @@ import { TORE_CASES, kutArmy, kutLoy, kutTier, kutVote, type ToreCase } from "./
 import { SCARS, VET_LV_MAX, VET_MAX, VET_RANKS, VET_XP, makeVet, vetBonus, vetTitle } from "./vets";
 import { ACHIEVEMENTS, steamUnlock, storeUnlocked, unlockedSet } from "./achievements";
 import { CODEX, codexTitle } from "./codex";
+import { ORIGIN_BY_ID, type OriginId } from "./origins";
 import { BOND_FX, BOND_LEAVE, BOND_QUEST, BOND_START, COMP_QUESTS, SWORN_MULT, type BondEvent, type CompQuest, type CqChoice } from "./bonds";
 import { t as tr } from "../i18n";
 import { SEASONS, SEASON_DAYS, seasonOf, type Season, type SeasonId } from "./seasons";
@@ -531,11 +532,19 @@ export class Game {
     return this.s.free ? this.cls().portrait : "heroes/slave";
   }
 
-  chooseClass(id: ClassId, name: string): void {
+  chooseClass(id: ClassId, name: string, origin: OriginId = "oba"): void {
     const s = this.s;
     const c = CLASS_BY_ID[id];
+    const o = ORIGIN_BY_ID[origin];
     s.cls = id;
+    s.origin = origin;
     s.hero.stats = { ...c.start };
+    for (const [k, v] of Object.entries(o.stats ?? {})) s.hero.stats[k as Stat] += v;
+    for (const [k, v] of Object.entries(o.skills ?? {})) s.hero.skills[k as Skill] += v;
+    for (const [k, v] of Object.entries(o.bond ?? {})) (s.bond ??= {})[k] = BOND_START + v;
+    s.res.gold += o.gold ?? 0;
+    s.renown += o.renown ?? 0;
+    s.kut = Math.min(100, (s.kut ?? 50) + (o.kut ?? 0));
     s.hero.name = name.trim().slice(0, 16) || "Toygar";
     s.hero.hp = this.maxHp();
     s.hero.energy = this.maxEnergy();
@@ -5278,6 +5287,8 @@ export class Game {
       const k2 = done.includes(id) ? SWORN_MULT : 1;
       if (c) for (const k of Object.keys(c.mods) as (keyof CompMods)[]) m[k] += (c.mods[k] ?? 0) * k2;
     }
+    const om = this.s.origin ? ORIGIN_BY_ID[this.s.origin]?.mods : null;
+    if (om) for (const k of Object.keys(om) as (keyof CompMods)[]) m[k] += om[k] ?? 0;
     return m;
   }
 
