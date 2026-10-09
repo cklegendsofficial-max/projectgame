@@ -3784,6 +3784,32 @@ export class Game {
     }
   }
 
+  archeryPaid(): boolean {
+    return (this.s.ok?.day ?? -1) !== this.dayOf().day;
+  }
+
+  archeryReward(score: number, hits: number): string {
+    const s = this.s;
+    s.ok ??= { day: -1, best: 0 };
+    const best = score > s.ok.best;
+    if (best) s.ok.best = score;
+    if (!this.archeryPaid()) {
+      saveGame(s);
+      return `${best ? "<b class=\"cheap\">Yeni rekor!</b> " : ""}Bugünün ödülünü zaten aldın; bu bir antrenmandı.`;
+    }
+    s.ok.day = this.dayOf().day;
+    const gold = Math.round(score * (0.8 + this.s.hero.lv * 0.05));
+    const renown = Math.floor(score / 40);
+    const xp = Math.round(score * 0.6);
+    this.gain({ gold });
+    s.renown += renown;
+    this.addXp(xp);
+    if (hits >= 12) this.addKut(1);
+    if (best && score >= 300) this.chron(`${s.hero.name} at üstünde ${hits} kabak vurdu; ihtiyarlar Mete Han'dan beri böylesini görmediklerini söyledi.`);
+    saveGame(s);
+    return `${best ? "<b class=\"cheap\">Yeni rekor!</b><br>" : ""}+${gold} altın · +${renown} şöhret · +${xp} tecrübe`;
+  }
+
   boyReason(b: Boy): string {
     const s = this.s;
     if (!s.free) return "Önce hürriyetini kazan";

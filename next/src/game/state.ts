@@ -273,6 +273,7 @@ export interface GameState {
   family: Family;
   boy: BoyState | null;
   boysDone: string[];
+  ok: { day: number; best: number };
   act3: { ch: number; ending: string; peak: { x: number; y: number } | null };
 }
 
@@ -521,6 +522,7 @@ export function newGame(w: World): GameState {
     family: { ...FAMILY_DEFAULT, kids: [] },
     boy: null,
     boysDone: [],
+    ok: { day: -1, best: 0 },
     act3: { ch: 0, ending: "", peak: null },
   };
 }

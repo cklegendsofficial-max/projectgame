@@ -18,6 +18,7 @@ import { VET_LV_MAX, VET_MAX, VET_RANKS, vetBonus, vetTitle } from "../game/vets
 import { PERSONAS, PERSONA_KEYS } from "../game/director";
 import { kidAge } from "../game/dynasty";
 import { BOYS } from "../game/korkut";
+import { Archery } from "./archery";
 import { KUT_TIERS, kutArmy, kutTier, kutVote } from "../game/kut";
 import { SING_GOLD, TAMGA_COLORS, TAMGA_DEFAULT, TAMGA_MARKS, TAMGA_SHAPES, singRenown, tamgaSvg, type Tamga } from "../game/ozan";
 import { CITIES, H, NH, NW, W } from "../world/gen";
@@ -1373,6 +1374,59 @@ export class Hud {
       <small class="dim">Kut; zaferle, adil hükümle, şölen ve fetihle artar. Yenilgi, soygun, ağır vergi ve kaybedilen şehirle söner. ${left ? `Sıradaki töre davası ~${left} gün sonra.` : "Yakında bir töre davası gelecek."} Kademeler: ${KUT_TIERS.map((x) => x.name).join(" · ")}</small>`;
   }
 
+  archery: Archery | null = null;
+
+  openArchery(): void {
+    const g = this.g;
+    if (this.archery || this.modal() || g.battleLock) return;
+    this.close();
+    g.battleLock = true;
+    const el = document.createElement("div");
+    el.className = "archery";
+    el.innerHTML = `<canvas></canvas><div class="ahud"></div><div class="ahint">Hedefe dokun ya da <kbd>Boşluk</kbd> · kabak 10 · kurt 20 · kartal 35 · art arda isabet çarpan verir</div><button class="btn sm aclose">Bırak</button><div class="aresult"></div>`;
+    this.root.appendChild(el);
+    const hudEl = el.querySelector(".ahud") as HTMLElement;
+    const res = el.querySelector(".aresult") as HTMLElement;
+    let tick = 0;
+    const key = (e: KeyboardEvent): void => {
+      if (e.code === "Space") {
+        e.preventDefault();
+        e.stopPropagation();
+        this.archery?.shootAuto();
+      } else if (e.code === "Escape") finish();
+    };
+    const finish = (): void => {
+      clearInterval(tick);
+      window.removeEventListener("keydown", key, true);
+      this.archery?.stop();
+      this.archery = null;
+      el.remove();
+      g.battleLock = false;
+    };
+    const game = new Archery(el.querySelector("canvas")!, (score, hits) => {
+      const note = g.archeryReward(score, hits);
+      audio.play(score >= 150 ? "level" : "quest");
+      res.innerHTML = `<div class="bbox"><h2>Kabak Atma bitti</h2><p><b>${score}</b> puan · ${hits} isabet<br>En iyi: <b>${g.s.ok.best}</b></p><p>${note}</p><div class="row"><button class="btn go again">Tekrar</button><button class="btn quit">Kapat</button></div></div>`;
+      res.classList.add("on");
+      res.querySelector(".again")!.addEventListener("click", () => { finish(); this.openArchery(); });
+      res.querySelector(".quit")!.addEventListener("click", finish);
+    });
+    this.archery = game;
+    tick = window.setInterval(() => {
+      const h = game.hud();
+      hudEl.innerHTML = `<span>${ic("u_archer")} ${h.arrows}</span><span>⏱ ${h.time.toFixed(1)}</span><span>${ic("trophy")} ${h.score}</span>${h.combo >= 3 ? `<span class="cheap">Kombo ×${1 + Math.min(4, Math.floor(h.combo / 3)) * 0.5}</span>` : ""}`;
+    }, 100);
+    window.addEventListener("keydown", key, true);
+    el.querySelector(".aclose")!.addEventListener("click", finish);
+  }
+
+  private gamesHtml(): string {
+    const g = this.g;
+    const paid = g.archeryPaid();
+    return `<h3>${ic("u_archer")} Bozkır Oyunları</h3>
+      <div class="grow">${ic("u_cavalry", "gimg")}<div class="bi2"><b>Kabak Atma <em>atlı okçuluk</em></b><small>Dörtnala giderken kabakları, kurtları ve kartalları vur. 30 saniye, 20 ok.</small><small class="${paid ? "cheap" : "dim"}">${paid ? "Bugünün ödülü hazır" : "Bugün ödül alındı · antrenman"} · Rekor: ${g.s.ok?.best ?? 0}</small></div><button class="btn sm go" data-a="${this.act(() => this.openArchery())}">Oyna</button></div>`;
+  }
+
   private korkutHtml(): string {
     const g = this.g;
     const s = g.s;
@@ -1542,7 +1596,7 @@ export class Hud {
     } else if (this.tab === "ayar") {
       body = this.settingsHtml();
     } else if (this.tab === "unvan") {
-      body = this.dailyHtml() + (s.beylik ? this.kutHtml() + this.familyHtml() : "") + (s.free ? this.korkutHtml() + this.ozanHtml() : "") + this.kurultayHtml() + this.rivalsHtml() + this.nemesisHtml() + this.titlesHtml();
+      body = this.dailyHtml() + (s.beylik ? this.kutHtml() + this.familyHtml() : "") + (s.free ? this.korkutHtml() + this.gamesHtml() + this.ozanHtml() : "") + this.kurultayHtml() + this.rivalsHtml() + this.nemesisHtml() + this.titlesHtml();
     } else if (this.tab === "techizat") {
       const inCity = g.nearCity() >= 0;
       body = `<div class="slots">` + SLOTS.map((sl) => {

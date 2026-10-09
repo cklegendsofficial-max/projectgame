@@ -30,6 +30,8 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: "beyq5", name: "Sözünün Eri", desc: "Beylerin 5 isteğini yerine getir.", icon: "lord_bey", done: (s) => (s.c.beyq ?? 0) >= 5 },
   { id: "turan", name: "Bozkır Kurdu", desc: "Savaşta Turan taktiğini 5 kez uygula.", icon: "u_cavalry", done: (s) => (s.c.turan ?? 0) >= 5 },
   { id: "tore", name: "Töre Bekçisi", desc: "8 töre davasında hüküm ver.", icon: "scroll", done: (s) => (s.c.tore ?? 0) >= 8 },
+  { id: "okcu", name: "Mete Han'ın Oku", desc: "Atlı okçulukta 300 puanı geç.", icon: "u_archer", done: (s) => (s.ok?.best ?? 0) >= 300 },
+  { id: "boy", name: "Dede Korkut'un Dili", desc: "Bir Dede Korkut boyunu tamamla.", icon: "scroll", done: (s) => (s.boysDone?.length ?? 0) >= 1 },
   { id: "kut", name: "Gök Kutlu", desc: "Kutunu 90'ın üstüne çıkar.", icon: "crown", done: (s) => (s.kut ?? 0) >= 90 },
   { id: "karahan", name: "Kara Tamga", desc: "Kara Han'ı yen ve ilk destanı bitir.", icon: "heroes/boss_karahan", done: (s) => s.story.done },
   { id: "erlik", name: "Erlik'in Kapısı", desc: "Erlik Han'ı yen.", icon: "boss_erlik", done: (s) => s.act2.done },
