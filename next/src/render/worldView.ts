@@ -327,7 +327,6 @@ export class WorldView {
       s.anchor.set(0.5, 0.9);
       s.position.set(tr[k], tr[k + 1]);
       s.scale.set(0.42 + ((k * 7) % 10) / 40);
-      s.cullable = true;
       items.push({ y: tr[k + 1], s });
     }
     const pk = this.world.peaks;
@@ -342,11 +341,41 @@ export class WorldView {
       s.scale.set(sc * (r > 0.5 ? 1 : -1) * (0.85 + r * 0.3), sc);
       const tn = 225 + Math.floor(r * 30);
       s.tint = (tn << 16) | (tn << 8) | Math.min(255, tn + 6);
-      s.cullable = true;
       items.push({ y: pk[k + 1], s });
     }
     items.sort((a, b) => a.y - b.y);
-    for (const it of items) this.deco.addChild(it.s);
+    // Chunked culling: per-sprite bounds checks on ~10k deco sprites dominated frame CPU.
+    const CH = 900;
+    const cols = Math.ceil(W / CH);
+    const rows = Math.ceil(H / CH);
+    const chunks: (Container | undefined)[] = new Array(cols * rows);
+    const box: number[] = [];
+    for (const it of items) {
+      const cx = Math.min(cols - 1, Math.max(0, Math.floor(it.s.x / CH)));
+      const cy = Math.min(rows - 1, Math.max(0, Math.floor(it.s.y / CH)));
+      const i = cy * cols + cx;
+      let c = chunks[i];
+      if (!c) {
+        c = chunks[i] = new Container();
+        c.cullable = true;
+        c.cullableChildren = false;
+        box[i * 4] = Infinity;
+        box[i * 4 + 1] = Infinity;
+        box[i * 4 + 2] = -Infinity;
+        box[i * 4 + 3] = -Infinity;
+      }
+      c.addChild(it.s);
+      const r = 160 * Math.abs(it.s.scale.y) + 40;
+      box[i * 4] = Math.min(box[i * 4], it.s.x - r);
+      box[i * 4 + 1] = Math.min(box[i * 4 + 1], it.s.y - r * 2);
+      box[i * 4 + 2] = Math.max(box[i * 4 + 2], it.s.x + r);
+      box[i * 4 + 3] = Math.max(box[i * 4 + 3], it.s.y + r * 0.4);
+    }
+    chunks.forEach((c, i) => {
+      if (!c) return;
+      c.cullArea = new Rectangle(box[i * 4], box[i * 4 + 1], box[i * 4 + 2] - box[i * 4], box[i * 4 + 3] - box[i * 4 + 1]);
+      this.deco.addChild(c);
+    });
   }
 
   private label(text: string, x: number, y: number, size = 1): Text {

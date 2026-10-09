@@ -78,6 +78,7 @@ export class Game {
   deep: DeepRun | null = null;
   birdFly: BirdFlight | null = null;
   birdAim = false;
+  fogRev = 0;
   private wasNight = false;
   private deepBest0 = 0;
   private afterBattle: (() => void) | null = null;
@@ -1620,7 +1621,10 @@ export class Game {
           changed = true;
         }
       }
-    if (changed) this.view.fogDirty = true;
+    if (changed) {
+      this.view.fogDirty = true;
+      this.fogRev++;
+    }
   }
 
   isExplored(x: number, y: number): boolean {

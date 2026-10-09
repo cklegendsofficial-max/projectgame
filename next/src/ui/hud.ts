@@ -72,6 +72,10 @@ export class Hud {
   private miniBase!: HTMLCanvasElement;
   private acts = new Map<string, () => void>();
   private actN = 0;
+  private panelHtml = "";
+  private htmlCache = new WeakMap<Element, string>();
+  private fogRev = -1;
+  private fogC?: HTMLCanvasElement;
   private place: Target | { kind: "hero" } | null = null;
   private tab = "";
   private liveT = 0;
@@ -644,6 +648,7 @@ export class Hud {
   close(): void {
     this.panel.classList.add("hidden");
     this.place = null;
+    this.panelHtml = "";
   }
 
   openPlace(t: Target): void {
@@ -690,6 +695,7 @@ export class Hud {
     const t = this.place;
     if (!t) return;
     this.acts.clear();
+    this.actN = 0;
     const g = this.g;
     const s = g.s;
     let html = "";
@@ -798,7 +804,10 @@ export class Hud {
         break;
       }
     }
-    this.panel.innerHTML = html;
+    if (html !== this.panelHtml || !this.panel.firstChild) {
+      this.panelHtml = html;
+      this.panel.innerHTML = html;
+    }
   }
 
   private nodeHtml(i: number): string {
@@ -1264,13 +1273,19 @@ export class Hud {
     setTimeout(step, 600);
   }
 
+  private setHtml(el: Element, html: string): void {
+    if (this.htmlCache.get(el) === html) return;
+    this.htmlCache.set(el, html);
+    el.innerHTML = html;
+  }
+
   update(): void {
     const g = this.g;
     const s = g.s;
     const now = performance.now();
     if (g.act) {
       this.actEl.classList.remove("hidden");
-      this.actEl.innerHTML = `<b>${g.act.label}…</b>${bar(g.act.t, g.act.dur, "", "")}`;
+      this.setHtml(this.actEl, `<b>${g.act.label}…</b>${bar(Math.round((g.act.t / g.act.dur) * 200), 200, "", "")}`);
     } else this.actEl.classList.add("hidden");
     if (now - this.liveT < 250) return;
     this.liveT = now;
@@ -1278,7 +1293,7 @@ export class Hud {
     const night = g.isNight();
     const h = s.hero;
     const showRes = RES_KEYS.filter((k) => k === "gold" || s.res[k] >= 1 || s.beylik);
-    this.top.innerHTML =
+    this.setHtml(this.top,
       showRes.map((k) => {
         const r = g.ratePerMin(k);
         return `<div class="res" title="${RES_NAME[k]}">${ic(RES_ICON[k])}<b>${fmt(s.res[k])}</b>${Math.round(r) ? `<small class="${r < 0 ? "neg" : ""}">${r >= 0 ? "+" : ""}${Math.round(r)}/dk</small>` : ""}</div>`;
@@ -1286,11 +1301,11 @@ export class Hud {
       `<div class="res vit"><div class="mbar hp"><i style="width:${(h.hp / g.maxHp()) * 100}%"></i><span>❤ ${Math.floor(h.hp)}</span></div><div class="mbar en"><i style="width:${(h.energy / g.maxEnergy()) * 100}%"></i><span>⚡ ${Math.floor(h.energy)}</span></div></div>
        <div class="res hero">${ic(g.face(), "ic round")}<b>Sv ${h.lv}</b>${h.points + h.spts + h.tpts ? `<small class="pts">+${h.points + h.spts + h.tpts}</small>` : ""}${s.wanted ? `<small class="wanted" title="Aranıyorsun">${"★".repeat(s.wanted)}</small>` : ""}</div>
        ${s.free ? `<div class="res">${ic("crown")}<b>${s.renown}</b></div>` : ""}
-       <div class="res day" title="${night ? "Gece: görüş azalır, haramiler cesurlaşır, muhafızlar seni zor bulur, Kurgan Taşları güçlenir ama daha çok Ruh Taşı verir" : "Gündüz"}">${night ? "🌙" : "☀️"}<b>Gün ${day.day}</b></div>`;
+       <div class="res day" title="${night ? "Gece: görüş azalır, haramiler cesurlaşır, muhafızlar seni zor bulur, Kurgan Taşları güçlenir ama daha çok Ruh Taşı verir" : "Gündüz"}">${night ? "🌙" : "☀️"}<b>Gün ${day.day}</b></div>`);
     const q = g.quest();
-    this.questEl.innerHTML = q
+    this.setHtml(this.questEl, q
       ? `${ic("quest", "qi")}<div><small>Görev ${s.quest + 1}/${g.QUESTS.length}</small><b>${q.title}</b><span>${q.text}</span><em>${costHtml(q.reward, g)}</em></div>`
-      : `${ic("crown", "qi")}<div><b>Tüm görevler bitti</b><span>Kampları temizle, beyliğini büyüt, batıya doğru keşfet.</span></div>`;
+      : `${ic("crown", "qi")}<div><b>Tüm görevler bitti</b><span>Kampları temizle, beyliğini büyüt, batıya doğru keşfet.</span></div>`);
     const ch = g.chapter();
     this.questEl.classList.toggle("hidden", !q && !!ch && s.free);
     const sq = this.topSide();
@@ -1316,8 +1331,8 @@ export class Hud {
     const ct = s.contract;
     this.taskEl.classList.toggle("hidden", !r && !ct);
     this.taskEl.classList.toggle("alert", !!r);
-    if (r) this.taskEl.innerHTML = `${ic("j_bandit", "qi")}<div><small>Baskın · ${dur(r.until - g.now)}</small><b>${s.villages[r.v].name} yağmalanıyor!</b></div>`;
-    else if (ct) this.taskEl.innerHTML = `${ic("j_caravan", "qi")}<div><small>Kervan sözleşmesi · ${dur(ct.until - g.now)}</small><b>${ct.cargo} → ${CITY_NAME[ct.to]}</b></div>`;
+    if (r) this.setHtml(this.taskEl, `${ic("j_bandit", "qi")}<div><small>Baskın · ${dur(r.until - g.now)}</small><b>${s.villages[r.v].name} yağmalanıyor!</b></div>`);
+    else if (ct) this.setHtml(this.taskEl, `${ic("j_caravan", "qi")}<div><small>Kervan sözleşmesi · ${dur(ct.until - g.now)}</small><b>${ct.cargo} → ${CITY_NAME[ct.to]}</b></div>`);
     const bld = g.building();
     this.root.querySelector('[data-b="capital"] span')!.textContent = bld ? `⏱ ${dur(s.buildings[bld].until - g.now)}` : "Semerkant";
     const hb = this.root.querySelector('[data-b="hero"]')!;
@@ -1351,13 +1366,21 @@ export class Hud {
     const c = this.mini.getContext("2d")!;
     const w = this.mini.width;
     const h = this.mini.height;
-    c.drawImage(this.miniBase, 0, 0);
-    c.fillStyle = "rgba(28,20,12,0.88)";
-    const ex = g.s.explored;
-    const cw = w / NW;
-    const ch = h / NH;
-    for (let y = 0; y < NH; y += 2)
-      for (let x = 0; x < NW; x += 2) if (!ex[y * NW + x]) c.fillRect(x * cw, y * ch, cw * 2 + 0.5, ch * 2 + 0.5);
+    if (!this.fogC || this.fogRev !== g.fogRev) {
+      this.fogRev = g.fogRev;
+      const fc = (this.fogC ??= document.createElement("canvas"));
+      fc.width = w;
+      fc.height = h;
+      const f = fc.getContext("2d")!;
+      f.drawImage(this.miniBase, 0, 0);
+      f.fillStyle = "rgba(28,20,12,0.88)";
+      const ex = g.s.explored;
+      const cw = w / NW;
+      const ch = h / NH;
+      for (let y = 0; y < NH; y += 2)
+        for (let x = 0; x < NW; x += 2) if (!ex[y * NW + x]) f.fillRect(x * cw, y * ch, cw * 2 + 0.5, ch * 2 + 0.5);
+    }
+    c.drawImage(this.fogC, 0, 0);
     const sx = w / W;
     const sy = h / H;
     for (const ci of CITIES) {
