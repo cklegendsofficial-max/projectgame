@@ -3,3 +3,8 @@ dist
 release
 *.log
 playtest
+
+art/esrgan/
+art/hires/
+art/upres/
+art/*_bak/

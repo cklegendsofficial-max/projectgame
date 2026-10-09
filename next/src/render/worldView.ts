@@ -1,5 +1,5 @@
 import { Application, Assets, Container, Graphics, Rectangle, Sprite, Text, Texture } from "pixi.js";
-import { CITIES, H, NH, NW, TW, W, type World } from "../world/gen";
+import { CITIES, GH, GW, H, NH, NW, TW, W, type World } from "../world/gen";
 import type { Camera } from "./camera";
 import type { Game } from "../game/game";
 import { CITY_NAME, NODE_SPRITE, armySize } from "../game/data";
@@ -12,6 +12,8 @@ import { alongPath, seaPath } from "../game/hazar";
 import { tamgaCanvas, type Tamga } from "../game/ozan";
 import { boyOf } from "../game/korkut";
 import { t as tr } from "../i18n";
+import { settings } from "../settings";
+import { terrainMesh, type TerrainMesh } from "./terrain";
 
 const urls: Record<string, string> = {};
 for (const [p, u] of Object.entries(import.meta.glob<string>("../assets/**/*.webp", { eager: true, query: "?url", import: "default" }))) {
@@ -182,6 +184,7 @@ export class WorldView {
   private stormC = new Container();
   private stormM = new Map<number, { glow: Sprite; g: Graphics; flash: number }>();
   private glow!: Texture;
+  private terrain: TerrainMesh | null = null;
   private mark: { x: number; y: number; t: number } | null = null;
   private time = 0;
   private visT = 0;
@@ -191,9 +194,20 @@ export class WorldView {
   async load(): Promise<void> {
     const keys = Object.keys(urls);
     await Promise.all(keys.map(async (k) => (this.tex[k] = await Assets.load<Texture>(urls[k]))));
-    const terrain = new Sprite(Texture.from(this.world.canvas));
-    terrain.scale.set(W / TW);
-    this.layer.addChild(terrain);
+    if (!settings.eco) {
+      try {
+        this.terrain = terrainMesh(this.world, { sand: this.tex["tex/sand"], steppe: this.tex["tex/steppe"], grass: this.tex["tex/grass"], rock: this.tex["tex/rock"] });
+        this.layer.addChild(this.terrain.mesh);
+      } catch (e) {
+        console.warn("terrain shader", e);
+        this.terrain = null;
+      }
+    }
+    if (!this.terrain) {
+      const terrain = new Sprite(Texture.from(this.world.canvas));
+      terrain.scale.set(W / TW);
+      this.layer.addChild(terrain);
+    }
     this.layer.addChild(this.pathG);
     this.buildDeco();
     this.layer.addChild(this.deco);
@@ -335,27 +349,62 @@ export class WorldView {
   }
 
   private buildDeco(): void {
-    const atlas = makeAtlas();
     const items: { y: number; s: Sprite }[] = [];
+    const hash = (n: number) => (((n * 2654435761) ^ (n >>> 7) * 40503) >>> 0) / 4294967296;
+    const fl = (names: string[]) => names.map((n) => this.tex["flora/" + n]).filter(Boolean);
+    const mt = [0, 1, 2, 3, 4, 5, 6, 7, 8].map((n) => this.tex["mtn/m" + n]);
+    const rich = mt.every(Boolean) && fl(["pine0"]).length > 0;
+    const atlas = rich ? null : makeAtlas();
+    const PINE = fl(["pine0", "pine1", "pine2", "pine3", "pop0", "pine1"]);
+    const BROAD = fl(["elm", "mulberry", "walnut", "pop1", "pop2", "pop3", "apricot", "elm", "walnut"]);
+    const tree = (tex: Texture, x: number, y: number, hgt: number, r: number, tint = 0xffffff) => {
+      const s = new Sprite(tex);
+      s.anchor.set(0.5, 0.94);
+      s.position.set(x, y);
+      const sc = hgt / tex.height;
+      s.scale.set(sc * (r > 0.5 ? 1 : -1), sc);
+      s.tint = tint;
+      items.push({ y, s });
+    };
     const tr = this.world.trees;
     const stride = Math.max(1, Math.floor(tr.length / 3 / 9000));
     for (let k = 0; k < tr.length; k += 3 * stride) {
-      const s = new Sprite(atlas.trees[(tr[k + 2] ? 0 : 2) + ((k / 3) % 2)]);
-      s.anchor.set(0.5, 0.9);
-      s.position.set(tr[k], tr[k + 1]);
-      s.scale.set(0.42 + ((k * 7) % 10) / 40);
-      items.push({ y: tr[k + 1], s });
+      const r = hash(k + 11);
+      if (atlas) {
+        const s = new Sprite(atlas.trees[(tr[k + 2] ? 0 : 2) + ((k / 3) % 2)]);
+        s.anchor.set(0.5, 0.9);
+        s.position.set(tr[k], tr[k + 1]);
+        s.scale.set(0.42 + ((k * 7) % 10) / 40);
+        items.push({ y: tr[k + 1], s });
+        continue;
+      }
+      const north = tr[k + 1] < H * 0.42;
+      const pool = tr[k + 2] || (north && r < 0.6) ? PINE : BROAD;
+      tree(pool[Math.floor(hash(k + 5) * pool.length)], tr[k], tr[k + 1], 30 + r * 16, hash(k + 3));
     }
+    if (!atlas) this.scatterDry(tree, hash);
     const pk = this.world.peaks;
     for (let k = 0; k < pk.length; k += 3) {
       const h = pk[k + 2];
       const r = ((k * 2654435761) >>> 0) / 4294967296;
       const v = h < 0.58 ? 0 : h < 0.73 + r * 0.06 ? 1 : 2;
-      const s = new Sprite(atlas.peaks[v]);
-      s.anchor.set(0.5, 0.94);
-      s.position.set(pk[k], pk[k + 1]);
       const sc = 0.34 + Math.min(0.5, (h - 0.5) * 1.5) + r * 0.22;
-      s.scale.set(sc * (r > 0.5 ? 1 : -1) * (0.85 + r * 0.3), sc);
+      const flip = r > 0.5 ? 1 : -1;
+      let s: Sprite;
+      if (atlas) {
+        s = new Sprite(atlas.peaks[v]);
+        s.anchor.set(0.5, 0.94);
+        s.scale.set(sc * flip * (0.85 + r * 0.3), sc);
+      } else {
+        const r2 = hash(k + 23);
+        if (r2 < 0.42 && sc < 0.75) continue;
+        const tex = mt[(2 - v) * 3 + Math.floor(hash(k + 17) * 3)];
+        s = new Sprite(tex);
+        s.anchor.set(0.5, 0.86);
+        const k2 = (128 * sc * (1.2 + r2 * 0.5)) / tex.width;
+        s.scale.set(k2 * flip * (0.9 + r * 0.2), k2);
+      }
+      s.position.set(pk[k], pk[k + 1]);
       const tn = 225 + Math.floor(r * 30);
       s.tint = (tn << 16) | (tn << 8) | Math.min(255, tn + 6);
       items.push({ y: pk[k + 1], s });
@@ -393,6 +442,38 @@ export class WorldView {
       c.cullArea = new Rectangle(box[i * 4], box[i * 4 + 1], box[i * 4 + 2] - box[i * 4], box[i * 4 + 3] - box[i * 4 + 1]);
       this.deco.addChild(c);
     });
+  }
+
+  private scatterDry(tree: (tex: Texture, x: number, y: number, hgt: number, r: number, tint?: number) => void, hash: (n: number) => number): void {
+    const { height, moist, river, road } = this.world;
+    const fl = (n: string) => this.tex["flora/" + n];
+    const shrub = [fl("saxaul"), fl("saxaul"), fl("tamarisk"), fl("bush")].filter(Boolean);
+    const palm = fl("palm");
+    if (!shrub.length) return;
+    const sx = W / GW, sy = H / GH;
+    const nearRiver = (x: number, y: number) => {
+      for (let v = -5; v <= 5; v += 2) for (let u = -5; u <= 5; u += 2) {
+        const xx = x + u, yy = y + v;
+        if (xx >= 0 && yy >= 0 && xx < GW && yy < GH && river[yy * GW + xx]) return true;
+      }
+      return false;
+    };
+    for (let y = 3; y < GH - 3; y += 5) for (let x = 3; x < GW - 3; x += 5) {
+      const n = y * GW + x;
+      const r = hash(n * 7 + 1);
+      const h = height[n], m = moist[n];
+      if (h < 0.04 || h > 0.46) continue;
+      const wx = (x + (hash(n + 2) - 0.5) * 4) * sx, wy = (y + (hash(n + 4) - 0.5) * 4) * sy;
+      if (road[Math.floor((wy / H) * NH) * NW + Math.floor((wx / W) * NW)]) continue;
+      if (CITIES.some((c) => Math.abs(c.x - wx) < 80 && Math.abs(c.y - wy) < 60)) continue;
+      if (palm && m < 0.45 && r < 0.3 && nearRiver(x, y)) {
+        tree(palm, wx, wy, 34 + hash(n + 9) * 12, hash(n + 6));
+        continue;
+      }
+      if (m > 0.5 || r > (m < 0.25 ? 0.03 : 0.055)) continue;
+      const sp = shrub[Math.floor(hash(n + 8) * shrub.length)];
+      tree(sp, wx, wy, 13 + hash(n + 9) * 9, hash(n + 6), sp === fl("saxaul") ? 0xe0d4c0 : 0xa89878);
+    }
   }
 
   private label(text: string, x: number, y: number, size = 1): Text {
@@ -635,6 +716,7 @@ export class WorldView {
   update(dt: number, game: Game, cam: Camera): void {
     const s = game.s;
     this.time += dt;
+    this.terrain?.tick(dt);
     const h = s.hero;
     const moving = !!h.path;
     this.hero.position.set(h.x, h.y - (moving ? Math.abs(Math.sin(this.time * 9)) * 3 : 0));
