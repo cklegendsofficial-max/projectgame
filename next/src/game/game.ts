@@ -17,7 +17,7 @@ import { BREEDS, BREED_GOLD, BREED_TIME, SHOP_BREEDS, tulparChance, type Breed }
 import { BIRDS, BIRD_KEYS, BIRD_MAX, BIRD_NAMES, HUNTS, birdSight, birdXpNeed, type BirdFlight, type BirdKind } from "./falcon";
 import { BRO_BETRAY, BRO_MAX, BRO_MODS, LAST_WORDS, NEM_MAX, NEM_TRAITS, REVENGE, SCAR_EPITHETS, TAUNTS, makeNemesis, nemBoss, nemName, type Nemesis } from "./nemesis";
 import { REQ_GOODS, REQ_INFO, RIVAL_DEFS, RIVAL_LINES, RIVAL_TRAITS, STATUS_NAME, giftCost, oneOf, reqGold, rivalArmy, rivalBoss, rivalName, tribute, type BeyReq, type Rival } from "./rivals";
-import { ENGINE_GOLD, FEAST_GOLD, SIEGE_LV, SIEGE_RENOWN, TAX, cityGarrison, cityTax, wallBonus } from "./conquest";
+import { CITY_BLDS, CITY_EVENTS, ENGINE_GOLD, FEAST_GOLD, GOVERNORS, GOV_GOLD, SIEGE_LV, SIEGE_RENOWN, TAX, cityBldCost, cityGarrison, cityTax, wallBonus, type CityBld, type CityEvent, type Governor } from "./conquest";
 import { DEEP_LORE, DEEP_PERKS, DOORS, DOOR_KEYS, RIDDLES, TOMBS, deepBoss, deepGuard, deepTier, tombOf, type DeepPerk, type DeepRun, type DoorKind } from "./deep";
 import { ACHIEVEMENTS, steamUnlock, storeUnlocked, unlockedSet } from "./achievements";
 import { SEASONS, SEASON_DAYS, seasonOf, type Season, type SeasonId } from "./seasons";
@@ -2740,19 +2740,114 @@ export class Game {
   ownRate(city: string): number {
     const o = this.s.owned[city];
     if (!o) return 0;
-    return cityTax(city) * TAX[o.tax].mult * (0.4 + o.loy / 100);
+    const ev = this.cityEv(city);
+    const gov = this.cityGov(city);
+    const fair = ev?.good && ev.tax > 1 ? 1 + 0.25 * this.cbl(city, "pazar") : 1;
+    return cityTax(city) * TAX[o.tax].mult * (0.4 + o.loy / 100) * (1 + 0.2 * this.cbl(city, "pazar")) * (1 + (gov?.tax ?? 0)) * (ev ? ev.tax * fair : 1) * (this.s.kurultay.decrees.includes("vergi") ? 1.15 : 1);
   }
 
   ownCap(city: string): number {
-    return cityTax(city) * 25;
+    return cityTax(city) * 25 * (1 + 0.5 * this.cbl(city, "ambar"));
+  }
+
+  cbl(city: string, b: CityBld): number {
+    return this.s.owned[city]?.blds?.[b] ?? 0;
+  }
+
+  cityGov(city: string): Governor | null {
+    const id = this.s.owned[city]?.gov;
+    return id ? GOVERNORS.find((g) => g.id === id) ?? null : null;
+  }
+
+  cityEv(city: string): CityEvent | null {
+    const e = this.s.owned[city]?.ev;
+    return e && e.until >= this.dayOf().day ? CITY_EVENTS[e.kind] ?? null : null;
+  }
+
+  cityDefense(city: string): number {
+    const o = this.s.owned[city];
+    if (!o) return 0;
+    return wallBonus(o.from, 0) + 0.1 + 0.12 * this.cbl(city, "sur") + (this.cityGov(city)?.def ?? 0);
+  }
+
+  buildCity(city: string, b: CityBld): void {
+    const o = this.s.owned[city];
+    if (!o) return;
+    const lv = this.cbl(city, b);
+    if (lv >= CITY_BLDS[b].max) return;
+    const c = cityBldCost(b, lv);
+    if (!this.pay(c)) {
+      this.hud.toast(`Yetersiz kaynak: ${c.gold} altın, ${c.stone} taş gerekli.`, "bad");
+      return;
+    }
+    o.blds = { ...(o.blds ?? {}), [b]: lv + 1 };
+    audio.play("quest");
+    this.hud.toast(`${CITY_NAME[city]}: ${CITY_BLDS[b].name} ${lv + 1}. seviye tamamlandı.`, "good");
+    saveGame(this.s);
+  }
+
+  appointGov(city: string, id: string): void {
+    const s = this.s;
+    const o = s.owned[city];
+    if (!o || o.gov === id) return;
+    if (!this.pay({ gold: GOV_GOLD })) return;
+    for (const x of Object.values(s.owned)) if (x.gov === id) delete x.gov;
+    o.gov = id;
+    const gv = GOVERNORS.find((g) => g.id === id)!;
+    audio.play("quest");
+    this.chron(`${gv.name}, ${CITY_NAME[city]} valiliğine atandı.`);
+    this.hud.toast(`${gv.name} artık ${CITY_NAME[city]} valisi.`, "good");
+  }
+
+  fixCityEv(city: string): void {
+    const o = this.s.owned[city];
+    const ev = this.cityEv(city);
+    if (!o || !ev?.fix) return;
+    const cost = { gold: ev.fix.gold ?? 0, food: ev.fix.food ?? 0 };
+    if (!this.pay(cost)) {
+      this.hud.toast("Bunun için yeterli kaynağın yok.", "bad");
+      return;
+    }
+    o.ev = null;
+    o.loy = Math.min(100, o.loy + 10);
+    audio.play("quest");
+    this.hud.toast(`${CITY_NAME[city]}: ${ev.name} sona erdi. Halk minnettar (+10 bağlılık).`, "good");
+  }
+
+  private cityDaily(): void {
+    const s = this.s;
+    const day = this.dayOf().day;
+    const se = this.season();
+    for (const [city, o] of Object.entries(s.owned)) {
+      const k = this.cbl(city, "kisla");
+      const gov = this.cityGov(city);
+      const vol = k * 2 + (gov?.id === "alper" && k ? 1 : 0);
+      if (vol) {
+        o.gar.spear += Math.ceil(vol / 2);
+        o.gar.archer += Math.floor(vol / 2);
+      }
+      if (o.ev && o.ev.until < day) o.ev = null;
+      if (o.ev) continue;
+      const pool = Object.entries(CITY_EVENTS).filter(([, e]) => e.seasons.includes(se));
+      const calm = gov?.calm ?? 0;
+      if (!pool.length || Math.random() > 0.22) continue;
+      const [kind, e] = pool[Math.floor(Math.random() * pool.length)];
+      if (!e.good && Math.random() < calm) continue;
+      o.ev = { kind, until: day + 2 };
+      this.chron(`${CITY_NAME[city]}: ${e.name}. ${e.text}`);
+      this.hud.toast(`${CITY_NAME[city]}: ${e.name}! ${e.text}`, e.good ? "good" : "bad");
+    }
   }
 
   private ownTick(el: number): void {
     const s = this.s;
     for (const [city, o] of Object.entries(s.owned)) {
       o.coffer = Math.min(this.ownCap(city), o.coffer + this.ownRate(city) * el);
-      const garLoy = Math.min(3, armySize(o.gar) / 20);
-      o.loy = Math.max(0, Math.min(100, o.loy + (TAX[o.tax].loy + garLoy - 1) * el));
+      const garLoy = Math.min(3, armySize(o.gar) / 20) * (1 + 0.25 * this.cbl(city, "kisla"));
+      const ev = this.cityEv(city);
+      const evLoy = ev ? (ev.loy < 0 && ev === CITY_EVENTS.kitlik ? ev.loy * (1 - Math.min(1, 0.4 * this.cbl(city, "ambar"))) : ev.loy) : 0;
+      const decree = s.kurultay.decrees.includes("adalet") ? 0.5 : 0;
+      o.loy = Math.max(0, Math.min(100, o.loy + (TAX[o.tax].loy + garLoy - 1 + (this.cityGov(city)?.loy ?? 0) + evLoy + decree) * el));
       if (o.loy < 15 && Math.random() < 0.12 * el) this.loseCity(city, "isyan");
     }
     if (this.battleLock || !s.counterAt || this.now < s.counterAt) return;
@@ -2768,7 +2863,7 @@ export class Game {
     const base = cityGarrison(o.from, 0);
     const k = Math.min(1.3, 0.55 + days * 0.03);
     const foe: Army = { spear: Math.round(base.spear * k), archer: Math.round(base.archer * k), horse: Math.round(base.horse * k) };
-    const res = fight(o.gar, wallBonus(o.from, 0) + 0.1, foe, 0);
+    const res = fight(o.gar, this.cityDefense(city), foe, 0);
     if (res.win) {
       o.gar = { ...res.rounds[res.rounds.length - 1].a };
       o.loy = Math.min(100, o.loy + 8);
@@ -2835,6 +2930,7 @@ export class Game {
     if (day > s.rivalDay) {
       s.rivalDay = day;
       this.rivalDaily();
+      this.cityDaily();
     }
     this.reqT -= dt;
     if (this.reqT <= 0) {
@@ -2891,7 +2987,7 @@ export class Game {
     for (const [city, o] of Object.entries(s.owned)) {
       const p = this.cityPos(city);
       if (Math.hypot(p.x - r.x, p.y - r.y) > 260) continue;
-      const res = fight(o.gar, wallBonus(o.from, 0) + 0.1, r.army, 0.05);
+      const res = fight(o.gar, this.cityDefense(city), r.army, 0.05);
       r.army = { ...res.rounds[res.rounds.length - 1].b };
       if (res.win) {
         o.gar = { ...res.rounds[res.rounds.length - 1].a };

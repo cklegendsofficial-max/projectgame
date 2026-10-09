@@ -23,7 +23,7 @@ import { TITLE_CATS, titleKey, titleOf } from "../game/titles";
 import { DAILY_POOL } from "../game/daily";
 import { REQ_INFO, RIVAL_TRAITS, STATUS_NAME } from "../game/rivals";
 import { DEEP_PERKS, TOMBS, tombOf } from "../game/deep";
-import { ENGINE_GOLD as ENGINE_GOLD_UI, FEAST_GOLD as FEAST_GOLD_UI, TAX as TAX_UI } from "../game/conquest";
+import { CITY_BLDS, CITY_BLD_KEYS, ENGINE_GOLD as ENGINE_GOLD_UI, FEAST_GOLD as FEAST_GOLD_UI, GOVERNORS, GOV_GOLD, TAX as TAX_UI, cityBldCost } from "../game/conquest";
 
 const WEAPON_ICON: Record<string, string> = { kilic: "it_sword_", balta: "it_axe_", hancer: "it_dagger_", ok: "it_bow_", asa: "it_staff_" };
 
@@ -1070,7 +1070,33 @@ export class Hud {
       <h3>${ic("scroll")} Vergi oranı</h3><div class="row">${TAX_UI.map((t, i) => `<button class="btn sm ${o.tax === i ? "go" : ""}" data-a="${this.act(() => g.setTax(city, i as 0 | 1 | 2))}">${t.name} ×${t.mult}</button>`).join("")}</div>
       <p class="dim">Hafif vergi bağlılığı artırır, ağır vergi kasayı hızla doldurur ama halkı kızdırır. Garnizon da bağlılığı destekler.</p>
       <button class="btn ${s.res.gold < FEAST_GOLD_UI ? "off" : ""}" data-a="${this.act(() => g.feast(city))}">${ic("food")} Şölen ver (+25 bağlılık) · ${ic("coins")}${FEAST_GOLD_UI}</button>
-      <h3>${ic("tug")} Garnizon <em>${armySize(o.gar)}</em></h3>${UNIT_KEYS.map(garRow).join("")}`;
+      <h3>${ic("tug")} Garnizon <em>${armySize(o.gar)} · savunma +%${Math.round(g.cityDefense(city) * 100)}</em></h3>${UNIT_KEYS.map(garRow).join("")}
+      ${this.cityMgmtHtml(city)}`;
+  }
+
+  private cityMgmtHtml(city: string): string {
+    const g = this.g;
+    const s = g.s;
+    const o = s.owned[city]!;
+    const ev = g.cityEv(city);
+    const evHtml = ev
+      ? `<div class="grow cev ${ev.good ? "good" : "bad"}">${ic(ev.icon, "gimg")}<div class="bi2"><b>${ev.name} <em>· ${Math.max(0, o.ev!.until - g.dayOf().day + 1)} gün</em></b><small>${ev.text}</small><small class="${ev.good ? "cheap" : "neg"}">Vergi ×${ev.tax} · bağlılık ${ev.loy > 0 ? "+" : ""}${ev.loy}/dk</small></div>${ev.fix ? `<button class="btn sm go" data-a="${this.act(() => g.fixCityEv(city))}">${ev.fix.label}<br>${ev.fix.gold ? `${ic("coins")}${ev.fix.gold}` : ""}${ev.fix.food ? `${ic("food")}${ev.fix.food}` : ""}</button>` : ""}</div>`
+      : "";
+    const blds = CITY_BLD_KEYS.map((b) => {
+      const B = CITY_BLDS[b];
+      const lv = g.cbl(city, b);
+      const max = lv >= B.max;
+      const c = cityBldCost(b, lv);
+      const can = s.res.gold >= c.gold && s.res.stone >= c.stone;
+      return `<div class="grow">${ic(B.icon, "gimg")}<div class="bi2"><b>${B.name} <em>${lv}/${B.max}</em></b><small>${B.desc(Math.max(1, lv + (max ? 0 : 1)))}</small></div>${max ? `<em class="cheap">Tamam</em>` : `<button class="btn sm ${can ? "go" : "off"}" data-a="${this.act(() => g.buildCity(city, b))}">Kur<br>${ic("coins")}${c.gold} ${ic("stone")}${c.stone}</button>`}</div>`;
+    }).join("");
+    const cur = g.cityGov(city);
+    const govs = GOVERNORS.map((gv) => {
+      const here = cur?.id === gv.id;
+      const where = Object.entries(s.owned).find(([, x]) => x.gov === gv.id)?.[0];
+      return `<div class="grow ${here ? "pick" : ""}">${ic(gv.icon, "gimg round")}<div class="bi2"><b>${gv.name} <em>${gv.role}</em></b><small>${gv.desc}</small>${where && !here ? `<small class="dim">Şu an ${CITY_NAME[where]} valisi</small>` : ""}</div>${here ? `<em class="cheap">Vali</em>` : `<button class="btn sm ${s.res.gold >= GOV_GOLD ? "" : "off"}" data-a="${this.act(() => g.appointGov(city, gv.id))}">Ata<br>${ic("coins")}${GOV_GOLD}</button>`}</div>`;
+    }).join("");
+    return `${evHtml}<h3>${ic("fortress")} Şehir yapıları</h3>${blds}<h3>${ic("crown")} Vali</h3><p class="dim">Her vali yalnızca bir şehri yönetir. Başka şehre atarsan eski görevinden ayrılır.</p>${govs}`;
   }
 
   private sagaBox(cityId: string, near: boolean): string {
