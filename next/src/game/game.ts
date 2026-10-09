@@ -49,7 +49,8 @@ import { steamStats } from "../platform";
 import { FALL_PRICE, FALL_TEXT, LEG_DAYS, MONGOL_DAY, MONGOL_LV, RECOVER_DAYS, ROUTE, RUMORS, RUMOR_LEAD, STR_MAX, WIN_DELAY, joinLoot, mongolArmy, mongolBoss, newMongol, tributeCost, type MongolState } from "./mongol";
 import { KIP_ALLY_FX, KIP_ALLY_MODS, KIP_FOOD, KIP_FORT_FX, KIP_GIFT, KIP_GIFT_REP, KIP_HIRE_GAP, KIP_HIRE_N, KIP_HIRE_REP, KIP_RAW, KIP_SELL_MULT, KIP_SELL_REP, KIP_STEPS, KIP_STONES_MODS, STONES, STONE_FX, inKipchak, kipBoss, kipFortArmy, kipHireCost, newKip, stoneXp, type KipPoi, type KipState } from "./kipchak";
 import { SEASONS, SEASON_DAYS, seasonOf, type Season, type SeasonId } from "./seasons";
-import { FACTIONS, FACTION_KEYS, HOSTILE, REP_RANKS, RANK_PERKS, factionOf, repRank, type FactionId } from "./factions";
+import { FACTIONS, FACTION_KEYS, HOSTILE, OCCUPY, REP_RANKS, RANK_PERKS, citiesOf, factionOf, repRank, type FactionId } from "./factions";
+import { DROUGHT_DAYS, ERAS, PEACE_GAP, RIOT_AT, SAFE_CITIES, SHORT_MAX, STYLE_NAME, WAR_CAUSES, WAR_CHANCE, WAR_MAX_DAYS, WAR_MIN_DAY, WAR_PAIRS, WAR_TAKE, WOLF_MAX, WOLF_PACK_AT, WOLF_SACRED, adaptWeights, counterOf, eraOf, favTactic, lifeStyle, moonKind, moonPhase, newWorld, noteTactic, realFest, shortMult, styleMix, warKey, type Style, type War, type WorldState } from "./world";
 import { CLASS_BY_ID, CLASS_SKILLS, SKILL_MAX, WEAPON_NAME, WEAPON_STAT, skillPow, skillRank, type ClassDef, type ClassId, type ClassSkill, type WeaponKind } from "./classes";
 import { ACT2, ACT3, CHAPTERS, COMP_BY_ID, COMP_MAX, ENDINGS, ERLIK, ERLIK_SHADE, FORT_GUARD, GATE_GUARD, KARA_HAN, KASIM, KOK_BORU, PEAK_GUARD, SHADE_GUARD, endingOf, type Chapter, type CompId, type CompMods, type Companion } from "./story";
 import { CAPITAL, SLAVE_RADIUS, banditArmy, campGarrison, importSave, kurganBoss, kurganGuard, loadGame, saveGame as rawSave, useSlot, wipeGame, type Bandit, type Bounty, type Caravan, type Contract, type GameState, type Storm } from "./state";
@@ -166,9 +167,12 @@ export class Game {
   private songLater = false;
   private retreatHook: (() => void) | null = null;
   private kurAnn = -1;
+  private moon: "dolunay" | "karaay" | null = moonKind(moonPhase(new Date()));
 
   constructor(public world: World, public view: WorldView, public cam: Camera) {
     this.s = loadGame(world);
+    this.s.wd = { ...newWorld(), ...this.s.wd };
+    Object.assign(OCCUPY, this.s.wd.occ);
     this.reveal(CAPITAL.x, CAPITAL.y, 16);
     this.reveal(this.s.hero.x, this.s.hero.y, 11);
     cam.zoom = 0.75;
@@ -676,7 +680,7 @@ export class Game {
   }
 
   heroBonus(): number {
-    return 0.025 * this.stat("lid") + 0.02 * (this.s.hero.lv - 1) + this.cls().mods.army + this.compMods().army + 0.03 * this.tal("nara") + (this.buff("davul") ? 0.15 : 0) + (this.buff("surek") ? 0.08 : 0) + (this.buff("yug") ? 0.05 : 0) + (this.buff("ulgen") ? 0.12 : 0) + (this.buff("ata") ? 0.05 : 0) + balbalBonus(this.s.foes ?? []) + (this.gearMods().army ?? 0) + this.heroRankBonus() + this.allyBonus() + (hasLegacy("tengri") ? 0.06 : 0) + vetBonus(this.s.vets ?? []) + (this.s.beylik ? kutArmy(this.s.kut ?? 50) : 0) + this.famBonus();
+    return 0.025 * this.stat("lid") + 0.02 * (this.s.hero.lv - 1) + this.cls().mods.army + this.compMods().army + 0.03 * this.tal("nara") + (this.buff("davul") ? 0.15 : 0) + (this.buff("surek") ? 0.08 : 0) + (this.buff("yug") ? 0.05 : 0) + (this.buff("ulgen") ? 0.12 : 0) + (this.buff("ata") ? 0.05 : 0) + balbalBonus(this.s.foes ?? []) + (this.gearMods().army ?? 0) + this.heroRankBonus() + this.allyBonus() + (hasLegacy("tengri") ? 0.06 : 0) + vetBonus(this.s.vets ?? []) + (this.s.beylik ? kutArmy(this.s.kut ?? 50) : 0) + this.famBonus() + this.moonBonus();
   }
 
   addKut(n: number, why = ""): void {
@@ -880,6 +884,10 @@ export class Game {
     const day = this.dayOf().day;
     if (s.road.day !== day) s.road = { ...s.road, day, n: 0 };
     if (s.road.n >= ROAD_PER_DAY || Math.random() > ROAD_CHANCE) return;
+    if (this.isNight() && this.wd().wolves >= WOLF_PACK_AT && Math.random() < (this.moon === "dolunay" ? 0.45 : 0.25)) {
+      s.road.n++;
+      return this.wolfPack();
+    }
     this.roadEvent();
   }
 
@@ -936,6 +944,8 @@ export class Game {
     }
     const pass = !o.check || Math.random() < checkChance(this.stat(o.check.stat), o.check.dc);
     const r = pass ? o.ok : o.fail ?? o.ok;
+    if (r.kut) this.remember(r.kut > 0, `${tr(ev.title)}: ${tr(o.label)}`);
+    this.note("kesif");
     const fx = this.roadFx(r);
     const roll = o.check ? `<small class="${pass ? "cheap" : "dear"}">${STAT_INFO[o.check.stat].name} sınaması: ${pass ? "başarılı" : "başarısız"}</small><br>` : "";
     this.hud.story(ev.title, ev.icon, `${roll}${r.text}${fx}`, "Yola devam");
@@ -1470,6 +1480,7 @@ export class Game {
     if (h.energy < 10) return this.hud.toast("Çok yorgunsun. Biraz bekle ya da şehirde dinlen.", "bad");
     if (this.s.free && n.left <= 0) return this.hud.toast("Burası tükendi", "bad");
     h.energy -= 10;
+    this.note("is");
     const label = { wood: "Odun kesiyorsun", stone: "Taş kırıyorsun", food: "Tarlada çalışıyorsun", gold: "Madende kazıyorsun" }[n.kind];
     this.start(label, 5, () => {
       const s = this.s;
@@ -1606,6 +1617,17 @@ export class Game {
       const coffer = Object.entries(s.serais).filter(([, v]) => v.coffer >= 80).sort((x, y) => y[1].coffer - x[1].coffer)[0];
       if (coffer) out.push({ kind: "firsat", icon: "map/serai", title: tr("{c} kervansarayı", { c: CITY_NAME[coffer[0]] }), text: tr("Kasada {n} altın birikti. Uğrayıp al.", { n: Math.floor(coffer[1].coffer) }), at: CITIES.find((c) => c.id === coffer[0]) });
       if (this.dailyClaimable()) out.push({ kind: "firsat", icon: "chest", title: tr("Günlük ödül hazır"), text: tr("Hedefler sekmesinden al."), open: "goals" });
+    }
+    if (s.free && s.wd) {
+      for (const war of s.wd.wars) {
+        if (!war.side) continue;
+        const foe = war.side === war.a ? war.b : war.a;
+        const front = s.forts.map((f, i) => ({ f, i })).filter((x) => x.f.owner === foe).sort((a, b) => Math.hypot(a.f.x - h.x, a.f.y - h.y) - Math.hypot(b.f.x - h.x, b.f.y - h.y))[0];
+        const lead = war.side === war.a ? war.takes : -war.takes;
+        out.push({ kind: "firsat", icon: "icons/swords", title: tr("Cephe: {f} savaşı", { f: FACTIONS[foe].short }), text: front ? tr("{k} düşman elinde. Alırsan cephe senin lehine döner. Durum: {l}", { k: this.fortTitle(front.i), l: lead > 0 ? tr("öndeyiz") : lead < 0 ? tr("geride kalıyoruz") : tr("başa baş") }) : tr("{f} kervanlarını vur, şehirlerini kuşat.", { f: FACTIONS[foe].short }), at: front?.f ?? null });
+      }
+      const sc = CITIES.filter((c) => (s.wd!.short[c.id] ?? 0) >= 4 && !this.hostile(c.id)).sort((a, b) => (s.wd!.short[b.id] ?? 0) - (s.wd!.short[a.id] ?? 0))[0];
+      if (sc) out.push({ kind: "firsat", icon: "icons/merchant", title: tr("{c} çarşısında kıtlık", { c: CITY_NAME[sc.id] }), text: tr("Fiyatlar %{p} yukarıda. Mal götüren kazanır; kıtlık sürerse isyan çıkar.", { p: Math.round((shortMult(s.wd.short[sc.id] ?? 0) - 1) * 100) }), at: sc });
     }
     const ch = s.free ? this.chapter() : null;
     if (ch) out.push({ kind: "hikaye", icon: ch.img, title: ch.title, text: ch.goal, at: ch.goto(this) });
@@ -1744,7 +1766,7 @@ export class Game {
     const ci = CITIES.findIndex((c) => c.id === city);
     const day = this.dayOf().day;
     const wave = 1 + 0.12 * Math.sin(day * 1.7 + ci * 2.3 + GOOD_KEYS.indexOf(g) * 1.1);
-    return GOODS[g].base * goodMult(city, g) * wave * (this.sea().goods[g] ?? 1) * this.eventMult(city, g) * (1 + 0.6 * (this.market(city)[g] ?? 0)) * (this.sacked(city) ? FALL_PRICE : 1);
+    return GOODS[g].base * goodMult(city, g) * wave * (this.sea().goods[g] ?? 1) * this.eventMult(city, g) * (1 + 0.6 * (this.market(city)[g] ?? 0)) * (this.sacked(city) ? FALL_PRICE : 1) * this.worldMult(city);
   }
 
   buyFactor(): number {
@@ -1919,6 +1941,7 @@ export class Game {
     }
     if (k === 0) return this.hud.toast(this.cargoUsed() >= this.carryCap() ? "Yükün dolu" : "Altın yetersiz", "bad");
     h.skills.ticaret += Math.ceil(paid / 25);
+    this.note("ticaret");
     this.hud.toast(`${k} ${GOODS[g].name} alındı (−${paid} altın)`, "info");
   }
 
@@ -1942,6 +1965,8 @@ export class Game {
     if (profit >= 120) this.addRep(factionOf(city), Math.floor(profit / 120), "ticaret");
     if (profit >= 150) this.bondEvent("trade");
     h.skills.ticaret += Math.ceil(got / 20);
+    this.note("ticaret");
+    if (this.shortage(city) >= 3) this.addShort(city, -Math.min(2, k0 / 10));
     this.addXp(Math.max(0, Math.floor(profit / 15)));
     this.hud.toast(`${k0} ${GOODS[g].name} satıldı: +${got} altın (${profit >= 0 ? "kâr" : "zarar"} ${Math.abs(profit)})`, profit >= 0 ? "good" : "bad");
   }
@@ -3206,6 +3231,7 @@ export class Game {
           b.army.spear += 2;
           const m = this.market(cv.to);
           m[cv.good] = Math.min(1.2, (m[cv.good] ?? 0) + 0.15);
+          this.addShort(cv.to, 1);
           if (this.isExplored(cv.x, cv.y)) this.hud.toast(`Bir ${FACTIONS[cv.fac as FactionId].short} kervanı yağmalandı. ${CITY_NAME[cv.to]} pazarında ${GOODS[cv.good].name} pahalanacak.`, "info");
         }
         continue;
@@ -3303,6 +3329,9 @@ export class Game {
       const gold = Math.round(this.caravanValue(cv) * 0.25 * this.stealMult());
       this.gain({ gold });
       s.c.robbed++;
+      this.addShort(cv.to, 2);
+      this.warHit(fac, 8);
+      this.remember(false, tr("{f} kervanını soydun", { f: FACTIONS[fac].short }));
       this.addKut(-4, "kervan soygunu töreye aykırı");
       this.bondEvent("robbed");
       if (s.c.robbed === 1) this.chron(`${FACTIONS[fac].name} kervanı yolda soyuldu. O günden beri hanlarda ${gen(s.hero.name)} adı fısıltıyla anılıyor.`);
@@ -3316,6 +3345,8 @@ export class Game {
     const gold = Math.round(this.caravanValue(cv) * 0.2);
     this.s.res.gold += gold;
     this.s.c.rescued++;
+    this.addShort(cv.to, -1);
+    this.remember(true, tr("{f} kervanını haramilerden kurtardın", { f: FACTIONS[fac].short }));
     this.addRep(fac, 25, "kervanı kurtardın");
     this.addKut(2);
     this.bondEvent("rescue");
@@ -3403,7 +3434,14 @@ export class Game {
     this.battleLock = true;
     h.path = null;
     this.target = null;
-    const w = stanceWeights(enemy, boss);
+    const wd = this.wd();
+    const w = adaptWeights(stanceWeights(enemy, boss), wd.tac, boss ? 0.9 : 0.35 + Math.min(0.4, this.s.renown / 1500));
+    const fav = favTactic(wd.tac);
+    const day = this.dayOf().day;
+    if (fav.n >= 6 && fav.share >= 0.6 && day - wd.tacWarn >= 3) {
+      wd.tacWarn = day;
+      this.hud.toast(tr("Düşmanlar senin {t} alışkanlığını öğrendi; artık {c} ile karşılıyorlar. Taktiğini değiştir!", { t: tr(TACTICS[fav.t].name), c: tr(TACTICS[counterOf(fav.t)].name) }), "bad");
+    }
     let r = Math.random();
     const stance = TACTIC_KEYS.find((t) => (r -= w[t]) < 0) ?? "duvar";
     const known = this.scouts();
@@ -3465,6 +3503,8 @@ export class Game {
   private resolveBattle(title: string, enemy: Army, enemyBonus: number, after: (win: boolean) => string, boss: Boss | null, foe: string, t: Tactic, stance: Tactic, auto: boolean): void {
     const h = this.s.hero;
     this.lastTactic = auto ? this.lastTactic : t;
+    if (!auto) noteTactic(this.wd().tac, t);
+    this.note("savas");
     const champ = this.champion();
     const sim = new Sim(h.army, this.heroBonus() + this.tdelta(t, stance), enemy, enemyBonus, champ, boss);
     this.readEdge = !auto && TACTICS[t].beats === stance;
@@ -3496,7 +3536,7 @@ export class Game {
         h.army[u] += k;
         revived += k;
       }
-    const xp = Math.round((armyPower(enemy) + (boss ? boss.atk * Math.sqrt(boss.hp) * 0.8 : 0)) * (res.win ? 0.7 : 0.15) * (this.readEdge ? 1.25 : 1)) + 3;
+    const xp = Math.round((armyPower(enemy) + (boss ? boss.atk * Math.sqrt(boss.hp) * 0.8 : 0)) * (res.win ? 0.7 : 0.15) * (this.readEdge ? 1.25 : 1) * this.eraXp()) + 3;
     if (this.readEdge) this.s.c.reads = (this.s.c.reads ?? 0) + 1;
     this.readEdge = false;
     const lvUp = this.addXp(xp);
@@ -3592,7 +3632,7 @@ export class Game {
     this.battle(`${c.name} kampı`, c.garrison, 0.1, (win) => {
       if (!win) return "";
       c.alive = false;
-      c.respawnAt = this.now + 15 * 60000;
+      c.respawnAt = this.now + 15 * 60000 * ERAS[this.wd().era].respawn;
       this.s.bandits = this.s.bandits.filter((b) => b.camp !== i);
       const loot = { gold: Math.round((60 * c.tier * c.tier + 40) * this.cls().mods.loot * this.stealMult()), wood: 60 * c.tier, stone: 40 * c.tier };
       this.gain(loot);
@@ -3842,6 +3882,7 @@ export class Game {
     const fac = FACTIONS[f];
     const name = CITY_NAME[city];
     s.rep[f] = Math.max(-500, this.rep(f) - (peaceful ? 200 : 400));
+    this.warHit(f, 60);
     delete s.sieged[city];
     s.owned[city] = { loy: peaceful ? 55 : 35, gar: army(10, 6, 4), coffer: 0, tax: 1, since: this.dayOf().day, from: f };
     s.c.conquests = (s.c.conquests ?? 0) + 1;
@@ -3950,6 +3991,7 @@ export class Game {
         this.addKut(-3, "ant bozuldu");
       }
     }
+    this.note("kusatma");
     this.siegeRun = newSiege(fortKey(i), fortWall(f, s.engines), f.gar, s.engines, Math.random);
     this.siegeRun.relief = f.owner === "harami" ? 99 : 5 + Math.floor(Math.random() * 3);
     s.engines = 0;
@@ -3995,7 +4037,10 @@ export class Game {
     const f = s.forts[i];
     const name = this.fortTitle(i);
     const prev = f.owner;
-    if (prev !== "harami" && prev !== "me") s.rep[prev] = Math.max(-500, this.rep(prev) - (peaceful ? 40 : 80));
+    if (prev !== "harami" && prev !== "me") {
+      s.rep[prev] = Math.max(-500, this.rep(prev) - (peaceful ? 40 : 80));
+      this.warHit(prev, 20 + 8 * f.tier);
+    }
     f.owner = "me";
     f.lost = 0;
     f.since = this.dayOf().day;
@@ -4188,6 +4233,417 @@ export class Game {
     this.chron(`${name}, ${this.fortOwnerName(f.owner)} eline geçti.`);
     if (!quiet) this.hud.story(tr("{k} kaybedildi", { k: name }), "icons/fortress", tr("{w} surları aştı; garnizonun kılıçtan geçirildi. Kaleyi yeniden almak için kuşatman gerekecek.", { w: this.fortOwnerName(f.owner) }), tr("Acı haber"));
     saveGame(this.s);
+  }
+
+  // ---------- yaşayan dünya ----------
+
+  wd(): WorldState {
+    return (this.s.wd ??= newWorld());
+  }
+
+  /** Oyuncunun ne yaptığını kaydeder; yönetmen tekrarı fark edip sürpriz çıkarır. */
+  note(k: Style): void {
+    const w = this.wd();
+    w.acts.push({ d: this.dayOf().day, k });
+    if (w.acts.length > 60) w.acts.splice(0, w.acts.length - 60);
+  }
+
+  /** Dünya hafızası: iyilik de kötülük de bir gün geri döner. */
+  remember(good: boolean, what: string): void {
+    const w = this.wd();
+    const h = this.s.hero;
+    w.deeds.push({ d: this.dayOf().day, good, x: h.x, y: h.y, what });
+    if (w.deeds.length > 24) w.deeds.shift();
+  }
+
+  playStyle(): { now: string; life: string } {
+    const w = this.wd();
+    return { now: STYLE_NAME[styleMix(w.acts, this.dayOf().day).top], life: STYLE_NAME[lifeStyle(w.acts)] };
+  }
+
+  warOf(f: FactionId): War | undefined {
+    return this.wd().wars.find((x) => x.a === f || x.b === f);
+  }
+
+  shortage(city: string): number {
+    return this.s.wd?.short[city] ?? 0;
+  }
+
+  addShort(city: string, n: number): void {
+    const w = this.wd();
+    w.short[city] = Math.max(0, Math.min(SHORT_MAX, (w.short[city] ?? 0) + n));
+  }
+
+  /** Şehir fiyatlarına dünya etkisi: kıtlık, çağ, savaş. */
+  worldMult(city: string): number {
+    const w = this.s.wd;
+    if (!w) return 1;
+    return shortMult(w.short[city] ?? 0) * ERAS[w.era].price * (this.warOf(factionOf(city)) ? 1.05 : 1);
+  }
+
+  eraXp(): number {
+    return ERAS[this.s.wd?.era ?? "kurulus"].xp;
+  }
+
+  moonBonus(): number {
+    return this.moon === "dolunay" && this.isNight() ? 0.05 : 0;
+  }
+
+  /** Oyuncunun bir devlete karşı yaptığı her şey cepheye yansır. */
+  warHit(f: FactionId, n: number): void {
+    const war = this.warOf(f);
+    if (!war) return;
+    war.score += f === war.a ? -n : n;
+    if (war.side && war.side !== f) war.help += n;
+  }
+
+  private worldDaily(day: number): void {
+    if (!this.s.free) return;
+    this.moon = moonKind(moonPhase(new Date()));
+    this.warDaily(day);
+    this.econDaily(day);
+    this.natureDaily(day);
+    this.eraDaily(day);
+    this.memoryDaily(day);
+    this.surpriseDaily(day);
+    this.festDaily();
+  }
+
+  private facPower(f: FactionId): number {
+    return citiesOf(f).length * 10 + this.s.forts.filter((x) => x.owner === f).length * 3 + 5;
+  }
+
+  private warDaily(day: number): void {
+    const w = this.wd();
+    for (const war of [...w.wars]) {
+      const pa = this.facPower(war.a);
+      const pb = this.facPower(war.b);
+      const lean = war.side ? (war.side === war.a ? 4 : -4) : 0;
+      war.score += ((pa - pb) / (pa + pb)) * 14 + lean + (Math.random() - 0.5) * 34;
+      if (Math.abs(war.score) >= WAR_TAKE) this.warTake(war);
+      if (day - war.since > WAR_MAX_DAYS || (day - war.since > 14 && Math.random() < 0.05)) this.warEnd(war, day);
+    }
+    if (day < WAR_MIN_DAY || w.wars.length >= 2 || this.s.mongol?.stage === 2 || Math.random() > WAR_CHANCE) return;
+    const busy = (f: FactionId) => w.wars.some((x) => x.a === f || x.b === f);
+    const pairs = WAR_PAIRS.filter(([a, b]) => !busy(a) && !busy(b) && (w.peaceUntil[warKey(a, b)] ?? 0) <= day);
+    if (!pairs.length) return;
+    const [a, b] = oneOf(pairs);
+    this.warStart(a, b, day);
+  }
+
+  warStart(a: FactionId, b: FactionId, day = this.dayOf().day): void {
+    const w = this.wd();
+    const war: War = { a, b, since: day, score: 0, side: null, help: 0, takes: 0 };
+    w.wars.push(war);
+    const cause = oneOf(WAR_CAUSES);
+    this.chron(`${FACTIONS[a].name} ile ${FACTIONS[b].name} arasında savaş başladı. ${cause}`);
+    audio.play("lose");
+    const text = `${tr(cause)}<br><br>${tr("{a} ile {b} artık savaşta. Sınır kaleleri ve şehirler el değiştirebilir; savaşan devletlerin pazarlarında fiyatlar kıpırdanacak.", { a: FACTIONS[a].name, b: FACTIONS[b].name })}<br><br>${tr("Bir tarafa katılırsan, onların düşmanının kalelerini almak, kervanlarını vurmak cepheyi senin lehine çevirir. Savaş kazanılırsa hükümdar seni ödüllendirir.")}`;
+    if (this.battleLock || this.hud.modal()) {
+      this.hud.toast(tr("{a} ile {b} savaşa tutuştu!", { a: FACTIONS[a].name, b: FACTIONS[b].name }), "bad");
+      return;
+    }
+    this.hud.choice(tr("Savaş ilanı!"), "icons/swords", text, [
+      { label: tr("{f} safına katıl", { f: FACTIONS[a].name }), cls: "", fn: () => this.warJoin(war, a) },
+      { label: tr("{f} safına katıl", { f: FACTIONS[b].name }), cls: "", fn: () => this.warJoin(war, b) },
+      { label: tr("Tarafsız kal"), cls: "", fn: () => {} },
+    ]);
+  }
+
+  warJoin(war: War, f: FactionId): void {
+    const s = this.s;
+    const foe = f === war.a ? war.b : war.a;
+    war.side = f;
+    s.rep[f] = this.rep(f) + 40;
+    s.rep[foe] = Math.max(-500, this.rep(foe) - 80);
+    this.chron(`${s.hero.name}, ${FACTIONS[f].name} safında ${FACTIONS[foe].name} savaşına katıldı.`);
+    this.hud.toast(tr("{f} sancağı altındasın. {e} kalelerini al, kervanlarını vur: cephe senin elinde.", { f: FACTIONS[f].short, e: FACTIONS[foe].short }), "good");
+    saveGame(s);
+  }
+
+  private warTake(war: War): void {
+    const s = this.s;
+    const w = this.wd();
+    const win = war.score > 0 ? war.a : war.b;
+    const lose = win === war.a ? war.b : war.a;
+    war.score = 0;
+    war.takes += win === war.a ? 1 : -1;
+    const cap = CITIES.find((c) => c.id === FACTIONS[win].cities[0])!;
+    const dist = (p: { x: number; y: number }) => Math.hypot(p.x - cap.x, p.y - cap.y);
+    const city = citiesOf(lose)
+      .filter((c) => !SAFE_CITIES.includes(c) && !s.owned[c] && citiesOf(lose).length > 1)
+      .map((c) => CITIES.find((x) => x.id === c)!)
+      .sort((x, y) => dist(x) - dist(y))[0];
+    if (city && Math.random() < 0.5) {
+      const home = FACTION_KEYS.find((f) => FACTIONS[f].cities.includes(city.id));
+      if (home === win) {
+        delete w.occ[city.id];
+        delete OCCUPY[city.id];
+      } else {
+        w.occ[city.id] = win;
+        OCCUPY[city.id] = win;
+      }
+      delete s.sieged[city.id];
+      this.addShort(city.id, 3);
+      this.chron(`${CITY_NAME[city.id]} düştü; şehrin burçlarında artık ${FACTIONS[win].name} sancağı dalgalanıyor.`);
+      audio.play("story");
+      this.hud.toast(tr("Cepheden haber: {c} {w} eline geçti! Çarşıda kıtlık başladı.", { c: CITY_NAME[city.id], w: FACTIONS[win].name }), "info");
+      return;
+    }
+    const fort = s.forts
+      .map((f, i) => ({ f, i }))
+      .filter((x) => x.f.owner === lose)
+      .sort((x, y) => dist(x.f) - dist(y.f))[0];
+    if (fort) {
+      fort.f.owner = win;
+      fort.f.lost = 1;
+      fort.f.gar = fortGarrison(fort.f.tier, win, 1);
+      this.chron(`${this.fortTitle(fort.i)}, ${FACTIONS[win].name} eline geçti.`);
+      this.hud.toast(tr("Cepheden haber: {k} {w} eline geçti.", { k: this.fortTitle(fort.i), w: FACTIONS[win].name }), "info");
+      return;
+    }
+    this.hud.toast(tr("Cepheden haber: {w}, {l} ordusunu meydan savaşında bozguna uğrattı.", { w: FACTIONS[win].name, l: FACTIONS[lose].name }), "info");
+  }
+
+  private warEnd(war: War, day: number): void {
+    const s = this.s;
+    const w = this.wd();
+    w.wars = w.wars.filter((x) => x !== war);
+    w.peaceUntil[warKey(war.a, war.b)] = day + PEACE_GAP;
+    const win = war.takes > 0 ? war.a : war.takes < 0 ? war.b : null;
+    this.chron(win ? `${FACTIONS[war.a].name} ile ${FACTIONS[war.b].name} barış yaptı; savaşı ${FACTIONS[win].name} kazandı.` : `${FACTIONS[war.a].name} ile ${FACTIONS[war.b].name} yorgun düştü; kimse kazanamadan barış imzalandı.`);
+    if (!war.side) {
+      this.hud.toast(tr("{a} ile {b} barış imzaladı.", { a: FACTIONS[war.a].name, b: FACTIONS[war.b].name }), "info");
+      return;
+    }
+    const f = war.side;
+    if (win === f || (!win && war.help >= 20)) {
+      const gold = 200 + Math.round(war.help * 12);
+      this.gain({ gold });
+      s.rep[f] = this.rep(f) + 60 + Math.round(war.help);
+      s.renown += 10 + Math.round(war.help / 4);
+      this.addKut(3, "zafer");
+      this.sing("zafer", { place: FACTIONS[f].name });
+      audio.play("quest");
+      this.hud.story(tr("Zafer!"), "icons/crown", tr("{r} seni divanına çağırdı: \"Bu savaşı senin kılıcın kazandı.\" Hazineden +{g} altın, itibar ve şöhret.", { r: FACTIONS[f].ruler, g: gold }), tr("Ne mutlu"));
+    } else this.hud.toast(tr("Savaş bitti. Desteklediğin {f} istediğini alamadı.", { f: FACTIONS[f].name }), "bad");
+  }
+
+  private econDaily(day: number): void {
+    const s = this.s;
+    const w = this.wd();
+    for (const c of CITIES) {
+      const amb = s.owned[c.id] ? this.cbl(c.id, "ambar") * 0.3 : 0;
+      const war = this.warOf(factionOf(c.id)) && !SAFE_CITIES.includes(c.id) ? 0.35 : 0;
+      w.short[c.id] = Math.max(0, Math.min(SHORT_MAX, (w.short[c.id] ?? 0) - 0.5 - amb + war));
+      if ((w.short[c.id] ?? 0) < RIOT_AT || day - (w.riotDay[c.id] ?? -99) < 6) continue;
+      w.riotDay[c.id] = day;
+      this.riot(c.id);
+    }
+  }
+
+  private riot(city: string): void {
+    const s = this.s;
+    const name = CITY_NAME[city];
+    this.chron(`${name} çarşısında ekmek isyanı çıktı.`);
+    const o = s.owned[city];
+    if (o) o.loy = Math.max(0, o.loy - 10);
+    const here = this.nearCity(260);
+    if (here < 0 || CITIES[here].id !== city || this.battleLock || this.hud.modal()) {
+      this.hud.toast(tr("{c} çarşısında kıtlık isyanı! Fiyatlar uçtu; oraya mal götüren köşeyi döner.", { c: name }), "bad");
+      return;
+    }
+    const food = 80;
+    const f = factionOf(city);
+    this.hud.choice(tr("{c} isyanı", { c: name }), "icons/merchant", tr("Yollar kesildi, ambarlar boşaldı. Aç kalabalık çarşıyı sardı; muhafızlar ne yapacağını bilmiyor. Herkesin gözü senin kervanında."), [
+      { label: tr("Ambarını aç · {n} yiyecek", { n: food }), cls: s.res.food >= food ? "go" : "off", fn: () => {
+        if (!this.pay({ food })) return;
+        this.addShort(city, -4);
+        this.addRep(f, 40, "aç halkı doyurdun");
+        this.addKut(3, "aç halkı doyurdun");
+        this.remember(true, tr("{c} kıtlığında halkı doyurdun", { c: name }));
+        this.hud.toast(tr("Kazanlar kaynadı, kalabalık dağıldı. {c} adını dualarla anıyor.", { c: name }), "good");
+      } },
+      { label: tr("Kargaşadan faydalan: çarşıyı yağmala"), cls: "bad", fn: () => {
+        const gold = Math.round((120 + s.hero.lv * 20) * this.stealMult());
+        this.gain({ gold });
+        s.rep[f] = Math.max(-500, this.rep(f) - 90);
+        this.addWanted(1);
+        this.addKut(-4, "yağma");
+        this.addShort(city, 2);
+        this.remember(false, tr("{c} isyanında çarşıyı yağmaladın", { c: name }));
+        this.hud.toast(tr("Kepenkleri kırıp kasaları boşalttın: +{g} altın. Bu şehir seni unutmayacak.", { g: gold }), "bad");
+      } },
+      { label: tr("Uzak dur"), cls: "", fn: () => {} },
+    ]);
+  }
+
+  private natureDaily(day: number): void {
+    const s = this.s;
+    const w = this.wd();
+    const se = this.season();
+    w.wolves = Math.min(WOLF_MAX, w.wolves + 2 + (se === "kis" ? 2 : 0) + (this.moon === "dolunay" ? 1 : 0));
+    if (w.wolves >= WOLF_PACK_AT && Math.random() < 0.25) {
+      const v = oneOf(s.villages);
+      v.rec = Math.max(0, v.rec - 2);
+      this.hud.toast(tr("Kurtlar {v} ağıllarına indi; köylüler sürülerini kaybetti.", { v: v.name }), "info");
+    }
+    if (w.drought && day >= w.drought.until) {
+      const d = w.drought;
+      w.drought = null;
+      this.droughtMigrate(d);
+    } else if (w.drought) {
+      const c = CITIES.reduce((a, b) => (Math.hypot(b.x - w.drought!.x, b.y - w.drought!.y) < Math.hypot(a.x - w.drought!.x, a.y - w.drought!.y) ? b : a));
+      this.addShort(c.id, 1);
+    } else if (se === "yaz" && Math.random() < 0.12) {
+      const c = oneOf(CITIES.filter((x) => x.id !== "samarkand"));
+      w.drought = { until: day + DROUGHT_DAYS, x: c.x, y: c.y };
+      this.chron(`${CITY_NAME[c.id]} ovasında kuraklık başladı.`);
+      this.hud.toast(tr("{c} ovasında kuraklık! Kuyular kurudu; çarşıda yiyecek ve mal kıtlaşacak, aç obalar yola düşebilir.", { c: CITY_NAME[c.id] }), "bad");
+    }
+  }
+
+  private droughtMigrate(d: { x: number; y: number }): void {
+    const s = this.s;
+    const dist = (p: { x: number; y: number }) => Math.hypot(p.x - d.x, p.y - d.y);
+    const dead = s.camps.filter((c) => !c.alive && !this.fortGuard(c.x, c.y)).sort((a, b) => dist(a) - dist(b))[0];
+    const camp = dead ?? s.camps.filter((c) => c.alive).sort((a, b) => dist(a) - dist(b))[0];
+    if (!camp) return;
+    camp.alive = true;
+    camp.garrison = campGarrison(Math.min(5, camp.tier + (dead ? 0 : 1)));
+    this.chron(`Kuraklıktan kaçan aç obalar ${camp.name} çevresinde yol kesmeye başladı.`);
+    this.hud.toast(tr("Kuraklık bitti ama aç kalan obalar harami oldu: {c} kampı yeniden doldu.", { c: camp.name }), "bad");
+  }
+
+  wolfPack(): void {
+    const s = this.s;
+    const w = this.wd();
+    const n = Math.round(4 + s.hero.lv * 0.9 + (w.wolves - WOLF_PACK_AT) * 0.15);
+    this.battle(tr("Kurt sürüsü"), { spear: 0, archer: 0, horse: n }, -0.25, (win) => {
+      if (!win) return `<p class="warn">${tr("Sürü yükünü dağıttı, yaralarını sarıp yola düştün.")}</p>`;
+      w.wolves = Math.max(0, w.wolves - 18);
+      const k = Math.min(2 + Math.floor(Math.random() * 3), Math.max(0, this.carryCap() - this.cargoUsed()));
+      if (k) s.hero.cargo.deri = (s.hero.cargo.deri ?? 0) + k;
+      let out = `<p class="good">${tr("Sürü dağıldı.")}${k ? ` +${k} ${GOODS.deri.name}` : ""}</p>`;
+      if (w.wolves < WOLF_SACRED) {
+        this.addKut(-3, "Börü soyu");
+        out += `<p class="warn">${tr("Bozkırda kurt kalmadı. Yaşlılar söyleniyor: \"Börü atamızın soyunu kurutan kutunu da kurutur.\"")}</p>`;
+      }
+      return out;
+    }, null, tr("Kurtlar"));
+  }
+
+  private eraDaily(day: number): void {
+    const s = this.s;
+    const w = this.wd();
+    const golden = s.kagan || Object.keys(s.owned).length >= 3 || s.renown >= 800;
+    const stage = s.mongol?.stage ?? 0;
+    if (stage >= 3 && w.era === "istila") w.eraDay = day;
+    const next = eraOf(stage, day - w.eraDay, golden, w.era);
+    if (next === w.era) return;
+    w.era = next;
+    if (next !== "yikim") w.eraDay = day;
+    const E = ERAS[next];
+    this.chron(`${E.name} başladı.`);
+    audio.play("story");
+    if (!this.battleLock && !this.hud.modal()) this.hud.story(tr("Yeni bir çağ: {e}", { e: tr(E.name) }), "icons/scroll", tr(E.text), tr("Çağın içine yürü"));
+    else this.hud.toast(tr("Yeni bir çağ: {e}", { e: tr(E.name) }), "info");
+  }
+
+  private memoryDaily(day: number): void {
+    const s = this.s;
+    const w = this.wd();
+    if (this.battleLock || this.hud.modal() || Math.random() > 0.2) return;
+    const d = w.deeds.find((x) => !x.paid && day - x.d >= 6);
+    if (!d) return;
+    d.paid = true;
+    const h = s.hero;
+    if (d.good) {
+      const roll = Math.random();
+      let gift: string;
+      if (roll < 0.4) {
+        const gold = 80 + h.lv * 20;
+        this.gain({ gold });
+        gift = tr("+{g} altın", { g: gold });
+      } else if (roll < 0.75) {
+        const room = Math.max(0, this.heroCap() - armySize(h.army));
+        const n = Math.min(room, 3 + Math.round(h.lv / 3));
+        h.army.horse += n;
+        gift = n ? tr("{n} atlı sancağına katıldı", { n }) : tr("yoluna dua okundu");
+      } else {
+        h.hp = this.maxHp();
+        this.addKut(2);
+        gift = tr("yaraların sarıldı, kutun parladı");
+      }
+      this.hud.story(tr("Unutulmayan iyilik"), "icons/scroll", tr("Bir yolcu yanına yaklaştı: \"Beni tanımadın mı? {d} — o gün yaptığını hiç unutmadık.\"", { d: d.what }) + `<br><br><b class="cheap">${gift}</b>`, tr("Yola devam"));
+      return;
+    }
+    const tier = Math.min(5, Math.max(1, Math.round(h.lv / 3)));
+    const a = Math.random() * Math.PI * 2;
+    for (let i = 0; i < 8; i++) {
+      const x = h.x + Math.cos(a + i) * 360;
+      const y = h.y + Math.sin(a + i) * 360;
+      if (this.cellCost(x, y) >= 3) continue;
+      const army0 = banditArmy(tier);
+      for (const u of UNIT_KEYS) army0[u] = Math.round(army0[u] * 1.2);
+      const camp = s.camps.indexOf(this.nearest(s.camps) ?? s.camps[0]);
+      s.bandits.push({ id: s.nextId++, camp, tier, x, y, army: army0, tx: x, ty: y, wait: 4, chase: true, amb: true });
+      this.hud.toast(tr("İntikam! \"{d}\" — o günün hesabını sormaya gelenler izini sürüyor.", { d: d.what }), "bad");
+      return;
+    }
+  }
+
+  private surpriseDaily(day: number): void {
+    const s = this.s;
+    const w = this.wd();
+    const mix = styleMix(w.acts, day);
+    if (mix.n < 6 || mix.share < 0.7 || day - w.surpriseDay < 4 || this.battleLock || this.hud.modal()) return;
+    w.surpriseDay = day;
+    const d = this.dir();
+    const p = PERSONAS[d.p];
+    if (mix.top === "savas" || mix.top === "kusatma") {
+      const have = GOOD_KEYS.filter((g) => (s.hero.cargo[g] ?? 0) > 0);
+      const good = have.length ? oneOf(have) : oneOf(GOOD_KEYS);
+      const ci = oneOf(CITIES.filter((c) => !this.hostile(c.id)));
+      if (!ci) return;
+      s.events.push({ city: ci.id, good, mult: 2, until: day + 4, text: `${CITY_NAME[ci.id]}: ${GOODS[good].name}` });
+      this.hud.toast(tr("{p}: Kılıcın dinlensin. {c} çarşısında {g} iki katına satılıyor; 4 gün içinde yetiş.", { p: p.name, c: CITY_NAME[ci.id], g: GOODS[good].name }), "good");
+      this.dirLog(tr("Tarzını okudu: {s} → ticaret fırsatı", { s: tr(STYLE_NAME[mix.top]) }), false);
+    } else if (mix.top === "ticaret" || mix.top === "is") {
+      const camp = s.camps.filter((c) => c.alive).sort((a, b) => Math.hypot(a.x - s.hero.x, a.y - s.hero.y) - Math.hypot(b.x - s.hero.x, b.y - s.hero.y))[0];
+      if (camp) this.reveal(camp.x, camp.y, 6);
+      this.addShort(oneOf(CITIES).id, 3);
+      this.hud.toast(tr("{p}: Pazarlar fazla sakin… {c} çetesi yolları kesti; kampı haritada belirdi. Vurursan kıtlık da biter.", { p: p.name, c: camp?.name ?? "" }), "bad");
+      this.dirLog(tr("Tarzını okudu: {s} → yol kesen çete", { s: tr(STYLE_NAME[mix.top]) }), true);
+    } else {
+      this.roadEvent();
+      this.dirLog(tr("Tarzını okudu: {s} → yol karşılaşması", { s: tr(STYLE_NAME[mix.top]) }), false);
+    }
+  }
+
+  private festDaily(): void {
+    const w = this.wd();
+    const f = realFest(new Date());
+    if (!f || w.fest.includes(f.id) || this.battleLock || this.hud.modal()) return;
+    w.fest.push(f.id);
+    if (w.fest.length > 12) w.fest.shift();
+    this.gain({ gold: f.gold, food: f.food });
+    this.addKut(f.kut);
+    this.chron(`${f.name} kutlandı.`);
+    audio.play("quest");
+    this.hud.story(tr(f.name), "icons/crown", `${tr(f.text)}<br><br><b class="cheap">+${f.gold} ${tr("altın")}, +${f.food} ${tr("yiyecek")}, ${tr("kut")} +${f.kut}</b>`, tr("Bayramın kutlu olsun"));
+  }
+
+  private gameNevruz(): void {
+    const s = this.s;
+    const w = this.wd();
+    const day = this.dayOf().day;
+    if (w.nevruz === day) return;
+    w.nevruz = day;
+    this.gain({ food: 40 });
+    this.addKut(1);
+    for (const c of CITIES) w.short[c.id] = Math.max(0, (w.short[c.id] ?? 0) - 2);
+    if (s.free) this.hud.toast(tr("Bozkırda Nevruz! Ateşler yakıldı, kıtlıklar hafifledi. +40 yiyecek"), "good");
   }
 
   // ---------- otag ----------
@@ -4439,6 +4895,7 @@ export class Game {
     const se = this.season();
     this.otagDaily();
     this.fortDaily(day);
+    this.worldDaily(day);
     this.toreTick(day);
     this.directorDaily();
     for (const o of Object.values(s.owned)) this.addKut(o.tax === 2 ? -1 : o.tax === 0 ? 0.5 : 0);
@@ -4750,12 +5207,12 @@ export class Game {
     let html = "";
     if (op === "intel") {
       d.intel = this.dayOf().day + 5;
-      const rows = fac.cities.filter((c) => !s.owned[c]).map((c) => `${CITY_NAME[c]}: <b>${armySize(this.cityGar(c))}</b> ${tr("asker")}`).join("<br>");
+      const rows = citiesOf(f).filter((c) => !s.owned[c]).map((c) => `${CITY_NAME[c]}: <b>${armySize(this.cityGar(c))}</b> ${tr("asker")}`).join("<br>");
       const ownedFrom = Object.values(s.owned).some((x) => x.from === f);
       const eta = s.counterAt && ownedFrom ? Math.max(0, Math.ceil((s.counterAt - this.now) / (DAY_SEC * 1000))) : -1;
       html = `${rows || tr("Şehirlerinin hepsi artık senin.")}<br><br>${eta >= 0 ? `<b class="dear">${tr("Karşı saldırı hazırlığı")}: ~${eta} ${tr("gün")}</b>` : tr("Yakında bir saldırı hazırlığı yok.")}<br><br><b class="cheap">${tr("5 gün boyunca kuşatmalarda surları zayıf")}</b>`;
     } else if (op === "sabotage") {
-      const list = fac.cities.filter((c) => !s.owned[c]);
+      const list = citiesOf(f).filter((c) => !s.owned[c]);
       const c = list[Math.floor(Math.random() * list.length)];
       if (c) s.sieged[c] = Math.min(3, (s.sieged[c] ?? 0) + 1);
       html = c ? `${CITY_NAME[c]} ${tr("ambarı gece yandı. Garnizonu zayıfladı")}: <b>${armySize(this.cityGar(c))}</b>` : tr("Yakılacak ambar kalmadı.");
@@ -6064,6 +6521,39 @@ export class Game {
       const lose = win === a ? b : a;
       for (const u of UNIT_KEYS) lose.army[u] = Math.floor(lose.army[u] * 0.6);
       this.hud.toast(`Söylenti: ${rivalName(win)} ile ${rivalName(lose)} çarpıştı; ${win.name} galip geldi.`, "info");
+    }
+    this.rivalAmbition(live);
+  }
+
+  /** Rakip beyler de kale alır, senin kalelerine göz diker. */
+  private rivalAmbition(live: Rival[]): void {
+    const s = this.s;
+    const day = this.dayOf().day;
+    for (const r of live) {
+      if (r.lv < 8 || Math.random() > 0.07) continue;
+      const home = this.cityPos(r.home);
+      const fac = factionOf(r.home);
+      const d = (p: { x: number; y: number }) => Math.hypot(p.x - home.x, p.y - home.y);
+      if (r.status === "war") {
+        const mine = s.forts.map((f, i) => ({ f, i })).filter((x) => x.f.owner === "me" && !x.f.threat).sort((a, b) => d(a.f) - d(b.f))[0];
+        if (!mine) continue;
+        const n = Math.round(armySize(r.army) * 0.8);
+        mine.f.threat = { day: day + 2, n, from: fac };
+        this.chron(`${rivalName(r)}, ${this.fortTitle(mine.i)} üzerine yürüyor.`);
+        this.hud.toast(tr("{r} {k} üzerine yürüyor! 2 gün içinde surlara varacak (~{n} asker).", { r: rivalName(r), k: this.fortTitle(mine.i), n }), "bad");
+        return;
+      }
+      if (r.status !== "peace" && r.status !== "ally") continue;
+      const prey = s.forts.map((f, i) => ({ f, i })).filter((x) => x.f.owner === "harami" && d(x.f) < 1600 * WS).sort((a, b) => d(a.f) - d(b.f))[0];
+      if (!prey || this.rivalPower(r) < armyPower(prey.f.gar) * 1.2) continue;
+      prey.f.owner = fac;
+      prey.f.lost = 1;
+      prey.f.gar = fortGarrison(prey.f.tier, fac, 1);
+      for (const u of UNIT_KEYS) r.army[u] = Math.floor(r.army[u] * 0.8);
+      r.lv = Math.min(30, r.lv + 1);
+      this.chron(`${rivalName(r)}, ${this.fortTitle(prey.i)} haramilerini kılıçtan geçirip kaleyi ${FACTIONS[fac].name} adına aldı.`);
+      this.hud.toast(tr("Söylenti: {r} {k} kalesini haramilerden aldı. Adı bozkırda büyüyor.", { r: rivalName(r), k: this.fortTitle(prey.i) }), "info");
+      return;
     }
   }
 
@@ -7651,6 +8141,7 @@ export class Game {
     const first = this.lastSeason === null;
     this.lastSeason = se;
     if (first || !this.s.free) return;
+    if (se === "bahar") this.gameNevruz();
     const S = SEASONS[se];
     this.chron(`${S.name} başladı.`);
     this.hud.toast(`${S.icon} ${S.arrive}`, "info");

@@ -26,6 +26,7 @@ import { FORT_NAMES, fortGarrison, type Fort } from "./forts";
 import { factionOf } from "./factions";
 import type { MyCaravan } from "./mycaravan";
 import type { DipMap } from "./spy";
+import type { WorldState } from "./world";
 
 export interface Village {
   name: string;
@@ -319,6 +320,8 @@ export interface GameState {
   slaveEv?: string[];
   /** Şehir başına günlük pazarlık sonucu; m>0 lehte, m<0 aleyhte fiyat. */
   haggle?: Record<string, { day: number; m: number }>;
+  /** Yaşayan dünya: savaşlar, işgaller, kıtlık, doğa, çağ, hafıza. */
+  wd?: WorldState;
 }
 
 export interface Voyage {

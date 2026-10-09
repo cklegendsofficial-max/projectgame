@@ -91,8 +91,16 @@ export const RANK_PERKS = [
   "Unvan ve bütün savaşlarda +%5 ordu gücü",
 ];
 
+/** Savaşta el değiştiren şehirler; kayıttan senkronlanır. */
+export const OCCUPY: Record<string, FactionId> = {};
+
 export function factionOf(city: string): FactionId {
-  return FACTION_KEYS.find((f) => FACTIONS[f].cities.includes(city)) ?? "karahan";
+  return OCCUPY[city] ?? FACTION_KEYS.find((f) => FACTIONS[f].cities.includes(city)) ?? "karahan";
+}
+
+export function citiesOf(f: FactionId): string[] {
+  const all = FACTION_KEYS.flatMap((k) => FACTIONS[k].cities);
+  return all.filter((c) => factionOf(c) === f);
 }
 
 export function repRank(v: number): number {

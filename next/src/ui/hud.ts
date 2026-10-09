@@ -54,7 +54,8 @@ import { FORT_COFFER_DAYS, FORT_TIERS, FORT_WALL_MAX, fortDefense, fortWall } fr
 import { ORIGINS, ORIGIN_BY_ID, type Origin, type OriginId } from "../game/origins";
 import { BOND_LIKES, BOND_LIKES_EN, BOND_QUEST, COMP_QUESTS, SWORN_MULT, bondTier } from "../game/bonds";
 import { SETS, SET_FORGE, SET_KEYS, SET_SLOTS, UNIQUES, modsText, type SetId } from "../game/legend";
-import { FACTIONS, FACTION_KEYS, HOSTILE, REP_RANKS, RANK_PERKS, factionOf } from "../game/factions";
+import { FACTIONS, FACTION_KEYS, HOSTILE, OCCUPY, REP_RANKS, RANK_PERKS, factionOf } from "../game/factions";
+import { ERAS, WOLF_MAX, WOLF_PACK_AT, favTactic, moonPhase, shortMult } from "../game/world";
 import { BRO_MODS, NEM_TRAITS, diyetCost, nemName } from "../game/nemesis";
 import { BIRDS, birdSight, birdXpNeed } from "../game/falcon";
 import { BREEDS, BREED_GOLD, BREED_TIME } from "../game/horse";
@@ -1289,7 +1290,39 @@ export class Hud {
             : "";
       return `<div class="ufk ${x.kind}">${ic(x.icon, "gimg")}<div class="bi2"><small>${KIND[x.kind]}</small><b>${x.title}</b><span>${x.text}</span></div>${go ? `<button class="btn sm go" data-a="${go}">${x.at && !x.open ? t("Git") : t("Aç")}</button>` : ""}</div>`;
     }).join("");
-    return `<p class="dim">${t("Bozkırda yön bulmak zordur. Ufuk, şu an en çok işine yarayacak adımları gösterir.")}</p>${rows || `<p>${t("Ufuk sakin. Keşfe çık, yeni şehirler gör.")}</p>`}`;
+    return `<p class="dim">${t("Bozkırda yön bulmak zordur. Ufuk, şu an en çok işine yarayacak adımları gösterir.")}</p>${rows || `<p>${t("Ufuk sakin. Keşfe çık, yeni şehirler gör.")}</p>`}${g.s.free ? this.pulseHtml() : ""}`;
+  }
+
+  /** Dünyanın nabzı: oyuncudan bağımsız dönen savaşlar, kıtlıklar, doğa ve çağ. */
+  private pulseHtml(): string {
+    const g = this.g;
+    const w = g.wd();
+    const day = g.dayOf().day;
+    const E = ERAS[w.era];
+    const wars = w.wars.map((war) => {
+      const lead = war.takes > 0 ? FACTIONS[war.a].short : war.takes < 0 ? FACTIONS[war.b].short : t("kimse");
+      const side = war.side
+        ? `<small class="cheap">${t("{f} safındasın · katkın {n}", { f: FACTIONS[war.side].short, n: Math.round(war.help) })}</small>`
+        : `<div class="col2"><button class="btn sm" data-a="${this.act(() => g.warJoin(war, war.a))}">${FACTIONS[war.a].short}</button><button class="btn sm" data-a="${this.act(() => g.warJoin(war, war.b))}">${FACTIONS[war.b].short}</button></div>`;
+      return `<div class="qrow">${ic("swords")} <b>${FACTIONS[war.a].short} ⚔ ${FACTIONS[war.b].short}</b><span>${t("{d}. gün · önde: {l}", { d: day - war.since + 1, l: lead })}</span></div>${side}`;
+    }).join("");
+    const occ = Object.entries(OCCUPY).map(([c, f]) => `${CITY_NAME[c]} → <b>${FACTIONS[f].short}</b>`).join(" · ");
+    const shorts = CITIES.filter((c) => (w.short[c.id] ?? 0) >= 2).map((c) => `${CITY_NAME[c.id]} <b class="dear">+%${Math.round((shortMult(w.short[c.id] ?? 0) - 1) * 100)}</b>`).join(" · ");
+    const ph = moonPhase(new Date());
+    const moon = Math.abs(ph - 0.5) < 0.04 ? t("Dolunay: gece savaşlarında +%5, kurtlar azgın") : ph < 0.035 || ph > 0.965 ? t("Karaay: gece zifiri karanlık") : ph < 0.5 ? t("Hilal büyüyor") : t("Ay küçülüyor");
+    const fav = favTactic(w.tac);
+    const st = g.playStyle();
+    const pend = w.deeds.filter((d) => !d.paid);
+    return `<h3>${ic("scroll")} ${t("Dünyanın Nabzı")}</h3>
+      <p><b>${t(E.name)}</b> · <span class="dim">${t(E.text)}</span></p>
+      ${wars || `<p class="dim">${t("Devletler arasında şimdilik barış var.")}</p>`}
+      ${occ ? `<p>${t("İşgal altındaki şehirler")}: ${occ}</p>` : ""}
+      ${shorts ? `<p>${t("Kıtlık")}: ${shorts}</p>` : ""}
+      ${bar(w.wolves, WOLF_MAX, w.wolves >= WOLF_PACK_AT ? "en" : "", `${t("Kurt nüfusu")} ${Math.round(w.wolves)}`)}
+      ${w.drought ? `<p class="dear">${t("Kuraklık sürüyor · {n} gün kaldı", { n: Math.max(0, w.drought.until - day) })}</p>` : ""}
+      <p class="dim">${moon}</p>
+      <p>${t("Oyun tarzın")}: <b>${t(st.now)}</b> · ${t("genel")}: <b>${t(st.life)}</b>${fav.n >= 4 ? ` · ${t("düşmanların senin {t} alışkanlığını biliyor (%{p})", { t: t(TACTICS[fav.t].name), p: Math.round(fav.share * 100) })}` : ""}</p>
+      ${pend.length ? `<p class="dim">${t("Bozkır unutmaz: {g} iyiliğin ve {b} kötülüğün hâlâ anılıyor.", { g: pend.filter((d) => d.good).length, b: pend.filter((d) => !d.good).length })}</p>` : ""}`;
   }
 
   private openHero(): void {
