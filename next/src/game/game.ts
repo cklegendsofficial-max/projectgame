@@ -2451,9 +2451,12 @@ export class Game {
     const day = this.dayOf().day;
     const last = this.sceneDay[id];
     if (last !== undefined && day - last < 3) return;
-    this.sceneDay[id] = day;
     const vis = (s.visited ??= []);
     const first = !vis.includes(id);
+    const tg = this.target;
+    const aimed = (tg?.kind === "city" && tg.i === ci) || (tg?.kind === "capital" && ci === CAP_I);
+    if (!first && !aimed) return;
+    this.sceneDay[id] = day;
     if (first) vis.push(id);
     const lines: string[] = [];
     const fac = FACTIONS[factionOf(id)];

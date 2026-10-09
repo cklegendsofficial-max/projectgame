@@ -19,17 +19,20 @@ await page.reload();
 await page.evaluate("window.__name = (f) => f");
 await page.waitForFunction(() => !document.getElementById("loading"), null, { timeout: 90000 });
 const ev = (fn: string) => page.evaluate(`(async () => { const g = window.game; ${fn} })()`);
-await page.locator(`.ccard[data-c="alp"]`).click();
-await page.locator(".cname .btn").click();
 const skip = async () => {
   for (let k = 0; k < 10 && (await page.locator(".battle .bbox .btn.go").count()); k++) {
     await page.locator(".battle .bbox .btn.go").first().click();
     await page.waitForTimeout(150);
   }
 };
-await skip();
-await ev(`g.s.res.gold = 300; const c = g.targetPos({kind:"capital"}); g.s.hero.x = c.x; g.s.hero.y = c.y; g.buyFreedom();`);
-await skip();
+// KK_RAW=1: karakter seçimi ve kölelik dahil, oyuncunun gördüğü haliyle başla.
+if (!process.env.KK_RAW) {
+  await page.locator(`.ccard[data-c="alp"]`).click();
+  await page.locator(".cname .btn").click();
+  await skip();
+  await ev(`g.s.res.gold = 300; const c = g.targetPos({kind:"capital"}); g.s.hero.x = c.x; g.s.hero.y = c.y; g.buyFreedom();`);
+  await skip();
+}
 let n = 0;
 for (const st of steps) {
   const at = st.lastIndexOf("@");
