@@ -17,6 +17,7 @@ export class Camera {
   private pointers = new Map<number, { x: number; y: number }>();
   onTap: (wx: number, wy: number) => void = () => {};
   keys = new Set<string>();
+  pad = { x: 0, y: 0 };
 
   constructor(private el: HTMLElement, private worldW: number, private worldH: number) {
     el.addEventListener("pointerdown", (e) => this.down(e));
@@ -139,10 +140,10 @@ export class Camera {
 
   update(dt: number, layer: Container): void {
     const k = this.keys;
-    if (k.size) {
+    if (k.size || this.pad.x || this.pad.y) {
       const sp = (720 * dt) / this.zoom;
-      const dx = (k.has("d") || k.has("arrowright") ? 1 : 0) - (k.has("a") || k.has("arrowleft") ? 1 : 0);
-      const dy = (k.has("s") || k.has("arrowdown") ? 1 : 0) - (k.has("w") || k.has("arrowup") ? 1 : 0);
+      const dx = (k.has("d") || k.has("arrowright") ? 1 : 0) - (k.has("a") || k.has("arrowleft") ? 1 : 0) + this.pad.x;
+      const dy = (k.has("s") || k.has("arrowdown") ? 1 : 0) - (k.has("w") || k.has("arrowup") ? 1 : 0) + this.pad.y;
       if (dx || dy) {
         this.x += dx * sp;
         this.y += dy * sp;

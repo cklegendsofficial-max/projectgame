@@ -19,6 +19,7 @@ import { PERSONAS, PERSONA_KEYS } from "../game/director";
 import { kidAge } from "../game/dynasty";
 import { BOYS } from "../game/korkut";
 import { Archery } from "./archery";
+import { Gamepad, type PadButton } from "./gamepad";
 import { KUT_TIERS, kutArmy, kutTier, kutVote } from "../game/kut";
 import { SING_GOLD, TAMGA_COLORS, TAMGA_DEFAULT, TAMGA_MARKS, TAMGA_SHAPES, singRenown, tamgaSvg, type Tamga } from "../game/ozan";
 import { CITIES, H, NH, NW, W } from "../world/gen";
@@ -266,6 +267,23 @@ export class Hud {
     });
     window.addEventListener("keyup", (e) => g.cam.keys.delete(e.key.toLowerCase()));
     window.addEventListener("blur", () => g.cam.keys.clear());
+    this.gamepad = new Gamepad(this.root, {
+      scope: () => {
+        const ar = this.root.querySelector<HTMLElement>(".archery");
+        if (ar) return ar.querySelector<HTMLElement>(".aresult.on");
+        const ov = this.root.querySelectorAll<HTMLElement>(".battle");
+        if (ov.length) return ov[ov.length - 1];
+        return this.panel.classList.contains("hidden") ? null : this.panel;
+      },
+      shooting: () => !!this.archery && !this.root.querySelector(".archery .aresult.on"),
+      shoot: () => this.archery?.shootAuto(),
+      press: (b, ui) => this.padPress(b, ui),
+      pan: (x, y) => {
+        g.cam.pad.x = x;
+        g.cam.pad.y = y;
+      },
+      zoom: (f) => g.cam.zoomBy(f),
+    });
     if (g.s.cls === null) setTimeout(() => this.classSelect(), 300);
     else if (!g.s.free && g.s.c.shifts === 0 && g.s.quest === 0) setTimeout(() => this.intro(), 400);
   }
@@ -598,6 +616,33 @@ export class Hud {
 
   modal(): boolean {
     return this.storyOpen || this.battleOpen;
+  }
+
+  gamepad: Gamepad | null = null;
+
+  private padPress(b: PadButton, ui: boolean): void {
+    const g = this.g;
+    if (this.archery) {
+      if (b === "b") window.dispatchEvent(new KeyboardEvent("keydown", { code: "Escape", key: "Escape" }));
+      return;
+    }
+    if (this.modal()) return;
+    if (ui) {
+      if (b === "b" || (b === "start" && this.place?.kind === "hero")) this.close();
+      else if (b === "lb" || b === "rb") {
+        const tabs = [...this.panel.querySelectorAll<HTMLElement>(".tabs .tab")];
+        const i = tabs.findIndex((x) => x.classList.contains("on"));
+        if (tabs.length) tabs[(i + (b === "rb" ? 1 : tabs.length - 1)) % tabs.length].click();
+      }
+      return;
+    }
+    if (b === "a") g.cam.onTap(g.cam.x, g.cam.y);
+    else if (b === "start") this.openHero();
+    else if (b === "back") this.openPlace({ kind: "capital" });
+    else if (b === "y") g.cam.flyTo(g.s.hero.x, g.s.hero.y, Math.max(g.cam.zoom, 0.7));
+    else if (b === "x" && g.s.bird && g.s.free) g.aimBird();
+    else if (b === "lb") g.cam.zoomBy(1 / 1.25);
+    else if (b === "rb") g.cam.zoomBy(1.25);
   }
 
   private act(fn: () => void): string {
@@ -1349,6 +1394,8 @@ export class Hud {
       <div class="setrow"><button class="btn sm" data-a="${this.act(() => this.exportFile())}">${ic("scroll")} ${t("Dışa aktar")}</button><button class="btn sm" data-a="${this.act(() => this.importFile())}">${ic("chest")} ${t("İçe aktar")}</button></div>
       <h3>${t("Klavye kısayolları")}</h3>
       <p class="dim keys"><kbd>H</kbd> Kahraman · <kbd>C</kbd> Semerkant · <kbd>Boşluk</kbd> Birliğine dön · <kbd>B</kbd> Kuşu uçur · <kbd>M</kbd> Ses · <kbd>F</kbd> Tam ekran · <kbd>WASD</kbd>/<kbd>Oklar</kbd> Kamera · <kbd>+</kbd>/<kbd>−</kbd> Yakınlaş · <kbd>Esc</kbd> Kapat</p>
+      <h3>${t("Oyun kolu")}</h3>
+      <p class="dim keys">${t("<kbd>Sol çubuk</kbd> Kamera / seçim · <kbd>A</kbd> Nişangâha git, seç · <kbd>B</kbd> Kapat · <kbd>Y</kbd> Birliğine dön · <kbd>X</kbd> Kuşu uçur · <kbd>LB</kbd>/<kbd>RB</kbd> Yakınlaş, sekme · <kbd>LT</kbd>/<kbd>RT</kbd> Yakınlaş · <kbd>Start</kbd> Kahraman · <kbd>Back</kbd> Semerkant")}</p>
       ${this.achHtml()}
       ${this.legacyHtml()}
       <button class="btn sm red reset" data-a="${this.act(() => confirm("Bu yuvadaki tüm ilerlemen silinip yeni bir oyun başlayacak. Emin misin?") && g.resetGame())}">${t("Bu yuvada yeni oyun başlat")}</button>`;

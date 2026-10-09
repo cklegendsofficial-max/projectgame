@@ -34,6 +34,8 @@ const EN: Record<string, string> = {
   "Dışa aktar": "Export",
   "İçe aktar": "Import",
   "Klavye kısayolları": "Keyboard shortcuts",
+  "Oyun kolu": "Gamepad",
+  "<kbd>Sol çubuk</kbd> Kamera / seçim · <kbd>A</kbd> Nişangâha git, seç · <kbd>B</kbd> Kapat · <kbd>Y</kbd> Birliğine dön · <kbd>X</kbd> Kuşu uçur · <kbd>LB</kbd>/<kbd>RB</kbd> Yakınlaş, sekme · <kbd>LT</kbd>/<kbd>RT</kbd> Yakınlaş · <kbd>Start</kbd> Kahraman · <kbd>Back</kbd> Semerkant": "<kbd>Left stick</kbd> Camera / select · <kbd>A</kbd> Go to reticle, confirm · <kbd>B</kbd> Close · <kbd>Y</kbd> Back to band · <kbd>X</kbd> Fly bird · <kbd>LB</kbd>/<kbd>RB</kbd> Zoom, tabs · <kbd>LT</kbd>/<kbd>RT</kbd> Zoom · <kbd>Start</kbd> Hero · <kbd>Back</kbd> Samarkand",
   "Bu yuvada yeni oyun başlat": "Start a new game in this slot",
   Aktif: "Active",
   Başarımlar: "Achievements",
