@@ -23,6 +23,7 @@ import { BRIBE_GOLD, DECREES, KAGAN_RENOWN, KURULTAY_EVERY, KURULTAY_MAX, decree
 import { ESCORT_GOLD, PIRATE_RISK, SHIP_CAP, SHIP_GOLD, SHIP_MAX, pirateArmy, portOf, routeDays } from "./hazar";
 import { LEGACY_PERKS, hasLegacy, recordEnding } from "./legacy";
 import { HERD_GOLD, HERD_BUY, HERD_MAX, MOVE_FOOD, OTAG_GOLD, OTAG_WOOD, REST_FOOD, ZONE_NAME, bestZone, pasture, zoneOf } from "./otag";
+import { ROAD_CHANCE, ROAD_EVENTS, ROAD_PER_DAY, ROAD_STEP, checkChance, type RoadCtx, type RoadEvent, type RoadFx, type RoadOpt } from "./road";
 import { SING_GOLD, SONG_MAX, TAMGA_DEFAULT, compose, singRenown, type SongCtx, type SongKind, type Tamga } from "./ozan";
 import { TORE_CASES, kutArmy, kutLoy, kutTier, kutVote, type ToreCase } from "./kut";
 import { SCARS, VET_LV_MAX, VET_MAX, VET_RANKS, VET_XP, makeVet, vetBonus, vetTitle } from "./vets";
@@ -86,6 +87,8 @@ export class Game {
   lastTactic: Tactic = "hucum";
   private spawnAt = new Map<number, number>();
   battleLock = false;
+  private roadD = 0;
+  private roadAt = { x: 0, y: 0 };
   deep: DeepRun | null = null;
   birdFly: BirdFlight | null = null;
   birdAim = false;
@@ -659,6 +662,150 @@ export class Game {
     saveGame(s);
   }
 
+  private roadTick(): void {
+    const s = this.s;
+    const h = s.hero;
+    const d = Math.hypot(h.x - this.roadAt.x, h.y - this.roadAt.y);
+    this.roadAt = { x: h.x, y: h.y };
+    if (!s.free || !h.path || d > 200 || this.hud.modal() || this.nearCity(260) >= 0) return;
+    this.roadD += d;
+    if (this.roadD < ROAD_STEP) return;
+    this.roadD = 0;
+    s.road ??= { day: -1, n: 0, seen: [] };
+    const day = this.dayOf().day;
+    if (s.road.day !== day) s.road = { ...s.road, day, n: 0 };
+    if (s.road.n >= ROAD_PER_DAY || Math.random() > ROAD_CHANCE) return;
+    this.roadEvent();
+  }
+
+  roadCtx(): RoadCtx {
+    const s = this.s;
+    return { season: this.season(), night: this.isNight(), cargo: this.cargoUsed(), army: armySize(s.hero.army), lv: s.hero.lv };
+  }
+
+  roadEvent(id?: string): boolean {
+    const s = this.s;
+    s.road ??= { day: -1, n: 0, seen: [] };
+    const ctx = this.roadCtx();
+    const ok = ROAD_EVENTS.filter((e) => !e.when || e.when(ctx));
+    const fresh = ok.filter((e) => !s.road.seen.includes(e.id));
+    const ev = id ? ROAD_EVENTS.find((e) => e.id === id) : (fresh.length ? fresh : ok)[Math.floor(Math.random() * (fresh.length || ok.length))];
+    if (!ev) return false;
+    s.road.n++;
+    s.road.seen = [ev.id, ...s.road.seen.filter((x) => x !== ev.id)].slice(0, 6);
+    const h = s.hero;
+    const saved = { path: h.path, pathI: h.pathI, target: this.target };
+    h.path = null;
+    this.target = null;
+    const resume = (): void => {
+      if (h.path || !saved.path || this.battleLock) return;
+      h.path = saved.path;
+      h.pathI = saved.pathI;
+      this.target = saved.target;
+    };
+    const opts = ev.opts(ctx);
+    this.hud.choice(
+      ev.title,
+      ev.icon,
+      ev.text,
+      opts.map((o) => {
+        const poor = (o.cost?.gold ?? 0) > s.res.gold || (o.cost?.food ?? 0) > s.res.food;
+        const cost = [o.cost?.gold ? `${o.cost.gold} altın` : "", o.cost?.food ? `${o.cost.food} yiyecek` : ""].filter(Boolean).join(", ");
+        const odds = o.check ? ` · ${STAT_INFO[o.check.stat].short} %${Math.round(checkChance(this.stat(o.check.stat), o.check.dc) * 100)}` : o.fight ? ` · savaş %${Math.round(this.odds(o.fight.army, o.fight.bonus) * 100)}` : "";
+        return { label: `${o.label}${cost ? ` (${cost})` : ""}${odds}`, cls: poor ? "off" : o.fight ? "bad" : "", fn: () => this.roadPick(ev, o, resume) };
+      }),
+    );
+    return true;
+  }
+
+  private roadPick(ev: RoadEvent, o: RoadOpt, resume: () => void): void {
+    const s = this.s;
+    if (o.cost && !this.pay({ gold: o.cost.gold ?? 0, food: o.cost.food ?? 0 })) return;
+    if (o.fight) {
+      const f = o.fight;
+      this.battle(f.foe, f.army, f.bonus, (win) => {
+        const r = win ? o.ok : o.fail ?? { text: "" };
+        return `${r.text}${this.roadFx(r)}`;
+      }, null, f.foe);
+      return;
+    }
+    const pass = !o.check || Math.random() < checkChance(this.stat(o.check.stat), o.check.dc);
+    const r = pass ? o.ok : o.fail ?? o.ok;
+    const fx = this.roadFx(r);
+    const roll = o.check ? `<small class="${pass ? "cheap" : "dear"}">${STAT_INFO[o.check.stat].name} sınaması: ${pass ? "başarılı" : "başarısız"}</small><br>` : "";
+    this.hud.story(ev.title, ev.icon, `${roll}${r.text}${fx}`, "Yola devam");
+    resume();
+    saveGame(s);
+  }
+
+  private roadFx(f: RoadFx): string {
+    const s = this.s;
+    const h = s.hero;
+    const out: string[] = [];
+    if (f.gold) {
+      const g = f.gold > 0 ? f.gold : -Math.min(s.res.gold, -f.gold);
+      s.res.gold += g;
+      out.push(`${g > 0 ? "+" : ""}${g} altın`);
+    }
+    if (f.food) {
+      const g = f.food > 0 ? f.food : -Math.min(s.res.food, -f.food);
+      if (g > 0) this.gain({ food: g });
+      else s.res.food += g;
+      out.push(`${g > 0 ? "+" : ""}${g} yiyecek`);
+    }
+    if (f.hp) {
+      const mx = this.maxHp();
+      const hp0 = h.hp;
+      h.hp = Math.max(1, Math.min(mx, h.hp + f.hp * mx));
+      out.push(`can ${h.hp >= hp0 ? "+" : ""}${Math.round(h.hp - hp0)}`);
+    }
+    if (f.cargo) {
+      let lost = 0;
+      for (const g of GOOD_KEYS) {
+        const n = h.cargo[g] ?? 0;
+        if (!n) continue;
+        const k = Math.ceil(n * f.cargo);
+        h.paid[g] = Math.round(((h.paid[g] ?? 0) * (n - k)) / n);
+        h.cargo[g] = n - k;
+        lost += k;
+      }
+      if (lost) out.push(`−${lost} mal`);
+    }
+    if (f.good) {
+      const room = Math.max(0, this.carryCap() - this.cargoUsed());
+      const g = GOOD_KEYS[Math.floor(Math.random() * 6)];
+      const k = Math.min(room, f.good + Math.floor(Math.random() * 2));
+      if (k) {
+        h.cargo[g] = (h.cargo[g] ?? 0) + k;
+        out.push(`+${k} ${GOODS[g].name}`);
+      }
+    }
+    if (f.units) {
+      let room = Math.max(0, this.heroCap() - armySize(h.army));
+      for (const u of UNIT_KEYS) {
+        const k = Math.min(room, f.units[u] ?? 0);
+        if (!k) continue;
+        h.army[u] += k;
+        room -= k;
+        out.push(`+${k} ${UNITS[u].name}`);
+      }
+    }
+    if (f.renown) {
+      s.renown += f.renown;
+      out.push(`+${f.renown} şöhret`);
+    }
+    if (f.kut && s.beylik) {
+      this.addKut(f.kut);
+      out.push(`kut ${f.kut > 0 ? "+" : ""}${f.kut}`);
+    }
+    if (f.xp) {
+      this.addXp(f.xp);
+      out.push(`+${f.xp} tecrübe`);
+    }
+    if (f.wanted) this.addWanted(f.wanted);
+    return out.length ? `<br><br><b>${out.join(" · ")}</b>` : "";
+  }
+
   private toreTick(day: number): void {
     const s = this.s;
     s.tore ??= { next: 0, seen: [] };
@@ -889,6 +1036,7 @@ export class Game {
     }
     if (!this.battleLock) {
       this.moveHero(dt);
+      this.roadTick();
       this.bandits(dt, now);
       this.caravanTick(dt);
       this.wantedTick(dt);

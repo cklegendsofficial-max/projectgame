@@ -591,6 +591,10 @@ export class Hud {
     );
   }
 
+  modal(): boolean {
+    return this.storyOpen || this.battleOpen;
+  }
+
   private act(fn: () => void): string {
     const id = "a" + this.actN++;
     this.acts.set(id, () => {

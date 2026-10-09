@@ -265,6 +265,7 @@ export interface GameState {
   songs: Song[];
   tamga: Tamga;
   ozanDay: number;
+  road: { day: number; n: number; seen: string[] };
   act3: { ch: number; ending: string; peak: { x: number; y: number } | null };
 }
 
@@ -508,6 +509,7 @@ export function newGame(w: World): GameState {
     songs: [],
     tamga: { ...TAMGA_DEFAULT },
     ozanDay: -1,
+    road: { day: -1, n: 0, seen: [] },
     act3: { ch: 0, ending: "", peak: null },
   };
 }
