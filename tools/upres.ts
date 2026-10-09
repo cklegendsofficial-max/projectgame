@@ -12,7 +12,9 @@ const MAX = +maxArg;
 const apply = applyFlag === "--apply";
 const walk = (d: string): string[] => readdirSync(d).flatMap((n) => (statSync(join(d, n)).isDirectory() ? walk(join(d, n)) : [join(d, n)]));
 const sheets = readdirSync(sheetDir).filter((n) => /\.(jpe?g|png)$/i.test(n) && !n.startsWith("c__")).map((n) => join(sheetDir, n));
-const assets = walk(assetDir).filter((f) => f.endsWith(".webp"));
+const SKIP = /[\\/](mtn|flora|tex)[\\/]/;
+const assets = walk(assetDir).filter((f) => f.endsWith(".webp") && !SKIP.test(f));
+const capOf = (w: number, h: number) => Math.min(MAX, Math.max(2 * Math.max(w, h), 256));
 const GRIDS: [number, number][] = [[1, 1], [2, 2], [3, 3], [3, 2], [2, 3], [3, 1], [4, 3], [4, 4], [4, 2], [5, 4], [6, 4], [7, 4], [5, 3], [4, 5], [6, 3], [8, 4], [6, 5]];
 const S = 16;
 
@@ -132,7 +134,7 @@ const dist = (a: number[], b: number[]) => {
   return s / a.length / 255;
 };
 const report: string[] = [];
-const plan: { file: string; c: Cand; d: number }[] = [];
+const plan: { file: string; c: Cand; d: number; cap: number }[] = [];
 for (const a of assetSigs) {
   const ar = a.w / a.h;
   let best: Cand | null = null, bd = 1;
@@ -144,15 +146,15 @@ for (const a of assetSigs) {
   }
   const rel = relative(assetDir, a.file).replace(/\\/g, "/");
   if (!best) { report.push(`${rel}\t${a.w}x${a.h}\tNO MATCH`); continue; }
-  const gain = Math.min(MAX, Math.max(best.w, best.h)) / Math.max(a.w, a.h);
+  const gain = Math.min(capOf(a.w, a.h), Math.max(best.w, best.h)) / Math.max(a.w, a.h);
   report.push(`${rel}\t${a.w}x${a.h}\t${bd.toFixed(3)}\t${relative(sheetDir, best.sheet)}\t${best.cols}x${best.rows}#${best.idx}\t${best.key}\tnative ${Math.round(best.w)}x${Math.round(best.h)}\tgain ${gain.toFixed(2)}`);
-  if (bd < 0.06 && gain >= 1.25) plan.push({ file: a.file, c: best, d: bd });
+  if (bd < 0.06 && gain >= 1.25) plan.push({ file: a.file, c: best, d: bd, cap: capOf(a.w, a.h) });
 }
 mkdirSync(outDir, { recursive: true });
 writeFileSync(join(outDir, "report.tsv"), report.join("\n"));
 console.log(`matched for upgrade: ${plan.length} / ${assetSigs.length}`);
 
-for (const { file, c } of plan) {
+for (const { file, c, cap } of plan) {
   const rel = relative(assetDir, file);
   const data = (await page.evaluate(`(async () => {
     const img = await loadImg(${JSON.stringify(b64(c.sheet))}); const bg = bgOf(img);
@@ -161,7 +163,7 @@ for (const { file, c } of plan) {
     let k;
     if (${JSON.stringify(c.key)} === "none") { const cv = document.createElement("canvas"); cv.width = Math.round(cw); cv.height = Math.round(ch); cv.getContext("2d").drawImage(img, sx, sy, cw, ch, 0, 0, cv.width, cv.height); k = { c: cv, x: 0, y: 0, w: cv.width, h: cv.height }; }
     else k = keyCell(img, sx, sy, cw, ch, 1, ${JSON.stringify(c.key)} === "magenta", bg, true);
-    const s = Math.min(1, ${MAX} / Math.max(k.w, k.h));
+    const s = Math.min(1, ${cap} / Math.max(k.w, k.h));
     const o = document.createElement("canvas"); o.width = Math.round(k.w * s); o.height = Math.round(k.h * s);
     const og = o.getContext("2d"); og.imageSmoothingQuality = "high";
     og.drawImage(k.c, k.x, k.y, k.w, k.h, 0, 0, o.width, o.height);

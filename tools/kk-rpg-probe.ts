@@ -86,6 +86,10 @@ await ev(`const c = g.targetPos({kind:"city", i: 7}); g.s.hero.x = c.x; g.s.hero
 await ev(`g.s.hero.xp += 500; g.addXp(0); g.hud["openHero"]();`);
 await ev(`g.addXp(1);`);
 await shot(page, "15-hero", 1200);
+for (let k = 0; k < 5 && (await page.locator(".battle .bbox .btn.go").count()); k++) {
+  await page.locator(".battle .bbox .btn.go").first().click();
+  await page.waitForTimeout(200);
+}
 await page.locator(".tab", { hasText: "Teçhizat" }).click();
 await shot(page, "16-gear", 400);
 await page.locator(".tab", { hasText: "Beceriler" }).click();
