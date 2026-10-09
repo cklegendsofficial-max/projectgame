@@ -2,6 +2,7 @@ import { LORD_SERAIS, type Game, type Quest, type Target } from "../game/game";
 import { BUILDINGS, DAY_SEC, NODE_NAME, RES_ICON, RES_KEYS, RES_NAME, UNITS, UNIT_KEYS, armySize, buildCost, buildTime, prodPerMin, unitUnlocked, xpNeed, type Army, type Res, type Unit } from "../game/data";
 import { ORDERS, ORDER_KEYS, TACTICS, TACTIC_KEYS, type BattleResult, type Boss, type Order, type Sim, type Tactic } from "../game/battle";
 import { BattleField } from "./battleField";
+import { SpiritView, type Realm } from "./spirit";
 import { GOODS, GOOD_KEYS, PLUS_CHANCE, SKILL_INFO, SKILL_KEYS, SLOTS, SLOT_NAME, STAT_INFO, STAT_KEYS, canPlus, itemStats, kindName, plusCost, skillLv, skillNext, type Item, type Slot } from "../game/rpg";
 import { ARMOR_NAME, CLASSES, SKILL_MAX, WEAPON_NAME, skillPow, skillRank, type ClassId } from "../game/classes";
 import { CAPITAL, SAVE_SLOTS, curSlot, exportSave, kurganBoss, slotInfo } from "../game/state";
@@ -1014,6 +1015,45 @@ export class Hud {
     });
   }
 
+  private spiritBtn(): string {
+    const why = this.g.spiritWhy();
+    return `<div class="sprow"><button class="btn spbtn ${why ? "off" : ""}" data-a="${this.act(() => this.spiritRite())}">${ic("ruh")} Kam ayini · ruhlar dünyası</button><small class="dim">${why ?? `${this.g.spiritCost()} Ruh Taşı · Üst ya da Alt Dünya'ya yolculuk`}</small></div>`;
+  }
+
+  spiritRite(): void {
+    const g = this.g;
+    const why = g.spiritWhy();
+    if (why) return this.toast(why, "bad");
+    if (this.storyOpen || this.battleOpen || !g.spiritBegin()) return;
+    this.close();
+    this.storyOpen = true;
+    audio.play("story");
+    const v = new SpiritView(this.root);
+    const end = (after?: () => void) => {
+      v.close();
+      this.storyOpen = false;
+      if (after) after();
+      else this.nextStory();
+    };
+    const pick = (id: string) => {
+      const r = g.spiritChoose(id);
+      v.panel(r.title, r.html, [{ label: r.fight ? "Kılıcını çek" : "Davula tutunup dön", cls: r.fight ? "red" : "go", fn: () => end(r.fight ? () => g.spiritFight() : undefined) }]);
+    };
+    const realm = (r: Realm) => {
+      v.setRealm(r);
+      v.panel(
+        r === "ust" ? "Üst Dünya" : "Alt Dünya",
+        r === "ust" ? "Kayın ağacının dallarına tutunup dokuz kat göğe tırmandın. Yıldızlar ayağının altında, Ülgen'in ak ışığı tepende." : "Ateşin külünden yerin dibine indin. Dokuz kat aşağıda, mor sisin içinde iki göz seni izliyor.",
+        g.spiritOpts(r).map((o) => ({ label: `<b>${o.name}</b><small>${o.off ?? o.text}</small>`, cls: o.off ? "off opt" : "opt", fn: () => pick(o.id) })),
+      );
+    };
+    v.setRealm("drum");
+    v.panel("Kam Ayini", `Ateş yandı, ardıç tütsüsü dumanlandı. Kam davulunu ısıtıp vurmaya başladı; her vuruşta bedenin biraz daha hafifliyor. Davul bir ata dönüştü.<br><br><small class="dim">Ruh Taşı: −${g.spiritCost()}</small>`, [
+      { label: "Üst Dünya · Ülgen'in gökleri", cls: "go", fn: () => realm("ust") },
+      { label: "Alt Dünya · Erlik'in katları", cls: "red", fn: () => realm("alt") },
+    ]);
+  }
+
   private listenBtn(): string {
     return canNarrate() ? `<button class="listen" title="${t("Dinle")}" aria-label="${t("Dinle")}"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#ffd56a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="#ffd56a33"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/><path d="M19 6a8.5 8.5 0 0 1 0 12"/></svg></button>` : "";
   }
@@ -1299,7 +1339,7 @@ export class Hud {
           <div class="stats"><div>${ic("foal")}Sürü: <b>${o.herd}/${HERD_MAX}</b></div><div>${ic("food")}Günlük: <b>+${y.food}</b></div><div>${ic("u_cavalry")}Atlı: <b>+${y.horses}/gün</b></div></div>
           <div class="odds ${y.q >= 1.1 ? "good" : y.q >= 0.8 ? "mid" : "bad"}">Otlak verimi: <b>%${Math.round(y.q * 100)}</b>${z === best ? " · mevsime uygun" : ` · bu mevsim <b>${ZONE_NAME[best].toLowerCase()}</b> daha bereketli`}</div>
           <p class="dim">Göç etmek için otağı istediğin yere taşı (Kahraman › Birlik › Otağ). Mevsime uygun bölgeye göç edersen şenlik yapılır.</p>
-          ${near ? `<div class="row"><button class="btn go" data-a="${this.act(() => g.otagRest())}">${ic("healer")} Dinlen (${REST_FOOD} yiyecek)</button><button class="btn ${s.res.gold < HERD_GOLD || o.herd >= HERD_MAX ? "off" : ""}" data-a="${this.act(() => g.buyHerd())}">${ic("coins")} +${HERD_BUY} baş (${HERD_GOLD})</button></div>` : this.walkBtn(t, "Otağa yürü")}`);
+          ${near ? `<div class="row"><button class="btn go" data-a="${this.act(() => g.otagRest())}">${ic("healer")} Dinlen (${REST_FOOD} yiyecek)</button><button class="btn ${s.res.gold < HERD_GOLD || o.herd >= HERD_MAX ? "off" : ""}" data-a="${this.act(() => g.buyHerd())}">${ic("coins")} +${HERD_BUY} baş (${HERD_GOLD})</button></div>${this.spiritBtn()}` : this.walkBtn(t, "Otağa yürü")}`);
         break;
       }
       case "kurgan": {
@@ -1314,7 +1354,7 @@ export class Hud {
           <h3>Sen ve birliğin</h3>${armyHtml(s.hero.army)}
           <div class="odds ${p >= 65 ? "good" : p >= 35 ? "mid" : "bad"}">Zafer şansı: <b>%${p}</b></div>
           <p class="dim">Ödül: ${2 * k.tier}+ Ruh Taşı, altın, kesin bir eşya (çoğu zaman bir kademe üstü), Kutsal Parşömen şansı.</p>
-          ${near ? `<button class="btn red big" data-a="${this.act(() => { this.close(); g.attackKurgan(t.i); })}">${ic("swords")} Taşa saldır!</button>` : this.walkBtn(t, "Taşa yürü")}` : this.deepHtml(t.i, near));
+          ${near ? `<button class="btn red big" data-a="${this.act(() => { this.close(); g.attackKurgan(t.i); })}">${ic("swords")} Taşa saldır!</button>` : this.walkBtn(t, "Taşa yürü")}` : this.deepHtml(t.i, near) + (near ? this.spiritBtn() : ""));
         break;
       }
       case "ruin": {

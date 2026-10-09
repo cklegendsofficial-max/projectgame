@@ -299,6 +299,7 @@ export interface GameState {
   weekly?: WeekState;
   kip?: KipState;
   mongol?: MongolState;
+  spirit?: { day: number; n: number; met: string[] };
 }
 
 export interface Voyage {

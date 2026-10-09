@@ -596,7 +596,7 @@ export class Game {
       crit: m.crit + (this.eq("silah")?.crit ?? 0) + 0.025 * this.tal("kritik") + (gm.crit ?? 0),
       critMult: m.critMult,
       dodge: m.dodge,
-      heal: m.heal + this.compMods().heal + 0.015 * this.tal("kanici") + (this.buff("tutsu") ? 0.04 : 0) + (gm.heal ?? 0),
+      heal: m.heal + this.compMods().heal + 0.015 * this.tal("kanici") + (this.buff("tutsu") ? 0.04 : 0) + (this.buff("umay") ? 0.04 : 0) + (gm.heal ?? 0),
       rage: m.rage,
       firstStrike: m.firstStrike,
       skills: this.classSkills()
@@ -635,7 +635,7 @@ export class Game {
   }
 
   heroBonus(): number {
-    return 0.025 * this.stat("lid") + 0.02 * (this.s.hero.lv - 1) + this.cls().mods.army + this.compMods().army + 0.03 * this.tal("nara") + (this.buff("davul") ? 0.15 : 0) + (this.buff("surek") ? 0.08 : 0) + (this.buff("yug") ? 0.05 : 0) + balbalBonus(this.s.foes ?? []) + (this.gearMods().army ?? 0) + this.heroRankBonus() + this.allyBonus() + (hasLegacy("tengri") ? 0.06 : 0) + vetBonus(this.s.vets ?? []) + (this.s.beylik ? kutArmy(this.s.kut ?? 50) : 0) + this.famBonus();
+    return 0.025 * this.stat("lid") + 0.02 * (this.s.hero.lv - 1) + this.cls().mods.army + this.compMods().army + 0.03 * this.tal("nara") + (this.buff("davul") ? 0.15 : 0) + (this.buff("surek") ? 0.08 : 0) + (this.buff("yug") ? 0.05 : 0) + (this.buff("ulgen") ? 0.12 : 0) + (this.buff("ata") ? 0.05 : 0) + balbalBonus(this.s.foes ?? []) + (this.gearMods().army ?? 0) + this.heroRankBonus() + this.allyBonus() + (hasLegacy("tengri") ? 0.06 : 0) + vetBonus(this.s.vets ?? []) + (this.s.beylik ? kutArmy(this.s.kut ?? 50) : 0) + this.famBonus();
   }
 
   addKut(n: number, why = ""): void {
@@ -4331,6 +4331,117 @@ export class Game {
     audio.play("coin");
     this.hud.toast(`${tr("Haftalık ödül")}: +${r.gold} ${tr("altın")}, +${r.renown} ${tr("şöhret")}${r.parsomen ? `, +${r.parsomen} ${tr("Parşömen")}` : ""}`, "good");
     return true;
+  }
+
+  // ---------- Kam ayini: ruhlar dünyası ----------
+
+  spiritCost(): number {
+    return this.s.cls === "kam" ? 1 : 3;
+  }
+
+  spiritWhy(): string | null {
+    const s = this.s;
+    const sp = s.spirit;
+    const day = this.dayOf().day;
+    if (sp && day - sp.day < 3) return `Ruhlar yorgun. ${3 - (day - sp.day)} gün sonra yeniden davul çalınabilir.`;
+    if (s.mats.ruh < this.spiritCost()) return `${this.spiritCost()} Ruh Taşı gerekir.`;
+    return null;
+  }
+
+  spiritBegin(): boolean {
+    const s = this.s;
+    if (this.spiritWhy() || this.battleLock) return false;
+    s.mats.ruh -= this.spiritCost();
+    const sp = (s.spirit ??= { day: 0, n: 0, met: [] });
+    sp.day = this.dayOf().day;
+    sp.n++;
+    if (sp.n === 1) this.chron(`${s.hero.name} ilk kez davulun sesine binip ruhlar dünyasına yolculuk etti.`);
+    saveGame(s);
+    return true;
+  }
+
+  private spiritAncestor(): { name: string; lv: number } | null {
+    const met = this.s.spirit?.met ?? [];
+    const f = (this.s.fallen ?? []).filter((x) => !met.includes(x.name)).sort((a, b) => b.day - a.day)[0];
+    return f ? { name: f.name, lv: f.lv } : null;
+  }
+
+  spiritOpts(realm: "ust" | "alt"): { id: string; name: string; text: string; off?: string | null }[] {
+    const s = this.s;
+    const lv = s.hero.lv;
+    if (realm === "ust") {
+      const anc = this.spiritAncestor();
+      return [
+        { id: "ulgen", name: "Ülgen'in kutsaması", text: "Dokuzuncu kat gökte Ülgen'e saçı sun. Sonraki 3 savaşta ordu gücü +%12, +3 kut." },
+        { id: "ata", name: anc ? `${anc.name} ile konuş` : "Ataların sesi", text: anc ? `Düşen yoldaşın ${anc.name} ateşin başında seni bekliyor. Bilgeliği tecrübeye dönüşür.` : "Atalarının gölgeleri yol gösterir: bol tecrübe." },
+        { id: "umay", name: "Umay Ana'nın şifası", text: "Can ve enerji tamamen dolar; sonraki 3 savaşta can yenileme artar." },
+      ];
+    }
+    return [
+      { id: "erlik", name: "Erlik'le pazarlık", text: `Erlik altın sever, ruh ister. +${150 + lv * 60} altın, −5 kut.` },
+      { id: "yek", name: "Kara ruhlarla dövüş", text: "Erlik'in yekleri yolunu kesiyor. Yenersen bol Ruh Taşı ve bir eşya." },
+      { id: "kurtar", name: "Kayıp bir ruhu kurtar", text: "Yolunu şaşırmış bir ruhu göğe çıkar (2 Ruh Taşı). +4 kut, +15 şöhret, sonraki 3 savaşta ordu +%5.", off: s.mats.ruh < 2 ? "2 Ruh Taşı gerekir" : null },
+    ];
+  }
+
+  spiritChoose(id: string): { title: string; html: string; fight?: boolean } {
+    const s = this.s;
+    const h = s.hero;
+    const lv = h.lv;
+    const sp = (s.spirit ??= { day: 0, n: 0, met: [] });
+    switch (id) {
+      case "ulgen":
+        s.buffs.ulgen = 3;
+        this.addKut(3, "Ülgen'in kutsaması");
+        return { title: "Ülgen'in Kutsaması", html: `Ak Ülgen altın tahtından baktı ve elini başına koydu. "Yolun açık olsun, yiğit."<br><br><b class="cheap">Sonraki 3 savaşta ordu gücü +%12 · +3 kut</b>` };
+      case "ata": {
+        const anc = this.spiritAncestor();
+        const xp = 200 + lv * 30 + (anc ? anc.lv * 15 : 0);
+        this.addXp(xp);
+        if (anc) {
+          sp.met.push(anc.name);
+          const f = s.fallen?.find((x) => x.name === anc.name);
+          if (f) f.mourned = true;
+          this.chron(`${h.name}, ruhlar dünyasında düşen yoldaşı ${anc.name} ile konuştu.`);
+        }
+        return { title: anc ? anc.name : "Ataların Sesi", html: anc ? `${anc.name} ateşin karşısında oturuyordu, yaraları kapanmış, yüzü aydınlık. "Beni unutmadın. Dinle: düşmanın sağ kanadı hep zayıftır, atını güneşe karşı sürme."<br><br><b class="cheap">+${xp} TP</b>` : `Gölgeler bir halka oldu. Alp Er Tunga'nın sesi rüzgârda: "Kurt sürüsünden ayrılınca ölür."<br><br><b class="cheap">+${xp} TP</b>` };
+      }
+      case "umay":
+        h.hp = this.maxHp();
+        h.energy = this.maxEnergy();
+        s.buffs.umay = 3;
+        return { title: "Umay Ana", html: `Ak saçlı ana, kayın ağacının dibinde ellerini yaralarına sürdü. Bedenin hafifledi.<br><br><b class="cheap">Can ve enerji doldu · sonraki 3 savaşta can yenileme +%4</b>` };
+      case "erlik": {
+        const gold = 150 + lv * 60;
+        s.res.gold += gold;
+        this.addKut(-5, "Erlik'le pazarlık");
+        this.chron(`${h.name} Alt Dünya'da Erlik Han ile pazarlık etti.`);
+        return { title: "Erlik'in Altını", html: `Erlik güldü; sesi dokuz katı titretti. "Altın senin, gölgenin bir parçası benim."<br><br><b class="cheap">+${gold} altın</b> · <b class="neg">−5 kut</b>` };
+      }
+      case "yek":
+        return { title: "Kara Ruhlar", html: "Kara kanatlı yekler çığlıklarla üzerine çullanıyor! Ruhunu kılıcına bağla.", fight: true };
+      case "kurtar":
+        s.mats.ruh = Math.max(0, s.mats.ruh - 2);
+        this.addKut(4, "kayıp bir ruhu kurtardın");
+        s.renown += 15;
+        s.buffs.ata = 3;
+        return { title: "Kurtarılan Ruh", html: `Ağlayan bir kız çocuğunun ruhunu elinden tutup kayın ağacının köklerine kadar çıkardın. Bir ak kuş olup göğe uçtu.<br><br><b class="cheap">+4 kut · +15 şöhret · sonraki 3 savaşta ordu +%5</b>` };
+    }
+    return { title: "", html: "" };
+  }
+
+  spiritFight(): void {
+    const s = this.s;
+    const lv = s.hero.lv;
+    const boss: Boss = { name: "Erlik'in Yeği Kara Kuş", icon: "heroes/boss_kam", atk: Math.round(14 + lv * 0.5), def: Math.round(7 + lv * 0.25), hp: 500 + lv * 14 };
+    this.battle("Alt Dünya", army(Math.round(lv * 0.4), Math.round(lv * 0.3), Math.round(lv * 0.2)), 0, (win) => {
+      if (!win) return "Yekler ruhunu sarstı. Davulun sesine tutunup dünyaya döndün.";
+      const ruh = 5 + Math.floor(lv / 3);
+      s.mats.ruh += ruh;
+      s.renown += 10;
+      const it = this.drop(this.legendTier(), 1);
+      return `Yekler dağıldı! <b class="cheap">+${ruh} Ruh Taşı · +10 şöhret</b>${it ? ` · <b class="r${it.rar}">${it.name}</b>` : ""}`;
+    }, boss, "Kara Ruhlar");
   }
 
   mongol(): MongolState {
