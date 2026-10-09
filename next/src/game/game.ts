@@ -22,7 +22,7 @@ import { DEEP_LORE, DEEP_PERKS, DOORS, DOOR_KEYS, RIDDLES, TOMBS, deepBoss, deep
 import { FACTIONS, FACTION_KEYS, HOSTILE, REP_RANKS, RANK_PERKS, factionOf, repRank, type FactionId } from "./factions";
 import { CLASS_BY_ID, CLASS_SKILLS, SKILL_MAX, WEAPON_NAME, WEAPON_STAT, skillPow, skillRank, type ClassDef, type ClassId, type ClassSkill, type WeaponKind } from "./classes";
 import { ACT2, CHAPTERS, COMP_BY_ID, COMP_MAX, ERLIK, ERLIK_SHADE, FORT_GUARD, GATE_GUARD, KARA_HAN, KASIM, SHADE_GUARD, type Chapter, type CompId, type CompMods, type Companion } from "./story";
-import { CAPITAL, SLAVE_RADIUS, banditArmy, campGarrison, kurganBoss, kurganGuard, loadGame, saveGame as rawSave, wipeGame, type Bandit, type Bounty, type Caravan, type Contract, type GameState, type Storm } from "./state";
+import { CAPITAL, SLAVE_RADIUS, banditArmy, campGarrison, importSave, kurganBoss, kurganGuard, loadGame, saveGame as rawSave, useSlot, wipeGame, type Bandit, type Bounty, type Caravan, type Contract, type GameState, type Storm } from "./state";
 
 export type Target =
   | { kind: "village" | "camp" | "node" | "ruin" | "city" | "bandit" | "kurgan" | "caravan" | "rival"; i: number }
@@ -99,6 +99,24 @@ export class Game {
     wiped = true;
     wipeGame();
     location.reload();
+  }
+
+  saveNow(): void {
+    saveGame(this.s);
+  }
+
+  switchSlot(i: number): void {
+    saveGame(this.s);
+    wiped = true;
+    useSlot(i);
+    location.reload();
+  }
+
+  importText(text: string): boolean {
+    if (!importSave(text)) return false;
+    wiped = true;
+    location.reload();
+    return true;
   }
 
   get now(): number {

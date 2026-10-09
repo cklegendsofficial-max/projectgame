@@ -5,12 +5,15 @@ import { WorldView } from "./render/worldView";
 import { Camera } from "./render/camera";
 import { Game } from "./game/game";
 import { Hud } from "./ui/hud";
+import { applyUi, settings } from "./settings";
 
 async function boot(): Promise<void> {
   extensions.add(CullerPlugin);
+  applyUi();
   const host = document.getElementById("game")!;
   const app = new Application();
-  await app.init({ resizeTo: host, background: "#1c120a", antialias: true, resolution: Math.min(2, window.devicePixelRatio || 1), autoDensity: true });
+  await app.init({ resizeTo: host, background: "#1c120a", antialias: !settings.eco, resolution: settings.eco ? 1 : Math.min(2, window.devicePixelRatio || 1), autoDensity: true });
+  if (settings.eco) app.ticker.maxFPS = 30;
   host.appendChild(app.canvas);
   await new Promise((r) => setTimeout(r, 30));
   const t0 = performance.now();

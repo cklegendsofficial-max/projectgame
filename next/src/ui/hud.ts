@@ -3,7 +3,8 @@ import { BUILDINGS, NODE_NAME, RES_ICON, RES_KEYS, RES_NAME, UNITS, UNIT_KEYS, a
 import { TACTICS, TACTIC_KEYS, type BattleResult, type Boss, type Tactic } from "../game/battle";
 import { GOODS, GOOD_KEYS, PLUS_CHANCE, SKILL_INFO, SKILL_KEYS, SLOTS, SLOT_NAME, STAT_INFO, STAT_KEYS, canPlus, itemStats, kindName, plusCost, skillLv, skillNext, type Item, type Slot } from "../game/rpg";
 import { ARMOR_NAME, CLASSES, SKILL_MAX, WEAPON_NAME, skillPow, skillRank, type ClassId } from "../game/classes";
-import { CAPITAL, kurganBoss } from "../game/state";
+import { CAPITAL, SAVE_SLOTS, curSlot, exportSave, kurganBoss, slotInfo } from "../game/state";
+import { applyUi, saveSettings, settings } from "../settings";
 import { BRANCHES, BRANCH_KEYS, ROW_NEED, TALENTS, branchSpent } from "../game/talents";
 import { CONSUMABLES, CONS_BY_ID, CRAFT_SLOTS, REFINES, gearCost, type Cost, type Mat } from "../game/crafting";
 import { SIDE_TEXT, type SideQuest } from "../game/sidequests";
@@ -187,6 +188,14 @@ export class Hud {
     window.addEventListener("pointerup", () => (this.holding = false));
     this.panel.addEventListener("input", (e) => {
       const el = e.target as HTMLInputElement;
+      const k = el.dataset.set as "music" | "fx" | undefined;
+      if (k) {
+        settings[k] = Number(el.value) / 100;
+        saveSettings();
+        audio.volumes();
+        const out = this.panel.querySelector(`[data-so="${k}"]`);
+        if (out) out.textContent = el.value;
+      }
       if (el.dataset.u) {
         this.sel[el.dataset.u as Unit] = Number(el.value);
         const out = this.panel.querySelector(`[data-o="${el.dataset.u}"]`);
@@ -1089,12 +1098,76 @@ export class Hud {
       }).join("") || `<p>Şu an sefer yok.</p>`);
   }
 
+  private settingsHtml(): string {
+    const g = this.g;
+    const cur = curSlot();
+    const pct = (v: number) => Math.round(v * 100);
+    const toggle = (k: "eco" | "mini", label: string, note = "") =>
+      `<div class="setrow"><span>${label}</span><button class="btn sm ${settings[k] ? "on" : ""}" data-a="${this.act(() => {
+        settings[k] = !settings[k];
+        saveSettings();
+        applyUi();
+        if (note) this.toast(note, "good");
+      })}">${settings[k] ? "Açık" : "Kapalı"}</button></div>`;
+    const slots = Array.from({ length: SAVE_SLOTS }, (_, i) => {
+      const inf = slotInfo(i);
+      const cl = inf?.cls ? CLASSES.find((c) => c.id === inf.cls) : null;
+      const when = inf?.at ? new Date(inf.at).toLocaleString("tr-TR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
+      const btn = i === cur
+        ? `<em class="cheap">Aktif</em>`
+        : `<button class="btn sm ${inf ? "go" : ""}" data-a="${this.act(() => g.switchSlot(i))}">${inf ? "Yükle" : "Yeni oyun"}</button>`;
+      return `<div class="sslot ${i === cur ? "cur" : ""}">${ic("scroll")}<div><b>Yuva ${i + 1}${inf ? ` · ${inf.name}` : ""}</b><small>${inf ? `${cl?.name ?? "Köle"} · Sv ${inf.lv} · ${ic("crown")}${inf.renown} · ${ic("coins")}${fmt(inf.gold)}${inf.owned ? ` · ${inf.owned} şehir` : ""}${when ? ` · ${when}` : ""}` : "Boş yuva"}</small></div>${btn}</div>`;
+    }).join("");
+    return `<h3>Ses</h3>
+      <div class="setrow"><span>Müzik</span><input type="range" min="0" max="100" value="${pct(settings.music)}" data-set="music"><b data-so="music">${pct(settings.music)}</b></div>
+      <div class="setrow"><span>Efektler</span><input type="range" min="0" max="100" value="${pct(settings.fx)}" data-set="fx"><b data-so="fx">${pct(settings.fx)}</b></div>
+      <h3>Görüntü</h3>
+      <div class="setrow"><span>Arayüz boyutu</span>${[0.85, 1, 1.15, 1.3].map((v) => `<button class="btn sm ${settings.ui === v ? "on" : ""}" data-a="${this.act(() => {
+        settings.ui = v;
+        saveSettings();
+        applyUi();
+      })}">%${pct(v)}</button>`).join("")}</div>
+      ${toggle("mini", "Mini harita")}
+      ${toggle("eco", "Pil tasarrufu", "Pil tasarrufu sayfa yenilenince devreye girer (30 FPS, düşük çözünürlük).")}
+      <h3>Kayıt yuvaları</h3>
+      <p class="dim">Oyun her birkaç saniyede bir etkin yuvaya kaydedilir. Yuva değiştirince mevcut oyunun kaydedilir ve sayfa yeniden yüklenir.</p>
+      ${slots}
+      <div class="setrow"><button class="btn sm" data-a="${this.act(() => this.exportFile())}">${ic("scroll")} Dışa aktar</button><button class="btn sm" data-a="${this.act(() => this.importFile())}">${ic("chest")} İçe aktar</button></div>
+      <button class="btn sm red reset" data-a="${this.act(() => confirm("Bu yuvadaki tüm ilerlemen silinip yeni bir oyun başlayacak. Emin misin?") && g.resetGame())}">Bu yuvada yeni oyun başlat</button>`;
+  }
+
+  private exportFile(): void {
+    this.g.saveNow();
+    const raw = exportSave();
+    if (!raw) return this.toast("Kaydedilecek bir oyun yok.", "bad");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([raw], { type: "application/json" }));
+    a.download = `kervan-krallik-yuva${curSlot() + 1}-${this.g.s.hero.name}.json`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    this.toast("Kayıt dosyası indirildi.", "good");
+  }
+
+  private importFile(): void {
+    const inp = document.createElement("input");
+    inp.type = "file";
+    inp.accept = ".json,application/json";
+    inp.onchange = async () => {
+      const f = inp.files?.[0];
+      if (!f) return;
+      const text = await f.text();
+      if (!confirm(`Yuva ${curSlot() + 1} içindeki oyunun yerine bu kayıt yüklenecek. Emin misin?`)) return;
+      if (!this.g.importText(text)) this.toast("Bu dosya geçerli bir Kervan Krallık kaydı değil.", "bad");
+    };
+    inp.click();
+  }
+
   private heroHtml(): string {
     const g = this.g;
     const s = g.s;
     const h = s.hero;
     const need = xpNeed(h.lv);
-    const tabs = this.tabs([["karakter", "Karakter"], ["beceri", `Beceriler${h.spts ? ` (${h.spts})` : ""}`], ["yetenek", `Yetenekler${h.tpts ? ` (${h.tpts})` : ""}`], ["techizat", `Teçhizat${h.bag.length ? ` (${h.bag.length})` : ""}`], ["ordu", "Birlik"], ...(s.free ? ([["unvan", `Hedefler${g.dailyClaimable() ? " ●" : ""}`]] as [string, string][]) : [])]);
+    const tabs = this.tabs([["karakter", "Karakter"], ["beceri", `Beceriler${h.spts ? ` (${h.spts})` : ""}`], ["yetenek", `Yetenekler${h.tpts ? ` (${h.tpts})` : ""}`], ["techizat", `Teçhizat${h.bag.length ? ` (${h.bag.length})` : ""}`], ["ordu", "Birlik"], ...(s.free ? ([["unvan", `Hedefler${g.dailyClaimable() ? " ●" : ""}`]] as [string, string][]) : []), ["ayar", "⚙"]]);
     let body = "";
     if (this.tab === "karakter") {
       const cl = g.cls();
@@ -1157,6 +1230,8 @@ export class Hud {
           const next = lv > 0 && lv < SKILL_MAX ? `<small class="dim">Sonraki seviye: ${sk.text(skillPow(sk, lv + 1))}</small>` : "";
           return `<div class="brow skill ${lv ? "" : "locked"}">${ic(sk.icon, "bimg")}<div class="bi2"><b>${sk.name} <em>${skillRank(lv)}</em></b><small>${cur}</small>${next}${why && why !== "Beceri puanın yok" ? `<small class="why">${why}</small>` : ""}</div><button class="btn sm plus ${why ? "off" : ""}" data-a="${this.act(() => g.learn(sk.id))}">+</button></div>`;
         }).join("");
+    } else if (this.tab === "ayar") {
+      body = this.settingsHtml();
     } else if (this.tab === "unvan") {
       body = this.dailyHtml() + this.rivalsHtml() + this.nemesisHtml() + this.titlesHtml();
     } else if (this.tab === "techizat") {

@@ -1,3 +1,5 @@
+import { settings } from "./settings";
+
 const HICAZ = [0, 1, 4, 5, 7, 8, 10, 12, 13, 16, 17, 19];
 const ROOT = 146.83;
 const KEY = "kk_audio";
@@ -27,10 +29,10 @@ class SoundSystem {
     this.master.gain.value = this.muted ? 0 : 0.8;
     this.master.connect(ctx.destination);
     this.music = ctx.createGain();
-    this.music.gain.value = 0.5;
+    this.music.gain.value = settings.music;
     this.music.connect(this.master);
     this.fx = ctx.createGain();
-    this.fx.gain.value = 0.7;
+    this.fx.gain.value = settings.fx;
     this.fx.connect(this.master);
     this.noise = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
     const d = this.noise.getChannelData(0);
@@ -45,6 +47,12 @@ class SoundSystem {
     localStorage.setItem(KEY, this.muted ? "off" : "on");
     if (this.ctx) this.master.gain.setTargetAtTime(this.muted ? 0 : 0.8, this.ctx.currentTime, 0.1);
     return this.muted;
+  }
+
+  volumes(): void {
+    if (!this.ctx) return;
+    this.music.gain.setTargetAtTime(settings.music, this.ctx.currentTime, 0.05);
+    this.fx.gain.setTargetAtTime(settings.fx, this.ctx.currentTime, 0.05);
   }
 
   storm(level: number): void {

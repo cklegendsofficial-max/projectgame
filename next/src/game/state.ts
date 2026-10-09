@@ -498,9 +498,59 @@ function decodeBits(s: string, n: number): Uint8Array {
   return out;
 }
 
+export const SAVE_SLOTS = 3;
+const SLOT_KEY = "kk_slot";
+
+export function curSlot(): number {
+  const n = Number(localStorage.getItem(SLOT_KEY) ?? 0);
+  return n >= 0 && n < SAVE_SLOTS ? Math.floor(n) : 0;
+}
+
+const slotKey = (i: number) => (i === 0 ? KEY : `${KEY}_s${i}`);
+
+export interface SlotInfo {
+  name: string;
+  cls: ClassId | null;
+  lv: number;
+  renown: number;
+  gold: number;
+  owned: number;
+  at: number;
+}
+
+export function slotInfo(i: number): SlotInfo | null {
+  try {
+    const raw = localStorage.getItem(slotKey(i));
+    if (!raw) return null;
+    const r = JSON.parse(raw) as GameState & { savedAt?: number };
+    return { name: r.hero?.name ?? "?", cls: r.cls ?? null, lv: r.hero?.lv ?? 1, renown: r.renown ?? 0, gold: Math.floor(r.res?.gold ?? 0), owned: Object.keys(r.owned ?? {}).length, at: r.savedAt ?? 0 };
+  } catch {
+    return null;
+  }
+}
+
+export function useSlot(i: number): void {
+  localStorage.setItem(SLOT_KEY, String(i));
+}
+
+export function exportSave(): string | null {
+  return localStorage.getItem(slotKey(curSlot()));
+}
+
+export function importSave(text: string): boolean {
+  try {
+    const r = JSON.parse(text) as { v?: number; hero?: unknown; res?: unknown };
+    if (r.v !== 3 || !r.hero || !r.res) return false;
+    localStorage.setItem(slotKey(curSlot()), text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function saveGame(s: GameState): void {
   try {
-    localStorage.setItem(KEY, JSON.stringify({ ...s, explored: encodeBits(s.explored), bandits: [], caravans: [], storms: [] }));
+    localStorage.setItem(slotKey(curSlot()), JSON.stringify({ ...s, explored: encodeBits(s.explored), bandits: [], caravans: [], storms: [], savedAt: Date.now() }));
   } catch {
     /* storage full or blocked */
   }
@@ -509,7 +559,7 @@ export function saveGame(s: GameState): void {
 export function loadGame(w: World): GameState {
   const fresh = newGame(w);
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = localStorage.getItem(slotKey(curSlot()));
     if (!raw) return fresh;
     const r = JSON.parse(raw) as Partial<GameState> & { explored?: string };
     if (r.v !== 3) return fresh;
@@ -533,5 +583,5 @@ export function loadGame(w: World): GameState {
 }
 
 export function wipeGame(): void {
-  localStorage.removeItem(KEY);
+  localStorage.removeItem(slotKey(curSlot()));
 }
