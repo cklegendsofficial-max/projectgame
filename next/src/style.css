@@ -451,6 +451,18 @@ body.titled #hud > .top, body.titled #hud > .track, body.titled #hud > .actbar, 
 .cxrow.open { background: #3b261480; border-color: #b8843e; }
 .cxrow p { margin: 4px 0 0; font: 14px/1.5 Georgia, serif; color: #f4e6c6; }
 .cxrow.lock { cursor: default; opacity: .6; }
+.wtiers { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 6px 0 8px; }
+.wtier { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 4px; border-radius: 10px; border: 1px solid #6b4a24; background: #0003; text-align: center; }
+.wtier b { font: 700 16px Georgia, serif; color: #e8c88a; }
+.wtier.ready { border-color: #7fd36a; background: #7fd36a1a; }
+.wtier.done { opacity: .6; }
+.wtier .btn { margin-top: 3px; }
+.wboard { border: 1px solid #6b4a24; border-radius: 10px; overflow: hidden; margin-bottom: 8px; }
+.wrow { display: grid; grid-template-columns: 28px 1fr auto; gap: 8px; padding: 4px 10px; font-size: 13px; }
+.wrow:nth-child(even) { background: #ffffff08; }
+.wrow.hd { background: #3b2614; font-weight: 700; color: #e8c88a; }
+.wrow.me { background: #ffd56a26; color: #ffe39a; font-weight: 700; }
+.wrow i { font-style: normal; opacity: .7; }
 .padcross { position: fixed; left: 50%; top: 50%; width: 34px; height: 34px; margin: -17px 0 0 -17px; border: 2px solid rgba(255, 220, 140, .9); border-radius: 50%; box-shadow: 0 0 0 2px rgba(0, 0, 0, .45), 0 0 12px rgba(255, 200, 90, .5); pointer-events: none; z-index: 5; display: none; }
 .padcross::after { content: ""; position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: #ffd98a; }
 .padcross.on { display: block; }

@@ -30,6 +30,13 @@ import { assetUrl } from "../render/worldView";
 import { audio } from "../audio";
 import { LANGS, lang, t, t as tr, type Lang } from "../i18n";
 import { cloudPush, cloudReady, onDeck, steam } from "../platform";
+import { WEEK_TIERS, weekEnd, weekNeed, weekReward, weekTheme } from "../game/weekly";
+
+const MOD_LABEL: Record<string, string> = { atk: "saldırı", army: "ordu gücü", heal: "iyileşme", xp: "tecrübe", trade: "ticaret", speed: "hız", sight: "görüş" };
+const SCORE_LABEL: Record<string, string> = {
+  profit: "kâr (altın)", contracts: "emanet", rescued: "kurtarılan kervan", wins: "zafer", camps: "kamp", slain: "can düşmanı", kurgans: "Kurgan Taşı",
+  floors: "derinlik katı", crafted: "eşya", trains: "talim", sides: "şehir görevi", conquests: "fetih", beyq: "bey isteği", voyages: "Hazar seferi",
+};
 import { SUREK_FOOD } from "../game/games";
 import { GIFT_GOLD, PEACE_GOLD, SPY_MAX, SPY_OPS, TRADE_GOLD, spyCost } from "../game/spy";
 import { MYCV_COST, MYCV_GUARD, MYCV_GUARD_MAX, MYCV_UPGRADE } from "../game/mycaravan";
@@ -468,6 +475,34 @@ export class Hud {
         .join("") +
       (d.chest ? `<div class="odds good">${tr("Bugünün sandığı açıldı. Yarın yeni fermanlar gelecek.")}</div>` : `<button class="btn big ${g.chestReady() ? "go" : "off"}" style="width:100%" data-a="${this.act(() => g.openChest())}"> ${ic("chest")} ${tr("Ferman sandığını aç")}</button>`)
     );
+  }
+
+  private weeklyHtml(): string {
+    const g = this.g;
+    const w = g.weekly();
+    const th = weekTheme(w.id);
+    const en = lang() === "en";
+    const score = g.weekScoreNow();
+    const left = Math.max(0, weekEnd(w.id) - Date.now());
+    const d = Math.floor(left / 864e5), h = Math.floor((left % 864e5) / 36e5);
+    const mods = Object.entries(th.mods).map(([k, v]) => (k === "carry" ? `+${v} ${tr("yük")}` : `+${Math.round((v ?? 0) * 100)}% ${tr(MOD_LABEL[k] ?? k)}`)).join(" · ");
+    const tiers = Array.from({ length: WEEK_TIERS }, (_, i) => {
+      const need = weekNeed(i, w.lv);
+      const r = weekReward(i, w.lv);
+      const st = i < w.claimed ? "done" : i === w.claimed && score >= need ? "ready" : "";
+      return `<div class="wtier ${st}"><b>${["I", "II", "III"][i]}</b><small>${need} ${tr("puan")}</small><small class="cheap">${ic("coins")}${r.gold} · ${ic("crown")}${r.renown}${r.parsomen ? ` · ${ic("parsomen")}${r.parsomen}` : ""}</small>${st === "ready" ? `<button class="btn sm go" data-a="${this.act(() => g.weekClaim(i))}">${tr("Al")}</button>` : st === "done" ? `<em class="good">✓</em>` : ""}</div>`;
+    }).join("");
+    const next = w.claimed < WEEK_TIERS ? weekNeed(w.claimed, w.lv) : weekNeed(WEEK_TIERS - 1, w.lv);
+    const board = g.weekBoardNow();
+    const rows = board.map((r, i) => `<div class="wrow ${r.me ? "me" : ""}"><i>${i + 1}</i><span>${r.name}</span><b>${r.score}</b></div>`).join("");
+    const pts = Object.entries(th.score).map(([k, v]) => `${tr(SCORE_LABEL[k] ?? k)} ×${v}`).join(" · ");
+    const hist = w.hist.length ? `<p class="dim">${tr("Geçmiş haftalar")}: ${w.hist.slice(0, 5).map((x) => `${weekTheme(x.id)[en ? "en" : "name"]} ${x.rank}. (${x.score})`).join(" · ")}</p>` : "";
+    return `<h3>${ic(th.icon)} ${en ? th.en : th.name} <em class="dim">· ${tr("{d}g {h}s kaldı", { d, h })}</em></h3>
+      <p class="dim">${en ? th.descEn : th.desc} ${tr("Haftanın lütfu")}: <b class="cheap">${mods}</b></p>
+      <p class="dim small">${tr("Puanlama")}: ${pts}</p>
+      ${bar(Math.min(score, next), next, "", `${tr("Hafta puanı")} ${score}/${next}`)}
+      <div class="wtiers">${tiers}</div>
+      <div class="wboard"><div class="wrow hd"><i>#</i><span>${tr("Bozkır sıralaması")}</span><b>${tr("puan")}</b></div>${rows}</div>${hist}`;
   }
 
   private studPick: number[] = [];
@@ -2085,7 +2120,7 @@ export class Hud {
     } else if (this.tab === "divan") {
       body = this.divanHtml();
     } else if (this.tab === "unvan") {
-      body = this.dailyHtml() + (s.beylik ? this.kutHtml() + this.familyHtml() : "") + (s.free ? this.korkutHtml() + this.gamesHtml() + this.yugHtml() + this.ozanHtml() : "") + this.kurultayHtml() + this.rivalsHtml() + this.nemesisHtml() + this.titlesHtml();
+      body = (s.free ? this.weeklyHtml() : "") + this.dailyHtml() + (s.beylik ? this.kutHtml() + this.familyHtml() : "") + (s.free ? this.korkutHtml() + this.gamesHtml() + this.yugHtml() + this.ozanHtml() : "") + this.kurultayHtml() + this.rivalsHtml() + this.nemesisHtml() + this.titlesHtml();
     } else if (this.tab === "techizat") {
       const inCity = g.nearCity() >= 0;
       body = `<div class="slots">` + SLOTS.map((sl) => {

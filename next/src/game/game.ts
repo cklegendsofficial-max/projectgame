@@ -40,7 +40,9 @@ import { BALBAL_GOLD, BALBAL_MAX, BALBAL_STONE, YUG_LATE, balbalBonus, yugCost, 
 import type { WrestleFoe } from "../ui/wrestle";
 import { SIEGE_MAX_DAY, newSiege, siegeDay, siegeGar, siegeWall, type SiegeAct, type SiegeCtx, type SiegeRun } from "./siege";
 import { BOND_FX, BOND_LEAVE, BOND_QUEST, BOND_START, COMP_QUESTS, SWORN_MULT, type BondEvent, type CompQuest, type CqChoice } from "./bonds";
-import { t as tr } from "../i18n";
+import { lang, t as tr } from "../i18n";
+import { WEEK_TIERS, weekBoard, weekFrac, weekId, weekNeed, weekRank, weekReward, weekScore, weekTheme, type BoardRow, type WeekState } from "./weekly";
+import { steamStats } from "../platform";
 import { SEASONS, SEASON_DAYS, seasonOf, type Season, type SeasonId } from "./seasons";
 import { FACTIONS, FACTION_KEYS, HOSTILE, REP_RANKS, RANK_PERKS, factionOf, repRank, type FactionId } from "./factions";
 import { CLASS_BY_ID, CLASS_SKILLS, SKILL_MAX, WEAPON_NAME, WEAPON_STAT, skillPow, skillRank, type ClassDef, type ClassId, type ClassSkill, type WeaponKind } from "./classes";
@@ -4286,6 +4288,53 @@ export class Game {
     }
   }
 
+  weekly(): WeekState {
+    const s = this.s;
+    if (!s.weekly) s.weekly = { id: weekId(), base: { ...s.c }, lv: s.hero.lv, claimed: 0, hist: [] };
+    return s.weekly;
+  }
+
+  weekScoreNow(): number {
+    const w = this.weekly();
+    return weekScore(weekTheme(w.id), this.s.c, w.base);
+  }
+
+  weekBoardNow(frac = weekFrac(this.weekly().id)): BoardRow[] {
+    const w = this.weekly();
+    return weekBoard(w.id, w.lv, frac, { name: this.s.hero.name, score: this.weekScoreNow() });
+  }
+
+  weekClaim(tier: number): boolean {
+    const s = this.s;
+    const w = this.weekly();
+    if (!s.free || tier !== w.claimed || tier >= WEEK_TIERS || this.weekScoreNow() < weekNeed(tier, w.lv)) return false;
+    const r = weekReward(tier, w.lv);
+    s.res.gold += r.gold;
+    s.renown += r.renown;
+    s.mats.parsomen += r.parsomen;
+    w.claimed = tier + 1;
+    audio.play("coin");
+    this.hud.toast(`${tr("Haftalık ödül")}: +${r.gold} ${tr("altın")}, +${r.renown} ${tr("şöhret")}${r.parsomen ? `, +${r.parsomen} ${tr("Parşömen")}` : ""}`, "good");
+    return true;
+  }
+
+  private weekCheck(): void {
+    const s = this.s;
+    const w = this.weekly();
+    const now = weekId();
+    if (now === w.id) return;
+    const score = this.weekScoreNow();
+    const rank = weekRank(this.weekBoardNow(1));
+    if (s.free) while (w.claimed < WEEK_TIERS && score >= weekNeed(w.claimed, w.lv)) this.weekClaim(w.claimed);
+    const hist = [{ id: w.id, score, rank }, ...w.hist].slice(0, 8);
+    s.weekly = { id: now, base: { ...s.c }, lv: s.hero.lv, claimed: 0, hist };
+    steamStats({ weekly_best: Math.max(...hist.map((h) => h.score)) });
+    if (score > 0) {
+      if (rank === 1) this.addKut(3, tr("Haftanın birincisi"));
+      this.hud.toast(tr("Hafta kapandı: {r}. sıra, {n} puan. Yeni hafta: {t}", { r: rank, n: score, t: lang() === "en" ? weekTheme(now).en : weekTheme(now).name }), rank <= 3 ? "good" : "info");
+    }
+  }
+
   surekReason(): string {
     const s = this.s;
     if (!s.free) return tr("Önce hürriyetini kazan");
@@ -5860,6 +5909,10 @@ export class Game {
     }
     const om = this.s.origin ? ORIGIN_BY_ID[this.s.origin]?.mods : null;
     if (om) for (const k of Object.keys(om) as (keyof CompMods)[]) m[k] += om[k] ?? 0;
+    if (this.s.free) {
+      const wm = weekTheme(this.weekly().id).mods;
+      for (const k of Object.keys(wm) as (keyof CompMods)[]) m[k] += wm[k] ?? 0;
+    }
     return m;
   }
 
@@ -6113,6 +6166,7 @@ export class Game {
     this.achT -= dt;
     if (this.achT > 0) return;
     this.achT = 2;
+    this.weekCheck();
     for (const a of ACHIEVEMENTS) {
       if (this.ach.has(a.id)) continue;
       let ok = false;

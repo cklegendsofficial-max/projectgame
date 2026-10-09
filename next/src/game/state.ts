@@ -11,6 +11,7 @@ import type { Bird } from "./falcon";
 import type { Owned } from "./conquest";
 import type { Rival } from "./rivals";
 import type { Vet } from "./vets";
+import type { WeekState } from "./weekly";
 import type { Otag } from "./otag";
 import { TAMGA_DEFAULT, type Song, type Tamga } from "./ozan";
 import { DIR_DEFAULT, type DirState } from "./director";
@@ -293,6 +294,7 @@ export interface GameState {
   dip?: DipMap;
   foes?: Foe[];
   games?: { wrDay: number; wrRound: number; kbDay: number; kbBest: number; champ: number };
+  weekly?: WeekState;
 }
 
 export interface Voyage {
