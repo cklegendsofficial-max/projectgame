@@ -2,6 +2,7 @@ import { CITIES } from "../world/gen";
 import { army } from "./data";
 import type { Boss } from "./battle";
 import type { Game } from "./game";
+import { gen } from "./text";
 
 export type CompId = "ayse" | "korkut" | "batu" | "leyla" | "ferhat" | "lucia";
 
@@ -211,3 +212,96 @@ export const ACT2: Chapter[] = [
     goto: (g) => g.s.act2.gate,
   },
 ];
+
+export const KOK_BORU: Boss = { name: "Kök Börü", icon: "heroes/boss_buz", atk: 120, def: 55, hp: 7200 };
+export const PEAK_GUARD = army(150, 120, 100);
+export const ACT3_LV = 24;
+export const OTUKEN_RENOWN = 900;
+
+export const ACT3: Chapter[] = [
+  {
+    title: "Göğün Çağrısı",
+    goal: `${ACT3_LV}. seviyeye ulaş ve Kaşgar'da Umay Kam'ı dinle.`,
+    img: "heroes/boss_kam",
+    intro: "Erlik yerin dibine çekildi ama bozkırın göğü hâlâ titriyor. Geceleri yıldızlar yer değiştiriyor, kartallar güneye uçmuyor. Kaşgar'dan yeniden ulak geldi: Umay Kam seni bekliyor.",
+    city: "kashgar",
+    req: (g) => (g.s.hero.lv >= ACT3_LV ? null : `${ACT3_LV}. seviye gerekir`),
+    scene: {
+      img: "heroes/boss_kam",
+      text: (g) => `Umay Kam bu kez ateş yakmamıştı. Davulunu dizlerine koymuş, göğe bakıyordu.<br><br><i>"Erlik'i yendin, ${g.s.hero.name}. Ama yeraltı boşalınca gök de sarsıldı. Tengri'nin <b>Kut</b>'u, beylere hükmetme hakkı, Ötüken'den koptu ve göğe savruldu. Kut sahipsiz kalırsa bozkır yüz yıl kardeş kanıyla yıkanır."</i><br><br><i>"Kut, beyleri tek sofrada toplayana, adı yedi iklimde anılana iner. Önce beyleri kurultayda birleştir. Sonra Tengri Dağı sana yolunu gösterecek."</i>`,
+      choices: [{ label: "Kut'un peşine düşeceğim", run: (g) => g.storyAdvance() }],
+    },
+    goto: () => city("kashgar"),
+  },
+  {
+    title: "Ötüken'in Kutu",
+    goal: `Semerkant'ta en az bir kurultay topla ve ${OTUKEN_RENOWN} şöhrete ulaş.`,
+    img: "lord_bey",
+    intro: "Kut sözle de kazanılır kılıçla da, ama asla tek başına. Müttefik ve tabi beylerini Semerkant'ta kurultaya çağır; adın bozkırın dört bucağına yayılsın.",
+    auto: (g) => g.s.kurultay.held >= 1 && g.s.renown >= OTUKEN_RENOWN,
+    outro: {
+      img: "ruh",
+      title: "Gökten inen ışık",
+      text: (g) => `Kurultayın son gecesi beyler otağdan çıktığında doğu göğünde bir ışık sütunu gördüler. Mavi, buz gibi, yere değmeden asılı duran bir ışık.<br><br>Korkut kopuzunu göğsüne bastırdı: <i>"Tengri Dağı… Ötüken'in kutu oraya inmiş. Zirvede Kök Börü bekler, ${g.s.hero.name}. Atalarımızı Ergenekon'dan çıkaran kurt. Kut'u ancak onu geçen alır."</i>`,
+    },
+    goto: () => city("samarkand"),
+  },
+  {
+    title: "Tengri Dağı",
+    goal: "Tengri Dağı'nın zirvesine çık ve Kök Börü'yü geç.",
+    img: "heroes/boss_buz",
+    intro: "Kaşgar'ın ardında, karla örtülü zirvede gök bozkıra değiyor. Yolu Gök Bekçileri tutuyor. Destanın son tırmanışı.",
+    goto: (g) => g.s.act3.peak,
+  },
+  {
+    title: "Kut'un Sahibi",
+    goal: "Tengri Dağı'nın zirvesinde Kut'un kaderini seç.",
+    img: "ruh",
+    intro: "Kök Börü başını eğdi. Zirvede, buzun içinde mavi bir alev gibi Kut duruyor. Bozkırın kaderi senin elinde.",
+    goto: (g) => g.s.act3.peak,
+  },
+];
+
+export interface Ending {
+  id: string;
+  name: string;
+  label: string;
+  img: string;
+  why?: (g: Game) => string | null;
+  text: (g: Game) => string;
+}
+
+export const ENDINGS: Ending[] = [
+  {
+    id: "kagan",
+    name: "Gök Kağan",
+    label: "Kut'u başına koy: bozkırı tek tuğ altında yönet",
+    img: "lord_bey",
+    why: (g) => (g.s.kagan ? null : "Önce kurultayda Kağan seçilmelisin"),
+    text: (g) => `Kut'u avuçlarına aldığında mavi alev başının üstünde bir taç gibi yandı. Zirveden indiğinde bütün beyler Tengri Dağı'nın eteğinde tuğlarını yere sapladı.<br><br><i>"Gök Kağan ${g.s.hero.name}!"</i><br><br>Semerkant'tan Kaşgar'a kadar bozkır artık tek sofradır. Tabi beyler haraçlarını Kağan'ın otağına getirir; kardeş kanı dökülmez. Bir zamanlar efendisinin ocağında taş taşıyan çocuk, göğün tahtına oturdu.`,
+  },
+  {
+    id: "hurriyet",
+    name: "Zincir Kıran",
+    label: "Kut'un gücüyle bozkırdaki bütün zincirleri kır",
+    img: "companions/ayse",
+    text: (g) => `Kut'u göğe kaldırdın ve bir dilek tuttun: <b>bir daha hiçbir çocuk zincire vurulmasın</b>.<br><br>O gece Merv'den Konstantinopolis'e kadar bütün esir pazarlarında kilitler kendiliğinden açıldı. Demir halkalar paslanıp toza döndü.${g.hasComp("ayse") ? " Ayşe omzundaki kara damgaya baktı: damga yoktu." : ""}<br><br>Köylüler adını ocak başlarında dua gibi anar. Senin tuğun bir hanedanın değil, hürriyetin bayrağı oldu.`,
+  },
+  {
+    id: "ozan",
+    name: "Korkut'un Yolu",
+    label: "Kut'u Ötüken'e geri göm, kopuzu al ve yola düş",
+    img: "companions/korkut",
+    text: (g) => `Kut'u almadın. Onu ellerinle Ötüken'in kara toprağına, atalarının yanına gömdün. <i>"Kut kimsenin değil, bozkırındır."</i><br><br>${g.hasComp("korkut") ? "Korkut gözyaşlarını silmeden kopuzunu sana uzattı" : "Yaşlı bir ozan kopuzunu sana uzattı"}: <i>"Artık destanı sen söyleyeceksin."</i><br><br>Bütün devletler seni hakem bilir; beyler kavgalarını senin çadırına getirir. Hükmetmedin ama her sözün ferman sayıldı.`,
+  },
+  {
+    id: "tengri",
+    name: "Göğe Meydan Okuyan",
+    label: "Kut'u kendi ruhuna mühürle (50 Ruh Taşı)",
+    img: "boss_erlik",
+    why: (g) => (g.s.mats.ruh >= 50 ? null : "50 Ruh Taşı gerekir"),
+    text: (g) => `Elli esir ruhunu Kut'un alevine fırlattın ve alevi kendi göğsüne çektin. Gök gürledi, Kök Börü uludu, Umay Kam'ın davulu yarıldı.<br><br>Artık yaşlanmıyorsun. Kılıcın göğün ağırlığını taşıyor. Ama beyler senden korkuyor; korku sadakat değildir. Yeni bir Erlik doğdu mu, yoksa Erlik'i yenen tek kişi mi göğün yerini aldı? Bunu ${gen(g.s.hero.name)} kılıcı yazacak.`,
+  },
+];
+
+export const endingOf = (id: string): Ending | undefined => ENDINGS.find((e) => e.id === id);

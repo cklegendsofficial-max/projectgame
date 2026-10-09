@@ -10,7 +10,7 @@ import { BRANCHES, BRANCH_KEYS, ROW_NEED, TALENTS, branchSpent } from "../game/t
 import { CONSUMABLES, CONS_BY_ID, CRAFT_SLOTS, REFINES, gearCost, type Cost, type Mat } from "../game/crafting";
 import { SIDE_TEXT, type SideQuest } from "../game/sidequests";
 import { CITY_NAME } from "../game/data";
-import { COMPANIONS, COMP_BY_ID, COMP_MAX, ERLIK, FORT_GUARD, GATE_GUARD, KARA_HAN, type CompId } from "../game/story";
+import { COMPANIONS, COMP_BY_ID, COMP_MAX, ERLIK, FORT_GUARD, GATE_GUARD, KARA_HAN, KOK_BORU, PEAK_GUARD, endingOf, type CompId } from "../game/story";
 import { CITIES, H, NH, NW, W } from "../world/gen";
 import { assetUrl } from "../render/worldView";
 import { audio } from "../audio";
@@ -836,6 +836,25 @@ export class Hud {
           ${near ? `<button class="btn red big" data-a="${this.act(() => { this.close(); g.attackGate(); })}">${ic("swords")} Kapıdan in!</button>` : this.walkBtn(t, "Kapıya yürü")}`);
         break;
       }
+      case "peak": {
+        const f = s.act3.peak;
+        if (!f) return this.close();
+        const near = Math.hypot(f.x - s.hero.x, f.y - s.hero.y) < 110;
+        const p = Math.round(g.peakOdds() * 100);
+        const end = endingOf(s.act3.ending);
+        let body: string;
+        if (end) body = `<p>Zirvede rüzgâr dinmiş. Kut'un yerinde bir avuç mavi buz parlıyor.</p><div class="odds good">Seçilen son: <b>${end.name}</b></div>`;
+        else if (s.act3.ch >= 3) body = `<p>Kök Börü zirvenin kenarında yatıyor, gözleri sende. Buzun içinde Kut mavi bir alev gibi yanıyor.</p>${near ? `<button class="btn go big" data-a="${this.act(() => g.endingChoice())}">${ic("crown")} Kut'un kaderini seç</button>` : this.walkBtn(t, "Zirveye yürü")}`;
+        else body = `<p>Karla örtülü sivri bir zirve; tepesinde gök bozkıra değiyor. Mavi bir ışık sütunu buluta karışıyor. Yamaçlarda gümüş zırhlı Gök Bekçileri nöbet tutuyor.</p>
+          <div class="brow">${ic(KOK_BORU.icon, "bimg round")}<div class="bi2"><b>${KOK_BORU.name}</b><small>Can ${KOK_BORU.hp} · Saldırı ${KOK_BORU.atk} · Savunma ${KOK_BORU.def}</small></div></div>
+          <h3>Gök Bekçileri</h3>${armyHtml(PEAK_GUARD, "enemy")}
+          <h3>Sen ve birliğin</h3>${armyHtml(s.hero.army)}
+          <div class="odds ${p >= 65 ? "good" : p >= 35 ? "mid" : "bad"}">Zafer şansı: <b>%${p}</b> · Müttefik desteği +%${Math.round(g.allyBonus() * 100)}</div>
+          <p class="dim">Önerilen: 28+ seviye, dolu birlik, +7 silah, Kağanlık ve tabi beyler.</p>
+          ${near ? `<button class="btn red big" data-a="${this.act(() => { this.close(); g.climbPeak(); })}">${ic("swords")} Zirveye tırman!</button>` : this.walkBtn(t, "Dağa yürü")}`;
+        html = this.frame("Tengri Dağı", "Göğün bozkıra değdiği yer · Gök Tengri Destanı", assetUrl("map/ruins"), body);
+        break;
+      }
       case "kurgan": {
         const k = s.kurgans[t.i];
         const b = kurganBoss(k.tier);
@@ -1395,7 +1414,7 @@ export class Hud {
         <h3>Toplam</h3><div class="stats"><div>${ic("j_bandit")}Yenilen düşman: <b>${s.kills}</b></div><div>${ic("quest")}Görev: <b>${s.quest}/${g.QUESTS.length}</b></div><div>Ticaret kârı: <b>${s.c.profit}</b></div></div>`;
     }
     const tl = s.title ? titleOf(s.title) : null;
-    return this.frame(h.name, s.free ? `Seviye ${h.lv} · ${s.kagan ? `<b class="ttl">Kağan</b>${tl ? ` · ${tl.name}` : ""}` : tl ? `<b class="ttl">${tl.name}</b>` : s.beylik ? "Bey" : "Hür yiğit"}` : `Seviye ${h.lv} · Köle`, assetUrl(g.face()), tabs + body);
+    return this.frame(h.name, s.free ? `Seviye ${h.lv} · ${s.act3.ending ? `<b class="ttl">${endingOf(s.act3.ending)!.name}</b>${tl ? ` · ${tl.name}` : ""}` : s.kagan ? `<b class="ttl">Kağan</b>${tl ? ` · ${tl.name}` : ""}` : tl ? `<b class="ttl">${tl.name}</b>` : s.beylik ? "Bey" : "Hür yiğit"}` : `Seviye ${h.lv} · Köle`, assetUrl(g.face()), tabs + body);
   }
 
   showBattle(title: string, before: Army, enemy: Army, res: BattleResult, hero: { hpBefore: number; maxHp: number }, xp: number, lvUp: boolean, extra: string, boss: Boss | null, foe: string, onClose: () => void): void {
@@ -1637,6 +1656,14 @@ export class Hud {
       c.lineWidth = 2;
       c.beginPath();
       c.arc(gt.x * sx, gt.y * sy, 4 + Math.sin(performance.now() / 300), 0, Math.PI * 2);
+      c.stroke();
+    }
+    const pk = g.s.act3.peak;
+    if (pk && !g.s.act3.ending) {
+      c.strokeStyle = "#7fd0ff";
+      c.lineWidth = 2;
+      c.beginPath();
+      c.arc(pk.x * sx, pk.y * sy, 4 + Math.sin(performance.now() / 300), 0, Math.PI * 2);
       c.stroke();
     }
     c.fillStyle = "#fff";

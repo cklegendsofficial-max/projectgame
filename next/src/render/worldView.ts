@@ -155,6 +155,7 @@ export class WorldView {
   private kurganM: Marker[] = [];
   private fortM: Marker | null = null;
   private gateM: Marker | null = null;
+  private peakM: Marker | null = null;
   private seraiF = new Map<string, Sprite>();
   private ownF = new Map<string, Sprite>();
   private rivalsM = new Map<string, { c: Container; st: string }>();
@@ -690,6 +691,11 @@ export class WorldView {
       this.gateM.sp.alpha = s.act2.done ? 0.45 : 1;
       if (this.gateM.label) this.gateM.label.text = s.act2.done ? "Mühürlü Kapı" : "Erlik'in Kapısı";
     }
+    if (s.act3.peak && !this.peakM) {
+      this.peakM = this.place("map/ruins", s.act3.peak.x, s.act3.peak.y, 150, "Tengri Dağı", 1);
+      this.peakM.sp.tint = 0xbfe4ff;
+      if (this.peakM.label) this.peakM.label.style.fill = "#9fdcff";
+    }
     const hb = this.heroBars;
     hb.clear();
     const hpK = Math.max(0, Math.min(1, h.hp / game.maxHp()));
@@ -876,6 +882,12 @@ export class WorldView {
       const pr = (this.time * 0.4) % 1;
       this.fxG.circle(s.act2.gate.x, s.act2.gate.y - 30, 70 + pr * 70).stroke({ color: 0xa64dff, width: 5, alpha: 0.7 * (1 - pr) });
       this.fxG.circle(s.act2.gate.x, s.act2.gate.y - 30, 26 + Math.sin(this.time * 3) * 6).fill({ color: 0xa64dff, alpha: 0.18 });
+    }
+    if (s.act3.peak && !s.act3.ending) {
+      const pr = (this.time * 0.35) % 1;
+      const p = s.act3.peak;
+      this.fxG.rect(p.x - 10, p.y - 420, 20, 380).fill({ color: 0x9fdcff, alpha: 0.12 + Math.sin(this.time * 2) * 0.04 });
+      this.fxG.circle(p.x, p.y - 30, 70 + pr * 80).stroke({ color: 0x7fd0ff, width: 5, alpha: 0.7 * (1 - pr) });
     }
     for (const k of s.kurgans) {
       if (!game.isExplored(k.x, k.y) || (!k.alive && k.delved)) continue;

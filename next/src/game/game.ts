@@ -25,7 +25,7 @@ import { ACHIEVEMENTS, steamUnlock, storeUnlocked, unlockedSet } from "./achieve
 import { SEASONS, SEASON_DAYS, seasonOf, type Season, type SeasonId } from "./seasons";
 import { FACTIONS, FACTION_KEYS, HOSTILE, REP_RANKS, RANK_PERKS, factionOf, repRank, type FactionId } from "./factions";
 import { CLASS_BY_ID, CLASS_SKILLS, SKILL_MAX, WEAPON_NAME, WEAPON_STAT, skillPow, skillRank, type ClassDef, type ClassId, type ClassSkill, type WeaponKind } from "./classes";
-import { ACT2, CHAPTERS, COMP_BY_ID, COMP_MAX, ERLIK, ERLIK_SHADE, FORT_GUARD, GATE_GUARD, KARA_HAN, KASIM, SHADE_GUARD, type Chapter, type CompId, type CompMods, type Companion } from "./story";
+import { ACT2, ACT3, CHAPTERS, COMP_BY_ID, COMP_MAX, ENDINGS, ERLIK, ERLIK_SHADE, FORT_GUARD, GATE_GUARD, KARA_HAN, KASIM, KOK_BORU, PEAK_GUARD, SHADE_GUARD, endingOf, type Chapter, type CompId, type CompMods, type Companion } from "./story";
 import { CAPITAL, SLAVE_RADIUS, banditArmy, campGarrison, importSave, kurganBoss, kurganGuard, loadGame, saveGame as rawSave, useSlot, wipeGame, type Bandit, type Bounty, type Caravan, type Contract, type GameState, type Storm } from "./state";
 
 export type Target =
@@ -33,6 +33,7 @@ export type Target =
   | { kind: "capital" }
   | { kind: "fort" }
   | { kind: "gate" }
+  | { kind: "peak" }
   | { kind: "point"; x: number; y: number };
 
 export interface Quest {
@@ -1839,6 +1840,8 @@ export class Game {
         return s.story.fort;
       case "gate":
         return s.act2.gate;
+      case "peak":
+        return s.act3.peak;
       case "bandit":
         return s.bandits.find((b) => b.id === t.i) ?? null;
       case "caravan":
@@ -1917,6 +1920,7 @@ export class Game {
     s.kurgans.forEach((k, i) => test({ kind: "kurgan", i }, k.x, k.y, 1.3));
     if (s.story.fort && !s.story.done) test({ kind: "fort" }, s.story.fort.x, s.story.fort.y, 2);
     if (s.act2.gate && !s.act2.done) test({ kind: "gate" }, s.act2.gate.x, s.act2.gate.y, 2.2);
+    if (s.act3.peak) test({ kind: "peak" }, s.act3.peak.x, s.act3.peak.y, 2.2);
     return best;
   }
 
@@ -4100,12 +4104,107 @@ export class Game {
   chapter(): Chapter | null {
     const s = this.s;
     if (!s.story.done) return CHAPTERS[s.story.ch] ?? null;
-    return s.act2.done ? null : (ACT2[s.act2.ch] ?? null);
+    if (!s.act2.done) return ACT2[s.act2.ch] ?? null;
+    return s.act3.ending ? null : (ACT3[s.act3.ch] ?? null);
   }
 
   sagaLabel(): string {
     const s = this.s;
+    if (s.act2.done) return `Gök Tengri Destanı · Bölüm ${s.act3.ch + 1}/${ACT3.length}`;
     return s.story.done ? `Erlik Destanı · Bölüm ${s.act2.ch + 1}/${ACT2.length}` : `Kara Tamga Destanı · Bölüm ${s.story.ch + 1}/${CHAPTERS.length}`;
+  }
+
+  private placePeak(): void {
+    const s = this.s;
+    if (s.act3.peak) return;
+    const k = this.cityPos("kashgar");
+    let spot = { x: k.x - 120, y: k.y - 300 };
+    for (let i = 0; i < 60; i++) {
+      const a = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI;
+      const d = 300 + Math.random() * 260;
+      const x = k.x + Math.cos(a) * d;
+      const y = k.y + Math.sin(a) * d;
+      if (x > 80 && y > 80 && x < W - 80 && y < H - 80 && this.cellCost(x, y) < 3 && (!s.act2.gate || Math.hypot(x - s.act2.gate.x, y - s.act2.gate.y) > 250)) {
+        spot = { x, y };
+        break;
+      }
+    }
+    s.act3.peak = spot;
+    this.reveal(spot.x, spot.y, 8);
+  }
+
+  peakOdds(): number {
+    return this.odds(PEAK_GUARD, 0.4, KOK_BORU);
+  }
+
+  climbPeak(): void {
+    const s = this.s;
+    if (!s.act3.peak || s.act3.ch !== 2) return;
+    this.battle("Tengri Dağı · Gök Bekçileri", PEAK_GUARD, 0.4, (win) => {
+      if (!win) return "Kök Börü'nün ulumasıyla çığ koptu; ordun eteklere savruldu. Güçlen ve yeniden tırman.";
+      s.act3.ch = 3;
+      s.renown += 200;
+      this.addXp(2500);
+      this.chron(`${s.hero.name} Tengri Dağı'nın zirvesinde Kök Börü'nün karşısında durdu; kurt başını eğdi.`);
+      this.endingChoice();
+      return "Kök Börü başını eğdi. Zirvede Kut seni bekliyor!";
+    }, KOK_BORU, "Gök Bekçileri");
+  }
+
+  endingChoice(): void {
+    const s = this.s;
+    if (s.act3.ch !== 3 || s.act3.ending) return;
+    this.hud.choice(
+      "Kut'un Sahibi",
+      "ruh",
+      `Zirvede rüzgâr sustu. Buzun içinde mavi bir alev gibi Kut duruyor; içinde bozkırın bütün sesleri: at kişnemeleri, ninniler, kılıç şakırtıları.<br><br>Korkut arkandan fısıldadı: <i>"Ne seçersen seç, ${s.hero.name}, ozanlar bunu bin yıl söyleyecek."</i>`,
+      ENDINGS.map((e) => {
+        const why = e.why?.(this);
+        return { label: why ? `${e.label} (${why})` : e.label, cls: why ? "off" : e.id === "tengri" ? "red" : "go", fn: () => this.chooseEnding(e.id) };
+      }).concat([{ label: "Henüz değil, düşüneceğim", cls: "", fn: () => {} }]),
+    );
+  }
+
+  chooseEnding(id: string): void {
+    const s = this.s;
+    const e = endingOf(id);
+    if (!e || s.act3.ch !== 3 || s.act3.ending || e.why?.(this)) return;
+    s.act3.ending = id;
+    s.act3.ch = ACT3.length;
+    s.renown += 500;
+    this.gain({ gold: 25000 });
+    if (id === "kagan") {
+      for (const r of s.rivals) if (r.status === "ally" || r.status === "peace") r.status = "vassal";
+    } else if (id === "hurriyet") {
+      for (const v of s.villages) v.rep = 100;
+      for (const o of Object.values(s.owned)) if (o) o.loy = 100;
+    } else if (id === "ozan") {
+      for (const f of FACTION_KEYS) s.rep[f] = Math.min(2000, this.rep(f) + 300);
+      for (const r of s.rivals) if (r.status === "war") r.status = "peace";
+    } else if (id === "tengri") {
+      s.mats.ruh -= 50;
+      s.hero.points += 20;
+      for (const r of s.rivals) if (r.status !== "dead" && r.status !== "vassal") r.status = "war";
+    }
+    const it = uniqueItem(s.nextId++, this.cls(), UNIQUES[Math.floor(Math.random() * UNIQUES.length)], 5);
+    this.chron(`${s.hero.name} Tengri Dağı'nda Kut'un kaderini seçti: ${e.name}.`);
+    audio.play("level");
+    this.hud.story(`Son · ${e.name}`, e.img, `${e.text(this)}<br><br>${this.epilogue()}<br><br><b>+25000 altın · +500 şöhret · Destan ganimeti: ${it.name}</b>`, "Efsane sürüyor");
+    this.gainLegend(it);
+    saveGame(s);
+  }
+
+  epilogue(): string {
+    const s = this.s;
+    const lines: string[] = [];
+    const owned = Object.keys(s.owned).length;
+    if (owned) lines.push(`${owned} şehir ${gen(s.hero.name)} tuğu altında.`);
+    if (s.kagan) lines.push("Kurultay onu Kağan seçti.");
+    if (s.c.voyages) lines.push(`Gemileri Hazar'da ${s.c.voyages} sefer yaptı.`);
+    if (s.comps.length) lines.push(`Yoldaşları: ${s.comps.map((c) => COMP_BY_ID[c as CompId].name).join(", ")}.`);
+    if (s.c.rescued) lines.push(`${s.c.rescued} esiri zincirden kurtardı.`);
+    lines.push(`Destan ${this.dayOf().day}. günde tamamlandı.`);
+    return `<i>${lines.join(" ")}</i>`;
   }
 
   act2Ritual(fight: boolean): void {
@@ -4172,6 +4271,8 @@ export class Game {
         `Erlik Han'ın kara tahtı çatırdayarak yarıldı. Dokuz kat karanlık bir çığlıkla yerin dibine çekildi; zincirler yeniden kenetlendi.<br><br>Yukarı çıktığında bütün beyler kapının önünde diz çökmüştü. Korkut kopuzunu aldı ve ilk kez senin destanını söyledi:<br><br><i>"Bir köle doğdu Semerkant'ta, demir halka boynunda… Erlik'i tahtından indirdi, bozkıra göğü geri verdi."</i><br><br><b>${s.hero.name}, Gök Tuğlu Han</b>.<br><br>Ama bozkır hiç uyumaz: beyler, reisler, kervanlar ve derinlikler seni bekliyor. Destanın bitti; efsanen sürüyor.`,
         "Efsane sürüyor",
       );
+      const a0 = ACT3[0];
+      this.hud.story(`Gök Tengri Destanı · Bölüm 1: ${a0.title}`, a0.img, `${a0.intro}<br><br><b>Hedef:</b> ${a0.goal}`, "Yola çık");
       return `Erlik Han yenildi! +15000 altın, +300 şöhret, +60 Ruh Taşı, +8 Parşömen<br>Destan ganimeti: <b class="r4">${it.name}</b>`;
     }, ERLIK, "Erlik'in ordusu");
   }
@@ -4186,17 +4287,21 @@ export class Game {
     if (!ch) return;
     if (ch.outro) this.hud.story(ch.outro.title, ch.outro.img, ch.outro.text(this), "Devam");
     const act2 = this.s.story.done;
-    if (act2) {
+    const act3 = this.s.act2.done;
+    if (act3) {
+      this.s.act3.ch++;
+      if (this.s.act3.ch === 2) this.placePeak();
+    } else if (act2) {
       this.s.act2.ch++;
       if (this.s.act2.ch === 4) this.placeGate();
     } else {
       this.s.story.ch++;
       if (this.s.story.ch === 4) this.placeFort();
     }
-    const n = act2 ? this.s.act2.ch : this.s.story.ch;
+    const n = act3 ? this.s.act3.ch : act2 ? this.s.act2.ch : this.s.story.ch;
     const next = this.chapter();
-    if (next) this.hud.story(`${act2 ? "Erlik Destanı · " : ""}Bölüm ${n + 1}: ${next.title}`, next.img, `${next.intro}<br><br><b>Hedef:</b> ${next.goal}`, "Yola çık");
-    this.addXp((act2 ? 120 : 40) * n);
+    if (next) this.hud.story(`${act3 ? "Gök Tengri Destanı · " : act2 ? "Erlik Destanı · " : ""}Bölüm ${n + 1}: ${next.title}`, next.img, `${next.intro}<br><br><b>Hedef:</b> ${next.goal}`, "Yola çık");
+    this.addXp((act3 ? 300 : act2 ? 120 : 40) * n);
     saveGame(this.s);
   }
 
