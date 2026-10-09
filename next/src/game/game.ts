@@ -82,6 +82,7 @@ export class Game {
   fogRev = 0;
   private lastSeason: SeasonId | null = null;
   private reqT = 2;
+  private starveT = 0;
   private wasNight = false;
   private deepBest0 = 0;
   private afterBattle: (() => void) | null = null;
@@ -731,6 +732,18 @@ export class Game {
         }
       }
     } else this.desertT = 0;
+    if (s.res.food <= 0 && this.upkeepPerMin() > 0 && armySize(s.garrison) > 0) {
+      this.starveT += dt;
+      if (this.starveT > 20) {
+        this.starveT = 0;
+        const u = UNIT_KEYS.filter((k) => s.garrison[k] > 0).sort((a, b) => s.garrison[b] - s.garrison[a])[0];
+        if (u) {
+          const n = Math.max(1, Math.round(s.garrison[u] * 0.04));
+          s.garrison[u] -= n;
+          this.hud?.toast(`Ambarlar boş! Aç kalan ${n} ${UNITS[u].name} kışladan kaçtı. Çiftlik kur ya da yiyecek getir.`, "bad");
+        }
+      }
+    } else this.starveT = 0;
     const decay = Math.exp(-el * 0.35);
     for (const m of Object.values(s.markets)) for (const g of GOOD_KEYS) if (m[g]) m[g] = m[g]! * decay;
     for (const v of s.villages) {

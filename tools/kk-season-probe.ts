@@ -41,5 +41,8 @@ await ev(`g.hud.openPlace({kind:"city", i: 1});`);
 await page.waitForTimeout(400);
 console.log("market season line:", await page.locator(".panel .odds.mid").first().innerText().catch(() => "-"));
 await page.screenshot({ path: `${out}-market.png` });
+await ev(`g.hud.close(); g.s.garrison = { spear: 30, archer: 10, horse: 10 }; g.s.res.food = 0; g.starveT = 19.5;`);
+await page.waitForTimeout(1500);
+console.log("starve garrison:", await ev(`return g.s.garrison;`), (await page.locator(".toast").allInnerTexts()).filter((t) => t.includes("Ambarlar")));
 console.log("errors:", errs);
 await browser.close();
