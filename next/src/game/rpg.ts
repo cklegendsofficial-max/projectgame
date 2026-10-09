@@ -1,6 +1,7 @@
-import { WEAPON_NAME, WEAPON_STAT, type ArmorKind, type ClassDef, type WeaponKind } from "./classes";
+import { ARMOR_NAME, WEAPON_NAME, WEAPON_STAT, type ArmorKind, type ClassDef, type WeaponKind } from "./classes";
 import { SETS, modsText, type GearMods, type SetId, type Unique } from "./legend";
 import { BREEDS, horseName, type Breed, type HorseInfo } from "./horse";
+import { t } from "../i18n";
 
 export type Stat = "guc" | "cev" | "day" | "lid" | "kar";
 export const STAT_KEYS: Stat[] = ["guc", "cev", "day", "lid", "kar"];
@@ -123,6 +124,7 @@ const CHARMS = [
   { name: "Kristal Muska", icon: "tr_crystal" },
   { name: "Yıldız Taşı", icon: "tr_star" },
 ];
+export const ITEM_NAMES = { weapons: WEAPONS, heavy: HEAVY, light: LIGHT, shields: SHIELDS, mounts: MOUNTS, charms: CHARMS };
 export const WEAPON_KINDS: WeaponKind[] = ["kilic", "balta", "hancer", "ok", "asa"];
 
 export function makeItem(id: number, slot: Slot, tier: number, rar: number, kind: WeaponKind | ArmorKind | "" = ""): Item {
@@ -197,20 +199,20 @@ export function itemPrice(it: Item): number {
 
 export function kindName(it: Item): string {
   if (it.slot === "silah") return WEAPON_NAME[it.kind as WeaponKind];
-  if (it.slot === "zirh") return it.kind === "agir" ? "Ağır zırh" : "Hafif zırh";
+  if (it.slot === "zirh") return ARMOR_NAME[it.kind === "agir" ? "agir" : "hafif"];
   return SLOT_NAME[it.slot];
 }
 
 export function itemStats(it: Item): string {
   const p: string[] = [];
-  if (it.atk) p.push(`Saldırı ${it.atk}`);
-  if (it.crit) p.push(`Kritik +%${Math.round(it.crit * 100)}`);
-  if (it.def) p.push(`Savunma ${it.def}`);
-  if (it.hp) p.push(`Can +${it.hp}`);
-  if (it.spd) p.push(`Hız +%${Math.round(it.spd * 100)}`);
-  if (it.carry) p.push(`Yük +${it.carry}`);
-  if (it.lid) p.push(`Liderlik +${it.lid}`);
-  if (it.kar) p.push(`Karizma +${it.kar}`);
+  if (it.atk) p.push(`${t("Saldırı")} ${it.atk}`);
+  if (it.crit) p.push(`${t("Kritik")} +%${Math.round(it.crit * 100)}`);
+  if (it.def) p.push(`${t("Savunma")} ${it.def}`);
+  if (it.hp) p.push(`${t("Can")} +${it.hp}`);
+  if (it.spd) p.push(`${t("Hız")} +%${Math.round(it.spd * 100)}`);
+  if (it.carry) p.push(`${t("Yük")} +${it.carry}`);
+  if (it.lid) p.push(`${t("Liderlik")} +${it.lid}`);
+  if (it.kar) p.push(`${t("Karizma")} +${it.kar}`);
   if (it.mods) p.push(modsText(it.mods));
   if (it.horse) p.push(`${it.horse.gen}. kuşak${it.horse.sire ? ` · ${it.horse.sire} × ${it.horse.dam}` : ""}`);
   return p.join(" · ");

@@ -6,11 +6,13 @@ import { Camera } from "./render/camera";
 import { Game } from "./game/game";
 import { Hud } from "./ui/hud";
 import { applyUi, settings } from "./settings";
+import { localizeData } from "./i18n-data";
 
 async function boot(): Promise<void> {
   extensions.add(CullerPlugin);
   applyUi();
   document.documentElement.lang = settings.lang ?? "tr";
+  localizeData();
   window.addEventListener("contextmenu", (e) => e.preventDefault());
   const host = document.getElementById("game")!;
   const app = new Application();

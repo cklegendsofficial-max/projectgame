@@ -1,4 +1,5 @@
 import type { Stat } from "./rpg";
+import { t } from "../i18n";
 
 export type ClassId = "alp" | "bahadir" | "suikastci" | "hirsiz" | "kam";
 export type WeaponKind = "kilic" | "balta" | "hancer" | "ok" | "asa";
@@ -169,7 +170,7 @@ export function skillPow(sk: ClassSkill, lv: number): number {
 }
 
 export function skillRank(lv: number): string {
-  return lv >= SKILL_MAX ? "Usta" : lv <= 0 ? "Kapalı" : `Sv ${lv}`;
+  return lv >= SKILL_MAX ? t("Usta") : lv <= 0 ? t("Kilitli") : `${t("Sv")} ${lv}`;
 }
 
 export const CLASS_BY_ID = Object.fromEntries(CLASSES.map((c) => [c.id, c])) as Record<ClassId, ClassDef>;
