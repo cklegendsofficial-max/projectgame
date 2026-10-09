@@ -32,6 +32,7 @@ import { LANGS, lang, t, t as tr, type Lang } from "../i18n";
 import { cloudPush, cloudReady, onDeck, steam } from "../platform";
 import { WEEK_TIERS, weekEnd, weekNeed, weekReward, weekTheme } from "../game/weekly";
 import { loadedMods, modBridge, removeMod, storeMod, storedMods, toggleMod } from "../mods";
+import { KIP_FOOD, KIP_GIFT, KIP_GIFT_REP, KIP_HIRE_GAP, KIP_HIRE_N, KIP_MIN_LV, KIP_STEPS, STONES, kipBoss, kipFortArmy, kipHireCost } from "../game/kipchak";
 
 const MOD_LABEL: Record<string, string> = { atk: "saldırı", army: "ordu gücü", heal: "iyileşme", xp: "tecrübe", trade: "ticaret", speed: "hız", sight: "görüş" };
 const SCORE_LABEL: Record<string, string> = {
@@ -477,6 +478,55 @@ export class Hud {
         .join("") +
       (d.chest ? `<div class="odds good">${tr("Bugünün sandığı açıldı. Yarın yeni fermanlar gelecek.")}</div>` : `<button class="btn big ${g.chestReady() ? "go" : "off"}" style="width:100%" data-a="${this.act(() => g.openChest())}"> ${ic("chest")} ${tr("Ferman sandığını aç")}</button>`)
     );
+  }
+
+  private kipHtml(i: number): string {
+    const g = this.g;
+    const s = g.s;
+    const p = g.kipPois()[i];
+    if (!p) return "";
+    const k = g.kip();
+    const en = lang() === "en";
+    const near = g.kipNear(i);
+    const walk = this.walkBtn({ kind: "kip", i }, tr("Oraya yürü"));
+    const btn = (label: string, why: string, fn: () => void, cls = "") => `<button class="btn ${cls} ${why ? "off" : ""}" data-a="${this.act(fn)}">${label}${why ? ` <small>· ${why}</small>` : ""}</button>`;
+    if (p.kind === "stone") {
+      const read = k.stones.includes(p.n);
+      return this.frame(tr("Taş Baba"), `${tr("Deşt-i Kıpçak")} · ${k.stones.length}/${STONES.length}`, assetUrl("map/kurgan"),
+        read ? `<p><i>"${en ? STONES[p.n].en : STONES[p.n].tr}"</i></p><p class="dim">${tr("Bu taşın sözünü okudun.")}</p>`
+          : `<p class="dim">${tr("Bozkırın ortasında, yüzü doğuya dönük, elinde kâse tutan bir taş heykel. Kaidesinde silik Göktürk harfleri var.")}</p>${near ? "" : walk}`);
+    }
+    if (p.kind === "fort") {
+      if (k.fort) return this.frame(tr("Kara Kıpçak Ordugâhı"), tr("Dağıtıldı"), assetUrl("map/castle"), `<p class="dim">${tr("Yanık çadırlar ve devrilmiş bir sancak. Kara Kıpçaklar dağıldı.")}</p>`);
+      const lv = s.hero.lv;
+      const b = kipBoss(lv);
+      const odds = Math.round(g.kipFortOdds() * 100);
+      return this.frame(tr("Kara Kıpçak Ordugâhı"), `${tr("Deşt-i Kıpçak")} · ${tr("önerilen seviye")} ${KIP_MIN_LV}+`, assetUrl("map/castle"), `
+        <p>${en ? KIP_STEPS[1].textEn : KIP_STEPS[1].text}</p>
+        <div class="brow">${ic(b.icon, "bimg round")}<div class="bi2"><b>${tr(b.name)}</b><small>${tr("Can")} ${b.hp} · ${tr("Saldırı")} ${b.atk} · ${tr("Savunma")} ${b.def}</small></div></div>
+        <h3>${tr("Düşman")}</h3>${armyHtml(kipFortArmy(lv), "enemy")}<h3>${tr("Sen ve birliğin")}</h3>${armyHtml(s.hero.army)}
+        <div class="odds ${odds >= 65 ? "good" : odds >= 35 ? "mid" : "bad"}">${tr("Zafer şansı")}: <b>%${odds}</b></div>
+        ${near ? btn(`${ic("swords")} ${tr("Ordugâha saldır")}`, "", () => {
+          this.close();
+          g.kipFortAttack();
+        }, "red big") : walk}`);
+    }
+    const st = KIP_STEPS[k.step];
+    const quest = st
+      ? `<h3>${ic("quest")} ${en ? st.en : st.title} <em class="dim">${k.step + 1}/${KIP_STEPS.length}</em></h3><p>${en ? st.textEn : st.text}</p>
+        ${k.step === 2 ? `<p class="dim">${tr("Taş Baba")}: ${k.stones.length}/${STONES.length}</p>` : ""}
+        ${near ? btn(`${ic("seal")} ${k.step === 0 ? tr("{n} yiyecek ver", { n: KIP_FOOD }) : tr("Hana haber ver")}`, g.kipStepReady() ? "" : tr("henüz değil"), () => g.kipStep(), "go") : ""}`
+      : `<div class="odds good">${tr("Kıpçak kardeşliği: ordu gücü +%3, hız +%3")}</div>`;
+    return this.frame(tr("Kıpçak Ordası"), `${tr("Köten Han")} · ${tr("itibar")} ${k.rep}/100${k.ally ? ` · ${tr("Kardeş")}` : ""}`, assetUrl("map/yurts"), `
+      <p class="dim">${tr("Yüzlerce keçe çadır, at sürüleri ve kımız kokusu. Kıpçaklar dışarıdan gelene temkinli ama cömerttir.")}</p>
+      ${bar(k.rep, 100, "", `${tr("itibar")} ${k.rep}/100`)}
+      ${quest}
+      <h3>${ic("lord_bey")} ${tr("Orda pazarı")}</h3>
+      ${near ? `<div class="col2">
+        ${btn(`${ic("coins")} ${tr("Armağan sun")} (${KIP_GIFT}) · +${KIP_GIFT_REP}`, g.kipGiftReason(), () => g.kipGift())}
+        ${btn(`${ic("u_cavalry")} ${tr("{n} Kıpçak atlısı kirala", { n: KIP_HIRE_N })} (${kipHireCost(s.hero.lv)})`, g.kipHireReason(), () => g.kipHire())}
+        ${btn(`${ic("j_caravan")} ${tr("Bütün yükü sat")} (+${g.kipSellValue()})`, g.kipSellReason(), () => g.kipSell())}
+      </div><p class="dim">${tr("Orda malı bozkır fiyatının %25 üstünden alır, ama günde bir kez. Atlılar {d} günde bir kiralanabilir.", { d: KIP_HIRE_GAP })}</p>` : walk}`);
   }
 
   private weeklyHtml(): string {
@@ -1196,6 +1246,11 @@ export class Hud {
         const poor = st.cost && !g.canAfford({ gold: st.cost.gold ?? 0, food: st.cost.food ?? 0 });
         body += near ? `<button class="btn ${st.act === "fight" ? "red" : "go"} big ${poor ? "off" : ""}" data-a="${this.act(() => { if (st.act === "fight") this.close(); g.boyAct(); })}">${ic(st.act === "fight" ? "swords" : "scroll")} ${st.btn}${cost}</button>` : this.walkBtn(t, "Oraya yürü");
         html = this.frame(st.place, `Dede Korkut · ${b.name} · Adım ${n + 1}/${b.steps.length}`, assetUrl(st.img), body);
+        break;
+      }
+      case "kip": {
+        html = this.kipHtml(t.i);
+        if (!html) return this.close();
         break;
       }
       case "otag": {

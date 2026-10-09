@@ -11,6 +11,7 @@ import { SEASONS } from "../game/seasons";
 import { alongPath, seaPath } from "../game/hazar";
 import { tamgaCanvas, type Tamga } from "../game/ozan";
 import { boyOf } from "../game/korkut";
+import { t as tr } from "../i18n";
 
 const urls: Record<string, string> = {};
 for (const [p, u] of Object.entries(import.meta.glob<string>("../assets/**/*.webp", { eager: true, query: "?url", import: "default" }))) {
@@ -162,6 +163,7 @@ export class WorldView {
   private boyM: Marker | null = null;
   private boyK = "";
   private otagM: Marker | null = null;
+  private kipM: Marker[] | null = null;
   private seraiF = new Map<string, Sprite>();
   private ownF = new Map<string, Sprite>();
   private rivalsM = new Map<string, { c: Container; st: string }>();
@@ -745,6 +747,23 @@ export class WorldView {
       this.peakM = this.place("map/ruins", s.act3.peak.x, s.act3.peak.y, 150, "Tengri Dağı", 1);
       this.peakM.sp.tint = 0xbfe4ff;
       if (this.peakM.label) this.peakM.label.style.fill = "#9fdcff";
+    }
+    if (s.free && !this.kipM) {
+      this.kipM = game.kipPois().map((p) => {
+        const [key, w, name, tint, col] = p.kind === "horde" ? ["map/yurts", 130, "Kıpçak Ordası", 0xffe0b0, "#ffcf7a"] as const : p.kind === "fort" ? ["map/castle", 130, "Kara Kıpçak Ordugâhı", 0xd09080, "#ff9a8a"] as const : ["map/kurgan", 64, "Taş Baba", 0xc8d4e0, "#d8e4ee"] as const;
+        const m = this.place(key, p.x, p.y, w, tr(name), p.kind === "stone" ? 0.6 : 0.85);
+        m.sp.tint = tint;
+        if (m.label) m.label.style.fill = col;
+        return m;
+      });
+    }
+    if (this.kipM && s.kip) {
+      const k = s.kip;
+      game.kipPois().forEach((p, i) => {
+        const m = this.kipM![i];
+        const dim = p.kind === "fort" ? k.fort : p.kind === "stone" ? k.stones.includes(p.n) : false;
+        m.sp.alpha = dim ? 0.5 : 1;
+      });
     }
     const hb = this.heroBars;
     hb.clear();

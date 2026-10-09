@@ -43,6 +43,7 @@ import { BOND_FX, BOND_LEAVE, BOND_QUEST, BOND_START, COMP_QUESTS, SWORN_MULT, t
 import { lang, t as tr } from "../i18n";
 import { WEEK_TIERS, weekBoard, weekFrac, weekId, weekNeed, weekRank, weekReward, weekScore, weekTheme, type BoardRow, type WeekState } from "./weekly";
 import { steamStats } from "../platform";
+import { KIP_ALLY_FX, KIP_ALLY_MODS, KIP_FOOD, KIP_FORT_FX, KIP_GIFT, KIP_GIFT_REP, KIP_HIRE_GAP, KIP_HIRE_N, KIP_HIRE_REP, KIP_RAW, KIP_SELL_MULT, KIP_SELL_REP, KIP_STEPS, KIP_STONES_MODS, STONES, STONE_FX, inKipchak, kipBoss, kipFortArmy, kipHireCost, newKip, stoneXp, type KipPoi, type KipState } from "./kipchak";
 import { SEASONS, SEASON_DAYS, seasonOf, type Season, type SeasonId } from "./seasons";
 import { FACTIONS, FACTION_KEYS, HOSTILE, REP_RANKS, RANK_PERKS, factionOf, repRank, type FactionId } from "./factions";
 import { CLASS_BY_ID, CLASS_SKILLS, SKILL_MAX, WEAPON_NAME, WEAPON_STAT, skillPow, skillRank, type ClassDef, type ClassId, type ClassSkill, type WeaponKind } from "./classes";
@@ -57,6 +58,7 @@ export type Target =
   | { kind: "peak" }
   | { kind: "otag" }
   | { kind: "boy" }
+  | { kind: "kip"; i: number }
   | { kind: "point"; x: number; y: number };
 
 export interface Quest {
@@ -1225,6 +1227,7 @@ export class Game {
     this.achTick(dt);
     this.cqTick(dt);
     this.myCvTick(dt);
+    this.kipTick(dt);
     this.storyTick();
     this.worldEvents(dt, now);
     this.checkContract();
@@ -2275,6 +2278,8 @@ export class Game {
         return s.otag;
       case "boy":
         return s.boy?.at ?? null;
+      case "kip":
+        return this.kipPois()[t.i] ?? null;
       case "bandit":
         return s.bandits.find((b) => b.id === t.i) ?? null;
       case "caravan":
@@ -2356,6 +2361,7 @@ export class Game {
     if (s.act3.peak) test({ kind: "peak" }, s.act3.peak.x, s.act3.peak.y, 2.2);
     if (s.otag) test({ kind: "otag" }, s.otag.x, s.otag.y, 1.8);
     if (s.boy?.at) test({ kind: "boy" }, s.boy.at.x, s.boy.at.y, 2);
+    if (s.free) this.kipPois().forEach((p, i) => test({ kind: "kip", i }, p.x, p.y, p.kind === "stone" ? 1.3 : 2));
     return best;
   }
 
@@ -4318,6 +4324,201 @@ export class Game {
     return true;
   }
 
+  private kipCache: KipPoi[] | null = null;
+
+  kip(): KipState {
+    return (this.s.kip ??= newKip());
+  }
+
+  /** Bölge noktaları; geçilebilir ve ulaşılabilir en yakın hücreye oturtulur. */
+  kipPois(): KipPoi[] {
+    if (this.kipCache) return this.kipCache;
+    const w = this.world;
+    const ok = (x: number, y: number) => {
+      const nx = Math.floor(x / NAV), ny = Math.floor(y / NAV);
+      if (nx < 1 || ny < 1 || nx >= NW - 1 || ny >= NH - 1) return false;
+      const i = ny * NW + nx;
+      return w.reach[i] === 1 && w.cost[i] < 2.2;
+    };
+    let n = 0;
+    this.kipCache = KIP_RAW.map(([kind, fx, fy]) => {
+      let x = fx * W, y = fy * H;
+      search: for (let r = 0; r < 400; r += NAV)
+        for (let a = 0; a < 16; a++) {
+          const px = x + Math.cos((a / 16) * Math.PI * 2) * r, py = y + Math.sin((a / 16) * Math.PI * 2) * r;
+          if (ok(px, py)) {
+            x = px;
+            y = py;
+            break search;
+          }
+        }
+      return { kind, x, y, n: kind === "stone" ? n++ : 0 };
+    });
+    return this.kipCache;
+  }
+
+  kipNear(i: number, r = 110): boolean {
+    const p = this.kipPois()[i];
+    return !!p && Math.hypot(p.x - this.s.hero.x, p.y - this.s.hero.y) < r;
+  }
+
+  private kipT = 1;
+
+  private kipTick(dt: number): void {
+    this.kipT -= dt;
+    if (this.kipT > 0) return;
+    this.kipT = 1;
+    const s = this.s;
+    if (!s.free || !inKipchak(s.hero.x, s.hero.y)) return;
+    const k = this.kip();
+    if (!k.seen) {
+      k.seen = true;
+      this.chron(tr("Deşt-i Kıpçak'a, Kıpçak bozkırına ayak bastın."));
+      const en = lang() === "en";
+      this.hud.story(tr("Deşt-i Kıpçak"), "map/yurts", en
+        ? "Beyond the Caspian and the Aral the grass reaches a horse's belly and the sky has no edge. This is the Desht-i Kipchak: the land of Köten Han's horde, of the Black Kipchak raiders and of the Stone Fathers raised by the ancestors. <br><br><b class=\"cheap\">Find the Kipchak Horde, read the five Stone Fathers and break the Black Kipchak war camp.</b>"
+        : "Hazar'ın ve Aral'ın ötesinde otlar atın karnına değer, gökyüzünün kıyısı yoktur. Burası Deşt-i Kıpçak: Köten Han'ın ordası, Kara Kıpçak akıncıları ve ataların diktiği Taş Babalar'ın yurdu.<br><br><b class=\"cheap\">Kıpçak Ordası'nı bul, beş Taş Baba'yı oku ve Kara Kıpçak ordugâhını dağıt.</b>", tr("Devam"));
+      saveGame(s);
+    }
+    this.kipPois().forEach((p, i) => {
+      if (p.kind === "stone" && !k.stones.includes(p.n) && this.kipNear(i, 90)) this.readStone(p.n);
+    });
+  }
+
+  private readStone(n: number): void {
+    const s = this.s;
+    const k = this.kip();
+    if (k.stones.includes(n)) return;
+    k.stones.push(n);
+    s.hero.xp += stoneXp(s.hero.lv);
+    const fx = this.roadFx(STONE_FX);
+    const st = STONES[n];
+    const all = k.stones.length >= STONES.length;
+    audio.play("story");
+    this.hud.story(`${tr("Taş Baba")} ${k.stones.length}/${STONES.length}`, "map/kurgan", `<i>"${lang() === "en" ? st.en : st.tr}"</i><br><br>+${stoneXp(s.hero.lv)} ${tr("TP")}${fx ? `<br>${fx}` : ""}${all ? `<br><br><b class="good">${tr("Beş taşın sözünü de okudun. Ataların sözü yolunu aydınlatıyor: tecrübe +%5.")}</b>` : ""}`, tr("Devam"));
+    if (all) this.chron(tr("Beş Taş Baba'nın sözünü okudun."));
+    saveGame(s);
+  }
+
+  kipGiftReason(): string {
+    const k = this.kip();
+    if (!this.s.free) return tr("Önce hürriyetini kazan");
+    if (this.s.res.gold < KIP_GIFT) return `${KIP_GIFT} ${tr("altın gerekir")}`;
+    if (k.giftDay === this.dayOf().day) return tr("Bugün armağan sundun");
+    if (k.rep >= 100) return tr("Han zaten kardeşin");
+    return "";
+  }
+
+  kipGift(): void {
+    if (this.kipGiftReason()) return;
+    const k = this.kip();
+    this.s.res.gold -= KIP_GIFT;
+    k.giftDay = this.dayOf().day;
+    k.rep = Math.min(100, k.rep + KIP_GIFT_REP);
+    audio.play("coin");
+    this.hud.toast(`${tr("Köten Han armağanı kabul etti")} · ${tr("itibar")} ${k.rep}`, "good");
+  }
+
+  kipHireReason(): string {
+    const k = this.kip();
+    if (k.rep < KIP_HIRE_REP) return `${tr("itibar")} ${KIP_HIRE_REP}+`;
+    const left = k.hireDay + KIP_HIRE_GAP - this.dayOf().day;
+    if (left > 0) return `${left} ${tr("gün")}`;
+    if (this.s.res.gold < kipHireCost(this.s.hero.lv)) return `${kipHireCost(this.s.hero.lv)} ${tr("altın gerekir")}`;
+    if (armySize(this.s.hero.army) + KIP_HIRE_N > this.heroCap()) return tr("Birlik sınırı dolu");
+    return "";
+  }
+
+  kipHire(): void {
+    if (this.kipHireReason()) return;
+    const k = this.kip();
+    this.s.res.gold -= kipHireCost(this.s.hero.lv);
+    this.s.hero.army.horse += KIP_HIRE_N;
+    k.hireDay = this.dayOf().day;
+    audio.play("coin");
+    this.hud.toast(tr("{n} Kıpçak atlısı sancağına katıldı.", { n: KIP_HIRE_N }), "good");
+  }
+
+  kipSellValue(): number {
+    const h = this.s.hero;
+    return GOOD_KEYS.reduce((a, g) => a + Math.round(GOODS[g].base * KIP_SELL_MULT) * (h.cargo[g] ?? 0), 0);
+  }
+
+  kipSellReason(): string {
+    const k = this.kip();
+    if (k.rep < KIP_SELL_REP) return `${tr("itibar")} ${KIP_SELL_REP}+`;
+    if (k.sellDay === this.dayOf().day) return tr("Orda bugün alışverişini yaptı");
+    if (this.kipSellValue() <= 0) return tr("Yükün boş.");
+    return "";
+  }
+
+  kipSell(): void {
+    if (this.kipSellReason()) return;
+    const s = this.s;
+    const h = s.hero;
+    const v = this.kipSellValue();
+    let paid = 0;
+    for (const g of GOOD_KEYS) {
+      paid += h.paid[g] ?? 0;
+      h.cargo[g] = 0;
+      h.paid[g] = 0;
+    }
+    s.res.gold += v;
+    s.c.profit += Math.max(0, v - paid);
+    this.kip().sellDay = this.dayOf().day;
+    audio.play("coin");
+    this.hud.toast(`${tr("Orda bütün yükünü aldı")}: +${v} ${tr("altın")}`, "good");
+  }
+
+  kipStepReady(): boolean {
+    const k = this.kip();
+    if (k.step === 0) return this.s.res.food >= KIP_FOOD;
+    if (k.step === 1) return k.fort;
+    if (k.step === 2) return k.stones.length >= STONES.length;
+    return false;
+  }
+
+  kipStep(): void {
+    const s = this.s;
+    const k = this.kip();
+    if (k.step >= KIP_STEPS.length || !this.kipStepReady()) return;
+    if (k.step === 0) s.res.food -= KIP_FOOD;
+    const st = KIP_STEPS[k.step];
+    k.rep = Math.min(100, k.rep + st.rep);
+    k.step++;
+    audio.play("quest");
+    if (k.step < KIP_STEPS.length) {
+      this.hud.toast(`${lang() === "en" ? st.en : st.title} · ${tr("tamamlandı")} · ${tr("itibar")} ${k.rep}`, "good");
+      return;
+    }
+    k.ally = true;
+    k.rep = 100;
+    const fx = this.roadFx(KIP_ALLY_FX);
+    this.chron(tr("Köten Han ile ant içtin; Kıpçak ordası artık kardeşin."));
+    this.hud.story(tr("Kıpçak Andı"), "lord_bey", `${tr("Köten Han kımız kâsesini kaldırdı: \"Kıpçak'ın atı senin atın, yolu senin yolundur.\" Beyler ant içti.")}<br><br>${fx}<br><b class="good">${tr("Kıpçak kardeşliği: ordu gücü +%3, hız +%3")}</b>`, tr("Devam"));
+    saveGame(s);
+  }
+
+  kipFortOdds(): number {
+    return this.odds(kipFortArmy(this.s.hero.lv), 0, kipBoss(this.s.hero.lv));
+  }
+
+  kipFortAttack(): void {
+    const s = this.s;
+    const k = this.kip();
+    if (k.fort || !s.free) return;
+    const lv = s.hero.lv;
+    const boss = { ...kipBoss(lv), name: tr(kipBoss(lv).name) };
+    this.battle(tr("Kara Kıpçak Ordugâhı"), kipFortArmy(lv), 0, (win) => {
+      if (!win) return `<p class="warn">${tr("Kara Kıpçaklar seni püskürttü. Birliğini güçlendirip yeniden gel.")}</p>`;
+      k.fort = true;
+      const fx = this.roadFx(KIP_FORT_FX);
+      this.addFoe(boss.name, "boss");
+      this.chron(tr("Kara Kıpçak ordugâhını dağıttın; Tuğrıl'ın sancağı devrildi."));
+      return `<p class="good">${tr("Ordugâh dağıldı! Tuğrıl'ın sancağı devrildi.")}</p><p>${fx}</p>`;
+    }, boss, tr("Kara Kıpçaklar"));
+  }
+
   private weekCheck(): void {
     const s = this.s;
     const w = this.weekly();
@@ -5913,6 +6114,9 @@ export class Game {
       const wm = weekTheme(this.weekly().id).mods;
       for (const k of Object.keys(wm) as (keyof CompMods)[]) m[k] += wm[k] ?? 0;
     }
+    const kp = this.s.kip;
+    if (kp?.ally) for (const [k, v] of Object.entries(KIP_ALLY_MODS) as [keyof CompMods, number][]) m[k] += v;
+    if ((kp?.stones.length ?? 0) >= STONES.length) for (const [k, v] of Object.entries(KIP_STONES_MODS) as [keyof CompMods, number][]) m[k] += v;
     return m;
   }
 

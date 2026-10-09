@@ -38,7 +38,7 @@ const missing = [];
 for (const f of files) {
   const src = readFileSync(f, "utf8");
   if (!/from "\.{1,2}\/(?:\.\.\/)*i18n"/.test(src)) continue;
-  for (const m of src.matchAll(/\b(?:t|tr)\("((?:[^"\\]|\\.)*)"/g)) if (!keys.has(m[1])) missing.push(`${f.slice(root.length)}: ${m[1]}`);
+  for (const m of src.matchAll(/(?<![.\w])(?:t|tr)\("((?:[^"\\]|\\.)*)"/g)) if (!keys.has(m[1])) missing.push(`${f.slice(root.length)}: ${m[1]}`);
 }
 if (missing.length) console.log(`Sözlükte olmayan t() çağrıları:\n  ${missing.join("\n  ")}\n`);
 per.sort((a, b) => b[1] - a[1]);

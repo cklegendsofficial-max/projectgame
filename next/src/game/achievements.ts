@@ -39,6 +39,7 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: "kagan", name: "Kağan", desc: "Kurultayda Kağan seçil.", icon: "crown", done: (s) => !!s.kagan },
   { id: "port", name: "Hazar Kaptanı", desc: "Hazar'da 5 sefer tamamla.", icon: "j_caravan", done: (s) => (s.c.voyages ?? 0) >= 5 },
   { id: "governor", name: "Vali Atayan", desc: "Fethettiğin bir şehre vali ata.", icon: "crown", done: (s) => Object.values(s.owned).some((o) => !!o.gov) },
+  { id: "kipcak", name: "Kıpçak Kardeşi", desc: "Köten Han ile ant iç.", icon: "u_cavalry", done: (s) => !!s.kip?.ally },
   { id: "ending", name: "Destanın Sonu", desc: "Üçüncü perdeyi bitir ve kaderini seç.", icon: "crown", done: (s) => !!s.act3?.ending },
 ];
 
