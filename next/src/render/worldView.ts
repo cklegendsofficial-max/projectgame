@@ -4,7 +4,7 @@ import type { Camera } from "./camera";
 import type { Game } from "../game/game";
 import { CITY_NAME, NODE_SPRITE, armySize } from "../game/data";
 import { CAPITAL, SLAVE_RADIUS } from "../game/state";
-import { FACTIONS, type FactionId } from "../game/factions";
+import { FACTIONS, citiesOf, type FactionId } from "../game/factions";
 import { nemName } from "../game/nemesis";
 import { TOMBS, tombOf } from "../game/deep";
 import { FORT_TIERS, type FortOwner } from "../game/forts";
@@ -402,6 +402,126 @@ export class WorldView {
 
   t(key: string): Texture {
     return this.tex[key] ?? this.tex["icons/" + key] ?? Texture.WHITE;
+  }
+
+  private occF = new Map<string, Sprite>();
+
+  private smoke(x: number, y: number, k: number, color = 0x4a4038, sc = 1): void {
+    const g = this.fxG;
+    for (let i = 0; i < 8; i++) {
+      const ph = (this.time * 0.22 + i / 8 + x * 0.0007) % 1;
+      const px = x + (Math.sin(this.time * 0.8 + i * 1.7) * 14 + ph * 40) * sc;
+      g.circle(px, y - ph * 170 * sc, (14 + ph * 38) * sc).fill({ color, alpha: (1 - ph) * 0.5 * k });
+    }
+  }
+
+  /** Dünyanın nabzı haritada: cepheler, işgal sancakları, kıtlık dumanı, kuraklık, kurt gözleri. */
+  private drawPulse(game: Game, inv: number): void {
+    const s = game.s;
+    const w = s.wd;
+    if (!w) return;
+    const g = this.fxG;
+    const col = (f: FactionId) => parseInt(FACTIONS[f].color.slice(1), 16);
+    const pos = (id: string) => CITIES.find((c) => c.id === id)!;
+    for (const war of w.wars) {
+      const ca = citiesOf(war.a).map(pos);
+      const cb = citiesOf(war.b).map(pos);
+      let best: [{ x: number; y: number }, { x: number; y: number }] | null = null;
+      for (const a of ca) for (const b of cb) if (!best || Math.hypot(a.x - b.x, a.y - b.y) < Math.hypot(best[0].x - best[1].x, best[0].y - best[1].y)) best = [a, b];
+      if (!best) continue;
+      const [A, B] = best;
+      const k = 0.5 + Math.max(-0.3, Math.min(0.3, (war.score / 100) * 0.3 + war.takes * 0.04));
+      const fx = A.x + (B.x - A.x) * k;
+      const fy = A.y + (B.y - A.y) * k;
+      if (!game.isExplored(fx, fy) && !game.isExplored(A.x, A.y) && !game.isExplored(B.x, B.y)) continue;
+      for (const [P, f] of [[A, war.a], [B, war.b]] as const) {
+        const d = Math.hypot(fx - P.x, fy - P.y);
+        const n = Math.floor(d / 70);
+        for (let i = 1; i < n; i++) {
+          const ph = (i / n + this.time * 0.04) % 1;
+          if (ph < 0.12) continue;
+          const x = P.x + (fx - P.x) * ph;
+          const y = P.y + (fy - P.y) * ph + Math.sin(this.time * 9 + i) * 1.5;
+          g.circle(x, y, 10 * inv).fill({ color: 0x1a0e04, alpha: 0.55 });
+          g.circle(x, y - 1, 7 * inv).fill({ color: col(f), alpha: 0.95 });
+          g.rect(x - 1 * inv, y - 20 * inv, 2 * inv, 16 * inv).fill({ color: 0xe8e0d0, alpha: 0.9 });
+        }
+        const bx = P.x + (fx - P.x) * 0.82;
+        const by = P.y + (fy - P.y) * 0.82;
+        g.rect(bx - 1.5 * inv, by - 40 * inv, 3 * inv, 40 * inv).fill({ color: 0x2a1606 });
+        g.poly([bx, by - 40 * inv, bx + (fx > P.x ? 22 : -22) * inv, by - 33 * inv + Math.sin(this.time * 5) * 2, bx, by - 26 * inv]).fill({ color: col(f) });
+      }
+      const pr = (this.time * 0.9) % 1;
+      g.circle(fx, fy, 50 + pr * 90).stroke({ color: 0xff5030, width: 4, alpha: 0.6 * (1 - pr) });
+      for (let i = 0; i < 9; i++) {
+        const a = i * 0.7 + this.time * 3;
+        const r = 18 + ((i * 37 + Math.floor(this.time * 8)) % 30);
+        g.circle(fx + Math.cos(a) * r, fy - 10 + Math.sin(a) * r * 0.6, 2.5 * inv).fill({ color: 0xffd080, alpha: 0.5 + 0.5 * Math.sin(this.time * 20 + i) });
+      }
+      this.smoke(fx, fy - 10, 1, 0x3a3430, inv);
+      const sw = 22 * inv;
+      g.moveTo(fx - sw, fy - sw - 30).lineTo(fx + sw, fy + sw - 30).moveTo(fx + sw, fy - sw - 30).lineTo(fx - sw, fy + sw - 30).stroke({ color: 0xfff0d0, width: 5 * inv, alpha: 0.9 });
+    }
+    for (const c of CITIES) {
+      const occ = w.occ[c.id];
+      let f = this.occF.get(c.id);
+      if (occ && !f) {
+        f = new Sprite(this.t("tug"));
+        f.anchor.set(0.5, 1);
+        f.scale.set(96 / f.texture.height);
+        f.position.set(c.x + 4, c.y - 56);
+        this.places.addChild(f);
+        this.occF.set(c.id, f);
+      }
+      if (f) {
+        f.visible = !!occ && !s.owned[c.id];
+        if (occ) f.tint = col(occ);
+        f.rotation = Math.sin(this.time * 2 + c.x) * 0.04;
+      }
+      const sh = w.short[c.id] ?? 0;
+      if (sh >= 3 && game.isExplored(c.x, c.y)) this.smoke(c.x - 30, c.y - 30, Math.min(1, (sh - 2) / 4), sh >= 6 ? 0x2a2420 : 0x6a5c4e, Math.min(1.8, inv));
+    }
+    if (w.drought && game.isExplored(w.drought.x, w.drought.y)) {
+      const d = w.drought;
+      const a = 0.14 + Math.sin(this.time * 1.3) * 0.03;
+      g.ellipse(d.x, d.y, 720, 520).fill({ color: 0xb8701e, alpha: a });
+      g.ellipse(d.x, d.y, 480, 340).fill({ color: 0xd08a2a, alpha: a });
+      g.ellipse(d.x, d.y, 720, 520).stroke({ color: 0xffb040, width: 6, alpha: 0.35 });
+      for (let i = 0; i < 18; i++) {
+        const a0 = i * 2.39;
+        const r0 = 80 + ((i * 131) % 380);
+        const cx = d.x + Math.cos(a0) * r0;
+        const cy = d.y + Math.sin(a0) * r0 * 0.7;
+        g.moveTo(cx, cy).lineTo(cx + 18, cy + 9).lineTo(cx + 30, cy + 4).moveTo(cx + 18, cy + 9).lineTo(cx + 22, cy + 24);
+      }
+      g.stroke({ color: 0x5a3410, width: 3, alpha: 0.5 });
+      for (let i = 0; i < 14; i++) {
+        const yy = d.y - 300 + i * 46;
+        const xx = d.x - 380 + ((i * 97) % 160);
+        for (let j = 0; j < 6; j++) {
+          const x = xx + j * 90;
+          const y = yy + Math.sin(this.time * 4 + i + j) * 4;
+          if (j) g.lineTo(x, y);
+          else g.moveTo(x, y);
+        }
+      }
+      g.stroke({ color: 0xffe0a0, width: 2, alpha: 0.25 });
+    }
+    const t = game.dayOf().t;
+    const dark = Math.max(0, -Math.cos(t * Math.PI * 2));
+    if (dark > 0.4 && w.wolves >= 65) {
+      const h = s.hero;
+      for (let i = 0; i < 4; i++) {
+        const blink = Math.sin(this.time * 0.9 + i * 2.1);
+        if (blink < -0.2) continue;
+        const a = i * 1.57 + Math.floor(this.time / 6 + i) * 0.9;
+        const r = 260 + ((i * 53) % 120);
+        const x = h.x + Math.cos(a) * r;
+        const y = h.y + Math.sin(a) * r;
+        const e = (blink + 0.2) * dark;
+        g.circle(x - 7, y, 4 * inv).circle(x + 7, y, 4 * inv).fill({ color: 0xffe060, alpha: Math.min(0.95, e * 1.3) });
+      }
+    }
   }
 
   private buildDeco(): void {
@@ -1241,6 +1361,7 @@ export class WorldView {
       const p = game.targetPos(tg);
       if (p) this.fxG.circle(p.x, p.y, 40 + Math.sin(this.time * 5) * 4).stroke({ color: tg.kind === "bandit" || tg.kind === "camp" ? 0xff6a4a : 0xffe08a, width: 3, alpha: 0.9 });
     }
+    if (s.free) this.drawPulse(game, inv);
 
     if (this.fogDirty) {
       this.fogDirty = false;

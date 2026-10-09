@@ -7317,7 +7317,7 @@ export class Game {
       const due = s.news.filter((n) => n.at <= s.time);
       if (due.length) {
         s.news = s.news.filter((n) => n.at > s.time);
-        for (const n of due) this.hud.toast(`Söylenti: ${n.text}`, "info");
+        for (const n of due) this.hud.toast(`Söylenti: ${n.text.replace(/<[^>]+>/g, "")}`, "info");
       }
     }
   }
@@ -7333,7 +7333,7 @@ export class Game {
     this.s.events.push({ city: ci.id, good, mult, until: day + 2, text });
     const late = this.newsDelay(ci.id);
     if (late < 5) this.hud?.toast(`Söylenti: ${text}`, "info");
-    else (this.s.news ??= []).push({ at: this.s.time + late, text: `${text} <small>(${late > DAY_SEC * 0.6 ? "bir günlük" : "taze"} haber)</small>` });
+    else (this.s.news ??= []).push({ at: this.s.time + late, text: `${text} (${late > DAY_SEC * 0.6 ? "bir günlük" : "taze"} haber)` });
   }
 
   eventMult(city: string, g: Good): number {
