@@ -33,6 +33,8 @@ import { SCARS, VET_LV_MAX, VET_MAX, VET_RANKS, VET_XP, makeVet, vetBonus, vetTi
 import { ACHIEVEMENTS, steamUnlock, storeUnlocked, unlockedSet } from "./achievements";
 import { CODEX, codexTitle } from "./codex";
 import { ORIGIN_BY_ID, type OriginId } from "./origins";
+import { WR_FOES } from "./games";
+import type { WrestleFoe } from "../ui/wrestle";
 import { SIEGE_MAX_DAY, newSiege, siegeDay, siegeGar, siegeWall, type SiegeAct, type SiegeCtx, type SiegeRun } from "./siege";
 import { BOND_FX, BOND_LEAVE, BOND_QUEST, BOND_START, COMP_QUESTS, SWORN_MULT, type BondEvent, type CompQuest, type CqChoice } from "./bonds";
 import { t as tr } from "../i18n";
@@ -3919,6 +3921,81 @@ export class Game {
     if (best && score >= 300) this.chron(`${s.hero.name} at üstünde ${hits} kabak vurdu; ihtiyarlar Mete Han'dan beri böylesini görmediklerini söyledi.`);
     saveGame(s);
     return `${best ? "<b class=\"cheap\">Yeni rekor!</b><br>" : ""}+${gold} altın · +${renown} şöhret · +${xp} tecrübe`;
+  }
+
+  toyDay(): boolean {
+    return this.dayOf().day % 7 === 0;
+  }
+
+  private gm(): NonNullable<GameState["games"]> {
+    return (this.s.games ??= { wrDay: -1, wrRound: 0, kbDay: -1, kbBest: 0, champ: 0 });
+  }
+
+  wrestleFoe(): WrestleFoe & { round: number } {
+    const r = Math.min(2, this.gm().wrRound);
+    return { ...WR_FOES[r], round: r };
+  }
+
+  wrestleOpen(): boolean {
+    return this.gm().wrDay !== this.dayOf().day;
+  }
+
+  wrestleReward(win: boolean, perfect: number): string {
+    const s = this.s;
+    const m = this.gm();
+    const r = Math.min(2, m.wrRound);
+    const k = this.toyDay() ? 2 : 1;
+    if (!this.wrestleOpen()) return tr("Bugün güreş meydanı kapandı; bu bir antrenmandı.");
+    if (!win) {
+      m.wrDay = this.dayOf().day;
+      m.wrRound = 0;
+      saveGame(s);
+      return `${WR_FOES[r].name} ${tr("seni sırtüstü yere serdi. Yarın yeniden meydana çık.")}`;
+    }
+    const gold = Math.round((40 + 30 * r + s.hero.lv * 4) * k);
+    const renown = (3 + 3 * r + Math.min(3, perfect)) * k;
+    this.gain({ gold });
+    s.renown += renown;
+    this.addXp((60 + 40 * r) * k);
+    let extra = "";
+    if (r >= 2) {
+      m.champ++;
+      m.wrDay = this.dayOf().day;
+      m.wrRound = 0;
+      s.renown += 20 * k;
+      this.addKut(2, "baş pehlivan");
+      this.chron(`${s.hero.name} güreş meydanında bütün pehlivanları yendi; ${m.champ}. kez baş pehlivan ilan edildi.`);
+      audio.play("level");
+      extra = `<br><b class="cheap">${tr("Baş pehlivan!")}</b> +${20 * k} ${tr("şöhret")}`;
+    } else m.wrRound = r + 1;
+    saveGame(s);
+    return `+${gold} ${tr("altın")} · +${renown} ${tr("şöhret")}${extra}`;
+  }
+
+  kokboruOpen(): boolean {
+    return this.gm().kbDay !== this.dayOf().day;
+  }
+
+  kokboruReward(goals: number): string {
+    const s = this.s;
+    const m = this.gm();
+    const best = goals > m.kbBest;
+    if (best) m.kbBest = goals;
+    if (!this.kokboruOpen()) {
+      saveGame(s);
+      return `${best ? `<b class="cheap">${tr("Yeni rekor!")}</b> ` : ""}${tr("Bugünün ödülünü zaten aldın; bu bir antrenmandı.")}`;
+    }
+    m.kbDay = this.dayOf().day;
+    const k = this.toyDay() ? 2 : 1;
+    const gold = Math.round((goals * 55 + s.hero.lv * 5) * k);
+    const renown = goals * 3 * k;
+    this.gain({ gold });
+    s.renown += renown;
+    this.addXp(goals * 45 * k);
+    if (goals >= 4) this.addKut(1);
+    if (best && goals >= 6) this.chron(`${s.hero.name} kökbörüde oğlağı ${goals} kez kazana attı; bozkır bu yiğidi konuşuyor.`);
+    saveGame(s);
+    return `${best ? `<b class="cheap">${tr("Yeni rekor!")}</b><br>` : ""}+${gold} ${tr("altın")} · +${renown} ${tr("şöhret")}`;
   }
 
   boyReason(b: Boy): string {

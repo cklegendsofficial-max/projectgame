@@ -19,6 +19,8 @@ import { PERSONAS, PERSONA_KEYS } from "../game/director";
 import { kidAge } from "../game/dynasty";
 import { BOYS } from "../game/korkut";
 import { Archery } from "./archery";
+import { Wrestle } from "./wrestle";
+import { KokBoru } from "./kokboru";
 import { Gamepad, type PadButton } from "./gamepad";
 import { CODEX, CODEX_CATS, codexText, codexTitle, type CodexCat } from "../game/codex";
 import { KUT_TIERS, kutArmy, kutTier, kutVote } from "../game/kut";
@@ -255,7 +257,7 @@ export class Hud {
       if (k === "escape") {
         if (this.menuOpen) return this.closeMenu();
         if (!this.panel.classList.contains("hidden")) return this.close();
-        if (!this.archery && !this.modal() && !g.battleLock) this.openMenu();
+        if (!this.archery && !this.minigame && !this.modal() && !g.battleLock) this.openMenu();
         return;
       }
       if (this.menuOpen) return;
@@ -289,8 +291,8 @@ export class Hud {
         if (ov.length) return ov[ov.length - 1];
         return this.panel.classList.contains("hidden") ? null : this.panel;
       },
-      shooting: () => !!this.archery && !this.root.querySelector(".archery .aresult.on"),
-      shoot: () => this.archery?.shootAuto(),
+      shooting: () => (!!this.archery || !!this.minigame) && !this.root.querySelector(".archery .aresult.on"),
+      shoot: () => (this.archery ? this.archery.shootAuto() : this.minigame?.press()),
       press: (b, ui) => this.padPress(b, ui),
       pan: (x, y) => {
         g.cam.pad.x = x;
@@ -716,8 +718,10 @@ export class Hud {
 
   private padPress(b: PadButton, ui: boolean): void {
     const g = this.g;
-    if (this.archery) {
+    if (this.archery || this.minigame) {
       if (b === "b") window.dispatchEvent(new KeyboardEvent("keydown", { code: "Escape", key: "Escape" }));
+      else if (b === "lb" || b === "y") this.minigame?.move?.(-1);
+      else if (b === "rb" || b === "x") this.minigame?.move?.(1);
       return;
     }
     if (this.menuOpen) {
@@ -758,7 +762,7 @@ export class Hud {
   }
 
   speed(): number {
-    if (this.g.battleLock || this.modal() || this.archery) return 1;
+    if (this.g.battleLock || this.modal() || this.archery || this.minigame) return 1;
     return settings.speed ?? 1;
   }
 
@@ -777,7 +781,7 @@ export class Hud {
 
   openMenu(title = false, done: (() => void) | null = null): void {
     const g = this.g;
-    if (this.menuOpen || this.archery || this.battleOpen || this.storyOpen) return;
+    if (this.menuOpen || this.archery || this.minigame || this.battleOpen || this.storyOpen) return;
     this.close();
     g.cam.keys.clear();
     this.menuOpen = true;
@@ -1650,7 +1654,7 @@ export class Hud {
 
   openArchery(): void {
     const g = this.g;
-    if (this.archery || this.modal() || g.battleLock) return;
+    if (this.archery || this.minigame || this.modal() || g.battleLock) return;
     this.close();
     g.battleLock = true;
     const el = document.createElement("div");
@@ -1695,11 +1699,98 @@ export class Hud {
     el.querySelector(".aclose")!.addEventListener("click", finish);
   }
 
+  minigame: { press(): void; stop(): void; move?(d: number): void } | null = null;
+
+  openMini(kind: "wr" | "kb"): void {
+    const g = this.g;
+    if (this.archery || this.minigame || this.modal() || g.battleLock) return;
+    this.close();
+    g.battleLock = true;
+    const el = document.createElement("div");
+    el.className = `archery mini-${kind}`;
+    const foe = g.wrestleFoe();
+    const hint = kind === "wr"
+      ? t("İbre yeşildeyken dokun ya da <kbd>Boşluk</kbd> · kırmızı ! çıkınca hemen karşı koy · rakibi sırtüstü yere ser")
+      : t("Üst/alt yarıya dokun ya da <kbd>↑</kbd>/<kbd>↓</kbd> · <kbd>Boşluk</kbd> en güvenli kulvara kaçar · oğlağı kazana ulaştır");
+    el.innerHTML = `<canvas></canvas><div class="ahud"></div><div class="ahint">${hint}</div><button class="btn sm aclose">${t("Bırak")}</button><div class="aresult"></div>`;
+    this.root.appendChild(el);
+    const hudEl = el.querySelector(".ahud") as HTMLElement;
+    const res = el.querySelector(".aresult") as HTMLElement;
+    let tick = 0;
+    const key = (e: KeyboardEvent): void => {
+      if (e.code === "Space") {
+        e.preventDefault();
+        e.stopPropagation();
+        this.minigame?.press();
+      } else if (e.code === "ArrowUp" || e.code === "KeyW") {
+        e.preventDefault();
+        e.stopPropagation();
+        this.minigame?.move?.(-1);
+      } else if (e.code === "ArrowDown" || e.code === "KeyS") {
+        e.preventDefault();
+        e.stopPropagation();
+        this.minigame?.move?.(1);
+      } else if (e.code === "Escape") {
+        e.stopImmediatePropagation();
+        finish();
+      }
+    };
+    const finish = (): void => {
+      clearInterval(tick);
+      window.removeEventListener("keydown", key, true);
+      this.minigame?.stop();
+      this.minigame = null;
+      el.remove();
+      g.battleLock = false;
+    };
+    const result = (title: string, body: string, note: string, again: boolean): void => {
+      res.innerHTML = `<div class="bbox"><h2>${title}</h2><p>${body}</p><p>${note}</p><div class="row">${again ? `<button class="btn go again">${t("Devam")}</button>` : ""}<button class="btn quit">${t("Kapat")}</button></div></div>`;
+      res.classList.add("on");
+      res.querySelector(".again")?.addEventListener("click", () => { finish(); this.openMini(kind); });
+      res.querySelector(".quit")!.addEventListener("click", finish);
+    };
+    const cv = el.querySelector("canvas")!;
+    if (kind === "wr") {
+      const open = g.wrestleOpen();
+      const w = new Wrestle(cv, foe, g.stat("guc") + g.stat("day") * 0.5, (win, bal, perfect) => {
+        const note = g.wrestleReward(win, perfect);
+        audio.play(win ? "level" : "quest");
+        const more = win && open && foe.round < 2;
+        result(win ? t("Zafer!") : t("Yenildin"), `${foe.name} · ${bal > 0 ? "+" : ""}${bal} · ${t("kusursuz")} ${perfect}`, note, more);
+      });
+      this.minigame = w;
+      tick = window.setInterval(() => {
+        const h = w.hud();
+        hudEl.innerHTML = `<span>${ic("trophy")} ${foe.round + 1}/3 · ${foe.name}</span><span>⏱ ${h.time.toFixed(1)}</span><span>${t("Denge")} ${h.bal > 0 ? "+" : ""}${h.bal}</span>`;
+      }, 100);
+    } else {
+      const k = new KokBoru(cv, g.stat("cev") + g.skill("silah") * 0.5, (goals) => {
+        const note = g.kokboruReward(goals);
+        audio.play(goals >= 3 ? "level" : "quest");
+        result(t("Kökbörü bitti"), `<b>${goals}</b> ${t("gol")} · ${t("En iyi")}: <b>${g.s.games?.kbBest ?? 0}</b>`, note, true);
+      });
+      this.minigame = { press: () => k.dodge(), stop: () => k.stop(), move: (d) => k.move(d) };
+      tick = window.setInterval(() => {
+        const h = k.hud();
+        hudEl.innerHTML = `<span>${ic("trophy")} ${h.goals}</span><span>⏱ ${h.time.toFixed(1)}</span><span>${Math.round(h.progress * 100)}%</span>`;
+      }, 100);
+    }
+    window.addEventListener("keydown", key, true);
+    el.querySelector(".aclose")!.addEventListener("click", finish);
+  }
+
   private gamesHtml(): string {
     const g = this.g;
     const paid = g.archeryPaid();
+    const toy = g.toyDay();
+    const foe = g.wrestleFoe();
+    const wo = g.wrestleOpen(), ko = g.kokboruOpen();
+    const st = (ok: boolean) => `<small class="${ok ? "cheap" : "dim"}">${ok ? t("Bugünün ödülü hazır") : t("Bugün ödül alındı · antrenman")}`;
     return `<h3>${ic("u_archer")} ${t("Bozkır Oyunları")}</h3>
-      <div class="grow">${ic("u_cavalry", "gimg")}<div class="bi2"><b>${t("Kabak Atma")} <em>${t("atlı okçuluk")}</em></b><small>Dörtnala giderken kabakları, kurtları ve kartalları vur. 30 saniye, 20 ok.</small><small class="${paid ? "cheap" : "dim"}">${paid ? "Bugünün ödülü hazır" : "Bugün ödül alındı · antrenman"} · Rekor: ${g.s.ok?.best ?? 0}</small></div><button class="btn sm go" data-a="${this.act(() => this.openArchery())}">${t("Oyna")}</button></div>`;
+      ${toy ? `<div class="odds good">${ic("tug")} <b>${t("Toy günü!")}</b> ${t("Bugün bütün oyunların ödülü iki katı.")}</div>` : `<p class="dim">${t("Her 7 günde bir Toy kurulur; o gün ödüller iki katıdır.")}</p>`}
+      <div class="grow">${ic("u_cavalry", "gimg")}<div class="bi2"><b>${t("Kabak Atma")} <em>${t("atlı okçuluk")}</em></b><small>${t("Dörtnala giderken kabakları, kurtları ve kartalları vur. 30 saniye, 20 ok.")}</small>${st(paid)} · ${t("Rekor")}: ${g.s.ok?.best ?? 0}</small></div><button class="btn sm go" data-a="${this.act(() => this.openArchery())}">${t("Oyna")}</button></div>
+      <div class="grow">${ic("arena", "gimg")}<div class="bi2"><b>${t("Kuşak Güreşi")} <em>${t("üç pehlivan")}</em></b><small>${t("Zamanlamayla kuşaktan çek, rakibin hamlesine karşı koy. Üç pehlivanı art arda yenen baş pehlivan olur.")}</small><small class="${wo ? "cheap" : "dim"}">${wo ? `${t("Sıradaki rakip")}: ${foe.name} (${foe.round + 1}/3)` : t("Meydan bugün kapandı · antrenman")} · ${t("Baş pehlivan")}: ${g.s.games?.champ ?? 0}</small></div><button class="btn sm go" data-a="${this.act(() => this.openMini("wr"))}">${t("Oyna")}</button></div>
+      <div class="grow">${ic("u_cavalry", "gimg")}<div class="bi2"><b>${t("Kökbörü")} <em>${t("oğlak kapma")}</em></b><small>${t("Oğlağı kap, rakip atlılardan sıyrılarak kazana ulaştır. 40 saniye.")}</small>${st(ko)} · ${t("Rekor")}: ${g.s.games?.kbBest ?? 0}</small></div><button class="btn sm go" data-a="${this.act(() => this.openMini("kb"))}">${t("Oyna")}</button></div>`;
   }
 
   private korkutHtml(): string {
