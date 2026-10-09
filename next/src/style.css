@@ -383,6 +383,11 @@ body.nomini .mini { display: none; }
 .sglog li:first-child { font-weight: 700; }
 .sglog li.good { color: #9be08a; }
 .sglog li.bad { color: #ff9a7a; }
+.dipc { padding: 8px; margin-bottom: 8px; border-radius: 12px; background: #0004; border: 1px solid #3b2614; border-left: 4px solid var(--fc); }
+.dipc .row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.dipc .row .btn { margin: 0; flex: 1 1 40%; font-size: 12px; }
+.dipc small span.good { color: #9be08a; }
+.dipops { display: flex; flex-direction: column; gap: 2px; margin-bottom: 8px; font-size: 12px; opacity: .85; }
 .mycv { padding: 8px; margin-bottom: 8px; border-radius: 12px; background: #0004; border: 1px solid #3b2614; }
 .mycvh { display: flex; gap: 8px; align-items: center; margin-bottom: 4px; }
 .mycvr { display: flex; gap: 8px; align-items: center; margin-top: 4px; font-size: 13px; }

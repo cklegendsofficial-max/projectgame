@@ -19,6 +19,7 @@ import type { CompId } from "./story";
 import type { OriginId } from "./origins";
 import type { Fallen, Foe } from "./yug";
 import type { MyCaravan } from "./mycaravan";
+import type { DipMap } from "./spy";
 
 export interface Village {
   name: string;
@@ -288,6 +289,7 @@ export interface GameState {
   surekDay?: number;
   fallen?: Fallen[];
   mycv?: MyCaravan[];
+  dip?: DipMap;
   foes?: Foe[];
   games?: { wrDay: number; wrRound: number; kbDay: number; kbBest: number; champ: number };
 }

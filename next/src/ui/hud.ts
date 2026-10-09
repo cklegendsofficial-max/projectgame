@@ -30,6 +30,7 @@ import { assetUrl } from "../render/worldView";
 import { audio } from "../audio";
 import { LANGS, lang, t, type Lang } from "../i18n";
 import { SUREK_FOOD } from "../game/games";
+import { GIFT_GOLD, PEACE_GOLD, SPY_MAX, SPY_OPS, TRADE_GOLD, spyCost } from "../game/spy";
 import { MYCV_COST, MYCV_GUARD, MYCV_GUARD_MAX, MYCV_UPGRADE } from "../game/mycaravan";
 import type { Good } from "../game/rpg";
 import { BALBAL_GOLD, BALBAL_MAX, BALBAL_STONE, FOE_KIND, balbalBonus, yugCost } from "../game/yug";
@@ -1650,6 +1651,32 @@ export class Hud {
       ${o ? `<button class="btn sm" data-a="${this.act(() => { this.close(); g.cam.flyTo(o.x, o.y, 0.8); })}">Otağı göster</button>` : ""}`;
   }
 
+  private divanHtml(): string {
+    const g = this.g, en = lang() === "en";
+    const btn = (why: string, label: string, fn: () => void, cls = "") => `<button class="btn sm ${cls} ${why ? "off" : ""}" title="${why}" data-a="${this.act(fn)}">${label}</button>`;
+    const cards = FACTION_KEYS.map((f) => {
+      const fac = FACTIONS[f], d = g.dip(f);
+      const tags = [
+        g.pact(f, "peace") ? `<span class="good">${t("Saldırmazlık")} ${g.pact(f, "peace")}${t("g")}</span>` : "",
+        g.pact(f, "trade") ? `<span class="cheap">${t("Ticaret")} ${g.pact(f, "trade")}${t("g")}</span>` : "",
+        g.pact(f, "intel") ? `<span class="cheap">${t("İstihbarat")} ${g.pact(f, "intel")}${t("g")}</span>` : "",
+      ].filter(Boolean).join(" · ");
+      const spy = d.spy ?? 0;
+      return `<div class="dipc" style="--fc:${fac.color}">
+        <div class="mycvh">${ic(fac.icon, "gimg")}<div class="bi2"><b>${fac.name} <em>${fac.ruler}</em></b><small>${t("İtibar")} <b>${Math.round(g.rep(f))}</b> · ${t("Casus ağı")} ${"●".repeat(spy)}<i class="dim">${"●".repeat(SPY_MAX - spy)}</i></small>${tags ? `<small>${tags}</small>` : ""}</div></div>
+        <div class="row">
+          ${btn(g.dipReason(f, "gift"), `${t("Armağan")} · ${GIFT_GOLD}`, () => g.sendGift(f))}
+          ${btn(g.dipReason(f, "peace"), `${t("Saldırmazlık")} · ${PEACE_GOLD}`, () => g.signPact(f, "peace"))}
+          ${btn(g.dipReason(f, "trade"), `${t("Ticaret anlaşması")} · ${TRADE_GOLD}`, () => g.signPact(f, "trade"))}
+          ${btn(g.dipReason(f, "spy"), `${t("Casus")} +1 · ${spyCost(spy)}`, () => g.hireSpy(f))}
+        </div>
+        ${spy ? `<div class="row">${SPY_OPS.map((o) => btn(g.spyReason(f, o.id), en ? o.en[0] : o.name, () => g.spyOp(f, o.id), "go")).join("")}</div>` : ""}
+      </div>`;
+    }).join("");
+    return `<h3>${ic("scroll")} ${t("Divan")}</h3><p class="dim">${t("Elçilerin hükümdarlara armağan götürür, antlaşmalar imzalar. Saldırmazlık antı o devletin karşı saldırılarını durdurur; bozarsan kutun söner. Ticaret antı pazarlarında fiyatları iyileştirir. Casusların haber toplar, ambar yakar, hazine soyar ama yakalanabilirler.")}</p>
+      <div class="dipops">${SPY_OPS.map((o) => `<small><b>${en ? o.en[0] : o.name}</b> (${t("ağ")} ${o.lv}+): ${en ? o.en[1] : o.desc}</small>`).join("")}</div>${cards}`;
+  }
+
   private myCvHtml(): string {
     const g = this.g, s = g.s;
     const list = g.myCvs();
@@ -1971,7 +1998,7 @@ export class Hud {
     const s = g.s;
     const h = s.hero;
     const need = xpNeed(h.lv);
-    const tabs = this.tabs([["karakter", t("Karakter")], ["beceri", `${t("Beceriler")}${h.spts ? ` (${h.spts})` : ""}`], ["yetenek", `${t("Yetenekler")}${h.tpts ? ` (${h.tpts})` : ""}`], ["techizat", `${t("Teçhizat")}${h.bag.length ? ` (${h.bag.length})` : ""}`], ["ordu", t("Birlik")], ...(s.free ? ([["unvan", `${t("Hedefler")}${g.dailyClaimable() ? " ●" : ""}`], ["kervan", t("Kervanlar")]] as [string, string][]) : []), ["bitig", "Bitig"], ["ayar", "⚙"]]);
+    const tabs = this.tabs([["karakter", t("Karakter")], ["beceri", `${t("Beceriler")}${h.spts ? ` (${h.spts})` : ""}`], ["yetenek", `${t("Yetenekler")}${h.tpts ? ` (${h.tpts})` : ""}`], ["techizat", `${t("Teçhizat")}${h.bag.length ? ` (${h.bag.length})` : ""}`], ["ordu", t("Birlik")], ...(s.free ? ([["unvan", `${t("Hedefler")}${g.dailyClaimable() ? " ●" : ""}`], ["kervan", t("Kervanlar")], ["divan", t("Divan")]] as [string, string][]) : []), ["bitig", "Bitig"], ["ayar", "⚙"]]);
     let body = "";
     if (this.tab === "karakter") {
       const cl = g.cls();
@@ -2040,6 +2067,8 @@ export class Hud {
       body = this.bitigHtml();
     } else if (this.tab === "kervan") {
       body = this.myCvHtml();
+    } else if (this.tab === "divan") {
+      body = this.divanHtml();
     } else if (this.tab === "unvan") {
       body = this.dailyHtml() + (s.beylik ? this.kutHtml() + this.familyHtml() : "") + (s.free ? this.korkutHtml() + this.gamesHtml() + this.yugHtml() + this.ozanHtml() : "") + this.kurultayHtml() + this.rivalsHtml() + this.nemesisHtml() + this.titlesHtml();
     } else if (this.tab === "techizat") {

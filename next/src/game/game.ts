@@ -34,6 +34,7 @@ import { ACHIEVEMENTS, steamUnlock, storeUnlocked, unlockedSet } from "./achieve
 import { CODEX, codexTitle } from "./codex";
 import { ORIGIN_BY_ID, type OriginId } from "./origins";
 import { SUREK_FOOD, WR_FOES } from "./games";
+import { GIFT_GOLD, INTEL_WALL, PACT_DAYS, PEACE_GOLD, PEACE_REP, SPY_MAX, SPY_OPS, TRADE_BONUS, TRADE_GOLD, TRADE_REP, giftRep, spyCost, type DipState, type SpyOp } from "./spy";
 import { MYCV_CAP, MYCV_COST, MYCV_FEE, MYCV_GUARD, MYCV_GUARD_MAX, MYCV_NAMES, MYCV_UPGRADE, mycvDays, mycvRisk, type MyCaravan } from "./mycaravan";
 import { BALBAL_GOLD, BALBAL_MAX, BALBAL_STONE, YUG_LATE, balbalBonus, yugCost, type Fallen, type Foe } from "./yug";
 import type { WrestleFoe } from "../ui/wrestle";
@@ -1576,7 +1577,7 @@ export class Game {
   repTrade(city: string): number {
     if (this.s.owned[city]) return 0.1;
     if (this.hostile(city)) return -0.08;
-    return [0, 0.03, 0.03, 0.06, 0.06][this.cityRank(city)];
+    return [0, 0.03, 0.03, 0.06, 0.06][this.cityRank(city)] + (this.pact(factionOf(city), "trade") ? TRADE_BONUS : 0);
   }
 
   heroRankBonus(): number {
@@ -3263,7 +3264,7 @@ export class Game {
   }
 
   siegeWall(city: string): number {
-    return wallBonus(factionOf(city), this.s.engines);
+    return Math.max(0, wallBonus(factionOf(city), this.s.engines) - (this.pact(factionOf(city), "intel") ? INTEL_WALL : 0));
   }
 
   siegeOdds(city: string): number {
@@ -3285,6 +3286,13 @@ export class Game {
   besiege(city: string): void {
     if (this.siegeReason(city)) return;
     const s = this.s;
+    const f = factionOf(city);
+    if (this.pact(f, "peace")) {
+      this.dip(f).peace = 0;
+      s.rep[f] = Math.max(-500, this.rep(f) - 200);
+      this.addKut(-4, "ant bozuldu");
+      this.chron(`${s.hero.name}, ${FACTIONS[f].ruler} ile yaptığı antı bozup ${CITY_NAME[city]} surlarına yürüdü.`);
+    }
     this.siegeRun = newSiege(city, this.siegeWall(city), this.cityGar(city), s.engines, Math.random);
     s.engines = 0;
     this.siegeRun.log.unshift({ t: tr("Ordun surların önüne çadır kurdu. Davullar çalıyor."), cls: "" });
@@ -3755,7 +3763,9 @@ export class Game {
       return;
     }
     s.counterAt = this.now + (6 + Math.random() * 5) * DAY_SEC * 1000;
-    const city = list[Math.floor(Math.random() * list.length)];
+    const open = list.filter((c) => !this.pact(s.owned[c].from, "peace"));
+    if (!open.length) return;
+    const city = open[Math.floor(Math.random() * open.length)];
     const o = s.owned[city];
     const days = this.dayOf().day - o.since;
     const base = cityGarrison(o.from, 0);
@@ -3928,6 +3938,110 @@ export class Game {
     if (best && score >= 300) this.chron(`${s.hero.name} at üstünde ${hits} kabak vurdu; ihtiyarlar Mete Han'dan beri böylesini görmediklerini söyledi.`);
     saveGame(s);
     return `${best ? "<b class=\"cheap\">Yeni rekor!</b><br>" : ""}+${gold} altın · +${renown} şöhret · +${xp} tecrübe`;
+  }
+
+  dip(f: FactionId): DipState {
+    return ((this.s.dip ??= {})[f] ??= {});
+  }
+
+  pact(f: FactionId, k: "peace" | "trade" | "intel"): number {
+    return Math.max(0, (this.dip(f)[k] ?? 0) - this.dayOf().day);
+  }
+
+  dipReason(f: FactionId, act: "gift" | "peace" | "trade" | "spy"): string {
+    const s = this.s, d = this.dip(f);
+    if (!s.free) return tr("Önce hürriyetini kazan");
+    if (act === "gift") return s.res.gold < GIFT_GOLD ? `${GIFT_GOLD} ${tr("altın")}` : "";
+    if (act === "peace") {
+      if (!s.beylik) return tr("Önce beyliğini kur");
+      if (this.pact(f, "peace")) return `${tr("Antlaşma sürüyor")}: ${this.pact(f, "peace")} ${tr("gün")}`;
+      if (this.rep(f) < PEACE_REP) return tr("Önce gönüllerini kazan (itibar 0+)");
+      return s.res.gold < PEACE_GOLD ? `${PEACE_GOLD} ${tr("altın")}` : "";
+    }
+    if (act === "trade") {
+      if (this.pact(f, "trade")) return `${tr("Antlaşma sürüyor")}: ${this.pact(f, "trade")} ${tr("gün")}`;
+      if (this.rep(f) < TRADE_REP) return `${tr("İtibar")} ${TRADE_REP}+`;
+      return s.res.gold < TRADE_GOLD ? `${TRADE_GOLD} ${tr("altın")}` : "";
+    }
+    if ((d.spy ?? 0) >= SPY_MAX) return tr("Ağ tam");
+    return s.res.gold < spyCost(d.spy ?? 0) ? `${spyCost(d.spy ?? 0)} ${tr("altın")}` : "";
+  }
+
+  sendGift(f: FactionId): void {
+    if (this.dipReason(f, "gift")) return;
+    const d = this.dip(f);
+    this.s.res.gold -= GIFT_GOLD;
+    const n = giftRep(d.gifts ?? 0);
+    d.gifts = (d.gifts ?? 0) + 1;
+    this.s.rep[f] = Math.min(2000, this.rep(f) + n);
+    this.hud.toast(`${FACTIONS[f].ruler} ${tr("armağanı kabul etti")}: +${n} ${tr("itibar")}`, "good");
+    saveGame(this.s);
+  }
+
+  signPact(f: FactionId, k: "peace" | "trade"): void {
+    if (this.dipReason(f, k)) return;
+    const s = this.s;
+    s.res.gold -= k === "peace" ? PEACE_GOLD : TRADE_GOLD;
+    this.dip(f)[k] = this.dayOf().day + PACT_DAYS;
+    this.chron(`${FACTIONS[f].ruler} ile ${k === "peace" ? "saldırmazlık" : "ticaret"} antlaşması imzalandı.`);
+    audio.play("quest");
+    this.hud.toast(k === "peace" ? `${FACTIONS[f].short}: ${tr("20 gün saldırmazlık")}` : `${FACTIONS[f].short}: ${tr("20 gün ticaret ayrıcalığı")}`, "good");
+    saveGame(s);
+  }
+
+  hireSpy(f: FactionId): void {
+    if (this.dipReason(f, "spy")) return;
+    const d = this.dip(f);
+    this.s.res.gold -= spyCost(d.spy ?? 0);
+    d.spy = (d.spy ?? 0) + 1;
+    this.hud.toast(`${FACTIONS[f].short}: ${tr("casus ağı")} ${d.spy}/${SPY_MAX}`, "good");
+    saveGame(this.s);
+  }
+
+  spyReason(f: FactionId, op: SpyOp): string {
+    const d = this.dip(f);
+    const o = SPY_OPS.find((x) => x.id === op)!;
+    if ((d.spy ?? 0) < o.lv) return `${tr("Ağ seviyesi")} ${o.lv}`;
+    if ((d.acted ?? -1) === this.dayOf().day) return tr("Casuslar bugün iş gördü");
+    return "";
+  }
+
+  spyOp(f: FactionId, op: SpyOp): void {
+    if (this.spyReason(f, op)) return;
+    const s = this.s, d = this.dip(f), fac = FACTIONS[f];
+    const o = SPY_OPS.find((x) => x.id === op)!;
+    d.acted = this.dayOf().day;
+    const risk = o.risk * (1 - 0.1 * this.tal("kacakci")) * (1 - (d.spy ?? 0) * 0.08);
+    if (Math.random() < risk) {
+      d.spy = Math.max(0, (d.spy ?? 1) - 1);
+      s.rep[f] = Math.max(-500, this.rep(f) - 60 - 40 * o.lv);
+      if (this.pact(f, "peace")) d.peace = 0;
+      audio.play("bad");
+      this.chron(`${fac.name} divanında bir casus yakalandı; ${fac.ruler} öfkeyle elçileri kovdu.`);
+      this.hud.story(tr("Casus yakalandı!"), "icons/wanted", `${fac.ruler}'ın adamları casusunu yakaladı. Ağın bir halkası koptu, itibarın düştü${this.pact(f, "peace") ? "" : " ve varsa antlaşma bozuldu"}.`, tr("Kahretsin"));
+      saveGame(s);
+      return;
+    }
+    let html = "";
+    if (op === "intel") {
+      d.intel = this.dayOf().day + 5;
+      const rows = fac.cities.filter((c) => !s.owned[c]).map((c) => `${CITY_NAME[c]}: <b>${armySize(this.cityGar(c))}</b> ${tr("asker")}`).join("<br>");
+      const ownedFrom = Object.values(s.owned).some((x) => x.from === f);
+      const eta = s.counterAt && ownedFrom ? Math.max(0, Math.ceil((s.counterAt - this.now) / (DAY_SEC * 1000))) : -1;
+      html = `${rows || tr("Şehirlerinin hepsi artık senin.")}<br><br>${eta >= 0 ? `<b class="dear">${tr("Karşı saldırı hazırlığı")}: ~${eta} ${tr("gün")}</b>` : tr("Yakında bir saldırı hazırlığı yok.")}<br><br><b class="cheap">${tr("5 gün boyunca kuşatmalarda surları zayıf")}</b>`;
+    } else if (op === "sabotage") {
+      const list = fac.cities.filter((c) => !s.owned[c]);
+      const c = list[Math.floor(Math.random() * list.length)];
+      if (c) s.sieged[c] = Math.min(3, (s.sieged[c] ?? 0) + 1);
+      html = c ? `${CITY_NAME[c]} ${tr("ambarı gece yandı. Garnizonu zayıfladı")}: <b>${armySize(this.cityGar(c))}</b>` : tr("Yakılacak ambar kalmadı.");
+    } else {
+      const gold = 200 + Math.floor(Math.random() * 250) + 60 * (d.spy ?? 0);
+      this.gain({ gold });
+      html = `${tr("Hazineden altın aşırıldı")}: <b>+${gold}</b>`;
+    }
+    audio.play("quest");
+    this.hud.story(`${fac.short} · ${tr(o.name)}`, "icons/scroll", html, tr("Güzel"));
+    saveGame(s);
   }
 
   myCvs(): MyCaravan[] {
