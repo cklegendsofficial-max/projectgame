@@ -69,7 +69,7 @@ const before = await ev<[number, number, number]>(`const a = g.siegeArmy("${city
 console.log("siege army with ally / without / odds:", before);
 await ev(`const c = g.s.rivals[1]; const p = g.cityPos("${city}"); g.s.hero.x = p.x; g.s.hero.y = p.y + 60; g.s.hero.army = { spear: 80, archer: 60, horse: 60 };`);
 const rArmy0 = await ev<number>(`const a = g.s.rivals[1].army; return a.spear + a.archer + a.horse;`);
-await ev(`g.besiege("${city}");`);
+await ev(`g.besiege("${city}"); g.siegeAssault();`);
 await page.waitForTimeout(300);
 await shot("3-siege");
 await dismiss();

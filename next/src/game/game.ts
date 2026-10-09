@@ -33,6 +33,7 @@ import { SCARS, VET_LV_MAX, VET_MAX, VET_RANKS, VET_XP, makeVet, vetBonus, vetTi
 import { ACHIEVEMENTS, steamUnlock, storeUnlocked, unlockedSet } from "./achievements";
 import { CODEX, codexTitle } from "./codex";
 import { ORIGIN_BY_ID, type OriginId } from "./origins";
+import { SIEGE_MAX_DAY, newSiege, siegeDay, siegeGar, siegeWall, type SiegeAct, type SiegeCtx, type SiegeRun } from "./siege";
 import { BOND_FX, BOND_LEAVE, BOND_QUEST, BOND_START, COMP_QUESTS, SWORN_MULT, type BondEvent, type CompQuest, type CqChoice } from "./bonds";
 import { t as tr } from "../i18n";
 import { SEASONS, SEASON_DAYS, seasonOf, type Season, type SeasonId } from "./seasons";
@@ -3271,16 +3272,91 @@ export class Game {
     saveGame(this.s);
   }
 
+  siegeRun: SiegeRun | null = null;
+
   besiege(city: string): void {
     if (this.siegeReason(city)) return;
+    const s = this.s;
+    this.siegeRun = newSiege(city, this.siegeWall(city), this.cityGar(city), s.engines, Math.random);
+    s.engines = 0;
+    this.siegeRun.log.unshift({ t: tr("Ordun surların önüne çadır kurdu. Davullar çalıyor."), cls: "" });
+    audio.play("quest");
+    this.hud.openSiege();
+  }
+
+  siegeFood(): number {
+    return Math.ceil(armySize(this.siegeArmy(this.siegeRun?.city)) / 8);
+  }
+
+  siegeCtx(): SiegeCtx {
+    return { kar: this.stat("kar"), renown: this.s.renown, armyN: armySize(this.siegeArmy(this.siegeRun?.city)), rnd: Math.random };
+  }
+
+  siegeAct(act: SiegeAct): void {
+    const r = this.siegeRun;
+    if (!r || r.day > SIEGE_MAX_DAY) return;
+    const s = this.s;
+    const food = this.siegeFood();
+    let loss = 0;
+    if (s.res.food >= food) s.res.food -= food;
+    else {
+      s.res.food = 0;
+      loss += Math.max(1, Math.round(armySize(s.hero.army) * 0.06));
+      r.log.unshift({ t: tr("Erzak bitti! Askerlerin aç; bir kısmı gece kaçtı."), cls: "bad" });
+    }
+    const out = siegeDay(r, act, this.siegeCtx());
+    loss += out.loss;
+    this.siegeLoss(loss);
+    if (out.surrender) {
+      this.siegeRun = null;
+      this.hud.closeSiege();
+      this.conquerCity(r.city, true);
+      return;
+    }
+    if (r.day > SIEGE_MAX_DAY) r.log.unshift({ t: tr("Askerler kuşatmadan bıktı: ya hücum et ya çekil."), cls: "bad" });
+    saveGame(s);
+  }
+
+  private siegeLoss(n: number): void {
+    const s = this.s;
+    for (const pool of [s.hero.army, s.garrison]) {
+      for (const u of UNIT_KEYS) {
+        const d = Math.min(pool[u], Math.ceil(n / 3));
+        pool[u] -= d;
+        n -= d;
+        if (n <= 0) return;
+      }
+    }
+  }
+
+  siegeRetreat(): void {
+    const r = this.siegeRun;
+    if (!r) return;
+    if (r.day === 1) this.s.engines = r.engines;
+    else this.s.sieged[r.city] = (this.s.sieged[r.city] ?? 0) + (r.gar0 - armySize(r.gar) > r.gar0 * 0.15 ? 1 : 0);
+    this.siegeRun = null;
+    this.hud.closeSiege();
+    this.hud.toast(tr("Kuşatmadan vazgeçtin; ordu kışlaya döndü."));
+  }
+
+  siegeAssault(): void {
+    const r = this.siegeRun;
+    if (!r) return;
+    this.siegeRun = null;
+    this.hud.closeSiege();
+    this.assault(r.city, siegeGar(r), siegeWall(r), r.engines);
+  }
+
+  siegeAssaultOdds(): number {
+    const r = this.siegeRun;
+    return r ? odds(this.siegeArmy(r.city), this.heroBonus(), siegeGar(r), siegeWall(r), this.champion(), null) : 0;
+  }
+
+  private assault(city: string, gar: Army, wall: number, used: number): void {
     const s = this.s;
     const f = factionOf(city);
     const fac = FACTIONS[f];
     const name = CITY_NAME[city];
-    const gar = this.cityGar(city);
-    const wall = this.siegeWall(city);
-    const used = s.engines;
-    s.engines = 0;
     const g0 = { ...s.garrison };
     const help = this.seferHelp(city);
     const a0 = help?.a ?? army();
@@ -3290,8 +3366,7 @@ export class Game {
     this.retreatHook = () => {
       for (const u of UNIT_KEYS) s.hero.army[u] -= g0[u] + a0[u];
       s.garrison = g0;
-      s.engines = used;
-      this.hud.toast("Kuşatmadan vazgeçtin; ordu kışlaya döndü.");
+      this.hud.toast("Hücumdan vazgeçtin; ordu kışlaya döndü.");
     };
     this.battle(`${name} kuşatması${help ? ` · ${rivalName(help.r)} yanında` : ""}`, gar, wall, (win) => {
       this.retreatHook = null;
@@ -3303,28 +3378,39 @@ export class Game {
         s.garrison[u] += back;
         if (help) help.r.army[u] = Math.max(0, help.r.army[u] - a0[u] + ally);
       }
-      s.rep[f] = Math.max(-500, this.rep(f) - (win ? 400 : 150));
       if (!win) {
+        s.rep[f] = Math.max(-500, this.rep(f) - 150);
         s.sieged[city] = (s.sieged[city] ?? 0) + 1;
         return `<p class="warn">${name} surları dayandı. ${used ? "Mancınıkların yakıldı. " : ""}Garnizon kayıp verdi; bir dahaki kuşatmada daha zayıf olacak.</p>`;
       }
-      delete s.sieged[city];
-      s.owned[city] = { loy: 35, gar: army(10, 6, 4), coffer: 0, tax: 1, since: this.dayOf().day, from: f };
-      s.c.conquests = (s.c.conquests ?? 0) + 1;
-      s.renown += 60;
-      this.addKut(5, `${name} fethi`);
-      this.bondEvent("conquer");
-      this.sing("fetih", { place: name });
-      if (!s.counterAt) s.counterAt = this.now + 8 * DAY_SEC * 1000;
-      this.chron(`${name} surlarına ${gen(s.hero.name)} tuğu dikildi. ${fac.ruler} bu hakareti unutmayacak.`);
-      this.hud.story(
-        `${name} düştü!`,
-        "icons/siege",
-        `Kapılar kırıldı, ${fac.name} sancağı burçlardan indirildi. Şehrin ileri gelenleri anahtarları önüne koydu.<br><br>Artık <b>${name}</b> senin. Vergi toplar, garnizon kurar, halkı hoşnut tutarsın. Ama ${fac.ruler} şehri geri almak için ordu gönderecek; halk da ağır vergiye isyanla karşılık verir.<br><br><b>Kale</b> sekmesinden şehri yönet.`,
-        "Şehre gir",
-      );
+      this.conquerCity(city, false);
       return `<p class="good">${name} fethedildi! +60 şöhret</p>`;
     }, null, `${fac.short} garnizonu`);
+  }
+
+  private conquerCity(city: string, peaceful: boolean): void {
+    const s = this.s;
+    const f = factionOf(city);
+    const fac = FACTIONS[f];
+    const name = CITY_NAME[city];
+    s.rep[f] = Math.max(-500, this.rep(f) - (peaceful ? 200 : 400));
+    delete s.sieged[city];
+    s.owned[city] = { loy: peaceful ? 55 : 35, gar: army(10, 6, 4), coffer: 0, tax: 1, since: this.dayOf().day, from: f };
+    s.c.conquests = (s.c.conquests ?? 0) + 1;
+    s.renown += 60;
+    this.addKut(peaceful ? 7 : 5, `${name} fethi`);
+    this.bondEvent(peaceful ? "toreFair" : "conquer");
+    this.sing("fetih", { place: name });
+    if (!s.counterAt) s.counterAt = this.now + 8 * DAY_SEC * 1000;
+    this.chron(peaceful ? `${name} kan dökülmeden ${gen(s.hero.name)} tuğuna boyun eğdi.` : `${name} surlarına ${gen(s.hero.name)} tuğu dikildi. ${fac.ruler} bu hakareti unutmayacak.`);
+    audio.play("quest");
+    this.hud.story(
+      `${name} düştü!`,
+      "icons/siege",
+      `${peaceful ? "Kapılar içeriden açıldı; şehrin ileri gelenleri anahtarları elçine teslim etti. Kan dökülmediği için halk sana daha sıcak bakıyor." : `Kapılar kırıldı, ${fac.name} sancağı burçlardan indirildi. Şehrin ileri gelenleri anahtarları önüne koydu.`}<br><br>Artık <b>${name}</b> senin. Vergi toplar, garnizon kurar, halkı hoşnut tutarsın. Ama ${fac.ruler} şehri geri almak için ordu gönderecek; halk da ağır vergiye isyanla karşılık verir.<br><br><b>Kale</b> sekmesinden şehri yönet.`,
+      "Şehre gir",
+    );
+    saveGame(s);
   }
 
   ownedList(): string[] {

@@ -53,6 +53,18 @@ await ev(`g.buyEngine(); g.buyEngine(); g.buyEngine(); g.hud.render();`);
 console.log("odds w/ engines", await ev(`return g.siegeOdds("merv");`));
 await shot("02-engines");
 await page.locator(".panel .btn.big", { hasText: "Kuşat" }).click();
+await page.waitForTimeout(300);
+const food0 = await ev<number>(`return g.s.res.food;`);
+await ev(`g.s.res.food = 400;`);
+for (const a of ["bombard", "sap", "sap", "starve", "raid"]) {
+  if (!(await ev<boolean>(`return !!g.siegeRun;`))) break;
+  await page.locator(`.siege [data-sg="${a}"]`).click();
+  await page.waitForTimeout(120);
+}
+console.log("siege run", JSON.stringify(await ev(`const r = g.siegeRun; return r && { day: r.day, breach: Math.round(r.breach), morale: Math.round(r.morale), relief: r.relief, gar: r.gar, odds: g.siegeAssaultOdds() };`)), "food", food0, "->", await ev(`return g.s.res.food;`));
+console.log("log", await page.locator(".siege .sglog li").allInnerTexts().catch(() => []));
+await shot("03-siege");
+if (await ev<boolean>(`return !!g.siegeRun;`)) await page.locator(`.siege [data-sg="assault"]`).click();
 await page.waitForTimeout(1500);
 await shot("03-battle");
 await dismiss();
@@ -60,7 +72,7 @@ await page.waitForTimeout(500);
 await dismiss();
 console.log("owned", JSON.stringify(await ev(`return { owned: g.s.owned, hero: g.s.hero.army, gar: g.s.garrison };`)));
 if (!(await ev<boolean>(`return !!g.s.owned.merv;`))) {
-  await ev(`g.s.garrison.horse += 200; g.besiege("merv");`);
+  await ev(`g.s.garrison.horse += 200; g.besiege("merv"); g.siegeAssault();`);
   await page.waitForTimeout(1500);
   await dismiss();
   await page.waitForTimeout(500);

@@ -27,6 +27,7 @@ import { CITIES, H, NAV, NH, NW, W } from "../world/gen";
 import { assetUrl } from "../render/worldView";
 import { audio } from "../audio";
 import { LANGS, lang, t, type Lang } from "../i18n";
+import { SIEGE_ACTS, SIEGE_MAX_DAY, parleyChance, siegeGar } from "../game/siege";
 import { ORIGINS, ORIGIN_BY_ID, type Origin, type OriginId } from "../game/origins";
 import { BOND_LIKES, BOND_LIKES_EN, BOND_QUEST, COMP_QUESTS, SWORN_MULT, bondTier } from "../game/bonds";
 import { SETS, SET_FORGE, SET_KEYS, SET_SLOTS, UNIQUES, modsText, type SetId } from "../game/legend";
@@ -654,7 +655,61 @@ export class Hud {
   }
 
   modal(): boolean {
-    return this.storyOpen || this.battleOpen || this.menuOpen;
+    return this.storyOpen || this.battleOpen || this.menuOpen || !!this.siegeEl;
+  }
+
+  private siegeEl: HTMLElement | null = null;
+
+  openSiege(): void {
+    this.close();
+    this.siegeEl?.remove();
+    const el = document.createElement("div");
+    el.className = "battle siege";
+    this.root.appendChild(el);
+    this.siegeEl = el;
+    this.renderSiege();
+  }
+
+  closeSiege(): void {
+    this.siegeEl?.remove();
+    this.siegeEl = null;
+  }
+
+  private renderSiege(): void {
+    const g = this.g, r = g.siegeRun, el = this.siegeEl;
+    if (!r || !el) return this.closeSiege();
+    const en = lang() === "en";
+    const s = g.s;
+    const over = r.day > SIEGE_MAX_DAY;
+    const food = g.siegeFood();
+    const odds = Math.round(g.siegeAssaultOdds() * 100);
+    const pc = Math.round(parleyChance(r, g.siegeCtx()) * 100);
+    const run = (fn: () => void) => this.act(() => {
+      fn();
+      this.renderSiege();
+    });
+    const wallPct = Math.round(100 - r.breach);
+    const towers = Array.from({ length: 7 }, (_, i) => `<i class="${(i + 0.5) / 7 * 100 < r.breach ? "down" : ""}${i === 3 && r.sap ? " sap" : ""}"></i>`).join("");
+    el.innerHTML = `<div class="bbox sgbox">
+      <h2>${ic("siege")} ${CITY_NAME[r.city]} ${t("kuşatması")} · ${t("Gün")} ${Math.min(r.day, SIEGE_MAX_DAY)}/${SIEGE_MAX_DAY}</h2>
+      <div class="sgwall">${towers}</div>
+      ${bar(wallPct, 100, "sgw", `${t("Sur sağlamlığı")} ${wallPct}%`)}
+      ${bar(r.morale, 100, "sgm", `${t("Savunmacı morali")} ${Math.round(r.morale)}`)}
+      <div class="sgstats">
+        <span>${ic("shield")} ${t("Garnizon")}: <b>${armySize(siegeGar(r))}</b></span>
+        <span>${ic("swords")} ${t("Ordun")}: <b>${armySize(g.siegeArmy(r.city))}</b></span>
+        <span>${ic("food")} ${t("Erzak")}: <b class="${s.res.food < food ? "dear" : ""}">${Math.floor(s.res.food)}</b> <small>(-${food}/${t("gün")})</small></span>
+        <span>${ic("tug")} ${r.relief > 0 ? `${t("Yardım ordusu")}: <b class="dear">${r.relief} ${t("gün")}</b>` : `<b>${t("Yardım ordusu geldi")}</b>`}</span>
+        <span>${ic("b_tasocagi")} ${t("Lağım")}: <b>${r.sap}/3</b></span>
+        <span>${ic("siege")} ${t("Mancınık")}: <b>${r.engines}</b></span>
+      </div>
+      <div class="sgacts">${over ? "" : SIEGE_ACTS.map((a) => `<button class="btn sgact" data-sg="${a.id}" data-a="${run(() => g.siegeAct(a.id))}">${ic(a.icon)}<b>${en ? a.en[0] : a.name}${a.id === "parley" ? ` ~%${pc}` : ""}</b><small>${en ? a.en[1] : a.desc}</small></button>`).join("")}</div>
+      <div class="sgend">
+        <button class="btn go big" data-sg="assault" data-a="${this.act(() => g.siegeAssault())}">${t("Hücum!")} <small>~%${odds}</small></button>
+        <button class="btn bad" data-sg="retreat" data-a="${this.act(() => g.siegeRetreat())}">${t("Geri çekil")}</button>
+      </div>
+      <ul class="sglog">${r.log.slice(0, 6).map((l) => `<li class="${l.cls}">${l.t}</li>`).join("")}</ul>
+    </div>`;
   }
 
   gamepad: Gamepad | null = null;
@@ -699,7 +754,7 @@ export class Hud {
   }
 
   panelOpen(): boolean {
-    return !this.panel.classList.contains("hidden") || this.battleOpen || this.storyOpen || this.menuOpen;
+    return !this.panel.classList.contains("hidden") || this.battleOpen || this.storyOpen || this.menuOpen || !!this.siegeEl;
   }
 
   speed(): number {
