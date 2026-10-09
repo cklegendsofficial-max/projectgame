@@ -1,4 +1,5 @@
-const { app, BrowserWindow, Menu, shell } = require("electron");
+const { app, BrowserWindow, Menu, ipcMain, shell } = require("electron");
+const fs = require("node:fs");
 const path = require("node:path");
 
 try {
@@ -10,7 +11,23 @@ try {
 app.commandLine.appendSwitch("ignore-gpu-blocklist");
 app.commandLine.appendSwitch("enable-gpu-rasterization");
 
+function modsDir() {
+  const dir = path.join(app.getPath("userData"), "mods");
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    const sample = path.join(__dirname, "ornek-mod.json");
+    const dst = path.join(dir, "ornek-mod.json.txt");
+    if (fs.existsSync(sample) && !fs.existsSync(dst)) fs.copyFileSync(sample, dst);
+  } catch {
+    /* read-only profile */
+  }
+  return dir;
+}
+
+ipcMain.handle("kk-open-mods", () => shell.openPath(modsDir()));
+
 function create() {
+  const mods = modsDir();
   const win = new BrowserWindow({
     width: 1600,
     height: 900,
@@ -25,6 +42,7 @@ function create() {
       contextIsolation: true,
       sandbox: false,
       backgroundThrottling: false,
+      additionalArguments: [`--kk-mods=${mods}`],
     },
   });
   Menu.setApplicationMenu(null);
@@ -43,6 +61,7 @@ function create() {
     win.webContents.once("did-finish-load", () => {
       setTimeout(async () => {
         const ok = await win.webContents.executeJavaScript("!!window.game && !document.getElementById('loading')");
+        console.log("KK_MODS", fs.existsSync(mods) ? fs.readdirSync(mods).join(",") : "missing");
         console.log("KK_SMOKE", ok ? "OK" : "FAIL");
         app.exit(ok ? 0 : 1);
       }, 6000);

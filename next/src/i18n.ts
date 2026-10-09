@@ -154,6 +154,21 @@ const EN: Record<string, string> = {
   "Bugünün sandığı açıldı. Yarın yeni fermanlar gelecek.": "Today's chest is open. New edicts arrive tomorrow.",
   "Ferman sandığını aç": "Open the edict chest",
   Tamamlandı: "Completed",
+  "Mod dosyası 512 KB'tan büyük olamaz.": "A mod file cannot be larger than 512 KB.",
+  "Mod bir JSON nesnesi olmalı.": "A mod must be a JSON object.",
+  "{n} mod eklendi. Etkinleşmesi için oyunu yeniden yükle.": "{n} mod(s) added. Reload the game to activate.",
+  uyarı: "warnings",
+  değişiklik: "changes",
+  kapalı: "off",
+  "Değişiklik oyunu yeniden yükleyince geçerli olur.": "The change takes effect after reloading the game.",
+  "Mod kaldırıldı. Yeniden yükleyince silinir.": "Mod removed. It disappears after a reload.",
+  "yeniden yükleyince etkinleşir": "activates after a reload",
+  Modlar: "Mods",
+  "Modlar JSON dosyalarıdır: mal fiyatlarını, birlikleri, binaları, şehir adlarını, metinleri değiştirebilir; Bitig'e yeni sayfa ve yeni haftalık temalar ekleyebilir.": "Mods are JSON files: they can change goods prices, units, buildings, city names and texts, and add new Codex pages and weekly themes.",
+  Klasör: "Folder",
+  "Mod klasörünü aç": "Open mods folder",
+  "Mod ekle (.json)": "Add mod (.json)",
+  "Yeniden yükle": "Reload",
   "Haftalık ödül": "Weekly reward",
   Parşömen: "Parchment",
   "Haftanın birincisi": "Champion of the week",
@@ -421,6 +436,17 @@ export function t(src: string, vars?: Record<string, string | number>): string {
   let out = DICT[lang()][src] ?? src;
   if (vars) for (const [k, v] of Object.entries(vars)) out = out.split(`{${k}}`).join(String(v));
   return out;
+}
+
+/** Modların metin eklemesi; Türkçe anahtarın karşılığını değiştirir. */
+export function addText(l: Lang, map: Record<string, string>): number {
+  let n = 0;
+  for (const [k, v] of Object.entries(map)) {
+    if (typeof v !== "string") continue;
+    DICT[l][k] = v;
+    n++;
+  }
+  return n;
 }
 
 export function hasT(src: string): boolean {

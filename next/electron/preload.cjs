@@ -1,4 +1,24 @@
-const { contextBridge } = require("electron");
+const { contextBridge, ipcRenderer } = require("electron");
+const fs = require("node:fs");
+const path = require("node:path");
+
+const MODS = (process.argv.find((a) => a.startsWith("--kk-mods=")) || "").slice("--kk-mods=".length);
+
+contextBridge.exposeInMainWorld("kkMods", {
+  dir: MODS,
+  list() {
+    if (!MODS) return [];
+    try {
+      return fs
+        .readdirSync(MODS)
+        .filter((f) => f.toLowerCase().endsWith(".json"))
+        .map((f) => ({ file: f, text: fs.statSync(path.join(MODS, f)).size <= 512 * 1024 ? fs.readFileSync(path.join(MODS, f), "utf8") : "{}" }));
+    } catch {
+      return [];
+    }
+  },
+  open: () => ipcRenderer.invoke("kk-open-mods"),
+});
 
 const APP_ID = Number(process.env.KK_STEAM_APPID || 480);
 let client = null;

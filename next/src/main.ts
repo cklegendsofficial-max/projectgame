@@ -10,6 +10,7 @@ import { localizeData } from "./i18n-data";
 import { t } from "./i18n";
 import { cloudPull, cloudPush, deckDefaults, steam, steamPresence, steamStats, syncAchievements } from "./platform";
 import { unlockedSet } from "./game/achievements";
+import { loadMods } from "./mods";
 
 async function boot(): Promise<void> {
   extensions.add(CullerPlugin);
@@ -19,6 +20,7 @@ async function boot(): Promise<void> {
   if (restored) console.log("steam cloud restored", restored);
   document.documentElement.lang = settings.lang ?? "tr";
   localizeData();
+  loadMods();
   window.addEventListener("contextmenu", (e) => e.preventDefault());
   const host = document.getElementById("game")!;
   const app = new Application();

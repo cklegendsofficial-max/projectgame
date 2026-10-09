@@ -31,6 +31,7 @@ import { audio } from "../audio";
 import { LANGS, lang, t, t as tr, type Lang } from "../i18n";
 import { cloudPush, cloudReady, onDeck, steam } from "../platform";
 import { WEEK_TIERS, weekEnd, weekNeed, weekReward, weekTheme } from "../game/weekly";
+import { loadedMods, modBridge, removeMod, storeMod, storedMods, toggleMod } from "../mods";
 
 const MOD_LABEL: Record<string, string> = { atk: "saldırı", army: "ordu gücü", heal: "iyileşme", xp: "tecrübe", trade: "ticaret", speed: "hız", sight: "görüş" };
 const SCORE_LABEL: Record<string, string> = {
@@ -1644,6 +1645,7 @@ export class Hud {
       ${slots}
       <div class="setrow"><button class="btn sm" data-a="${this.act(() => this.exportFile())}">${ic("scroll")} ${t("Dışa aktar")}</button><button class="btn sm" data-a="${this.act(() => this.importFile())}">${ic("chest")} ${t("İçe aktar")}</button></div>
       ${this.steamHtml()}
+      ${this.modsHtml()}
       <h3>${t("Klavye kısayolları")}</h3>
       <p class="dim keys"><kbd>H</kbd> Kahraman · <kbd>C</kbd> Semerkant · <kbd>Boşluk</kbd> Birliğine dön · <kbd>B</kbd> Kuşu uçur · <kbd>M</kbd> Ses · <kbd>F</kbd> Tam ekran · <kbd>WASD</kbd>/<kbd>Oklar</kbd> Kamera · <kbd>+</kbd>/<kbd>−</kbd> Yakınlaş · <kbd>T</kbd> Oyun hızı · <kbd>Esc</kbd> Kapat / Menü</p>
       <h3>${t("Oyun kolu")}</h3>
@@ -2041,6 +2043,50 @@ export class Hud {
       if (!this.g.importText(text)) this.toast("Bu dosya geçerli bir Kervan Krallık kaydı değil.", "bad");
     };
     inp.click();
+  }
+
+  private modFile(): void {
+    const inp = document.createElement("input");
+    inp.type = "file";
+    inp.accept = ".json,application/json";
+    inp.multiple = true;
+    inp.onchange = async () => {
+      let ok = 0;
+      for (const f of Array.from(inp.files ?? [])) {
+        const err = storeMod(f.name, await f.text());
+        if (err) this.toast(`${f.name}: ${tr(err)}`, "bad");
+        else ok++;
+      }
+      if (ok) {
+        this.toast(tr("{n} mod eklendi. Etkinleşmesi için oyunu yeniden yükle.", { n: ok }), "good");
+        this.render();
+      }
+    };
+    inp.click();
+  }
+
+  private modsHtml(): string {
+    const local = new Set(storedMods().map((m) => m.file));
+    const rows = loadedMods.map((m) => {
+      const errs = m.errors.length ? `<small class="why">${m.errors.length} ${tr("uyarı")}: ${m.errors.slice(0, 3).join(" · ")}</small>` : "";
+      const meta = [m.version && `v${m.version}`, m.author, m.on ? `${m.changes} ${tr("değişiklik")}` : tr("kapalı")].filter(Boolean).join(" · ");
+      return `<div class="sslot ${m.on ? "cur" : ""}">${ic("scroll")}<div><b>${m.name}</b><small>${meta}</small>${errs}</div><button class="btn sm ${m.on ? "on" : ""}" data-a="${this.act(() => {
+        toggleMod(m.id);
+        this.toast(tr("Değişiklik oyunu yeniden yükleyince geçerli olur."), "info");
+      })}">${m.on ? t("Açık") : t("Kapalı")}</button>${local.has(m.file) ? `<button class="btn sm red" data-a="${this.act(() => {
+        removeMod(m.file);
+        this.toast(tr("Mod kaldırıldı. Yeniden yükleyince silinir."), "info");
+        this.render();
+      })}">✕</button>` : ""}</div>`;
+    }).join("");
+    const pending = storedMods().filter((f) => !loadedMods.some((m) => m.file === f.file)).map((f) => `<div class="sslot">${ic("scroll")}<div><b>${f.file}</b><small>${tr("yeniden yükleyince etkinleşir")}</small></div></div>`).join("");
+    return `<h3>${ic("scroll")} ${tr("Modlar")} <em class="dim">${loadedMods.filter((m) => m.on).length}/${loadedMods.length}</em></h3>
+      <p class="dim">${tr("Modlar JSON dosyalarıdır: mal fiyatlarını, birlikleri, binaları, şehir adlarını, metinleri değiştirebilir; Bitig'e yeni sayfa ve yeni haftalık temalar ekleyebilir.")}${modBridge ? ` ${tr("Klasör")}: <code>${modBridge.dir}</code>` : ""}</p>
+      ${rows}${pending}
+      <div class="setrow">${modBridge ? `<button class="btn sm" data-a="${this.act(() => modBridge!.open())}">${ic("chest")} ${tr("Mod klasörünü aç")}</button>` : ""}<button class="btn sm" data-a="${this.act(() => this.modFile())}">${ic("scroll")} ${tr("Mod ekle (.json)")}</button><button class="btn sm go" data-a="${this.act(() => {
+        this.g.saveNow();
+        location.reload();
+      })}">${tr("Yeniden yükle")}</button></div>`;
   }
 
   private heroHtml(): string {
