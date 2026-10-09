@@ -32,7 +32,7 @@ body.nomini .mini { display: none; }
 .res small { font-size: 11px; color: #9be38a; }
 .res small.neg { color: #ff8a6a; }
 .res.full b { color: #ffb347; }
-.res.day { min-width: 0; }
+.res.day, .res.season { min-width: 0; }
 
 .track { position: absolute; left: 10px; top: 64px; width: 270px; display: flex; flex-direction: column; gap: 6px; }
 .quest.hidden { display: none; }
@@ -357,6 +357,7 @@ body.nomini .mini { display: none; }
 
 @media (max-width: 760px) {
   .res.vit { min-width: 0; }
+  .res.season b { display: none; }
   .mbar { width: 60px; }
   .actbar { bottom: 150px; }
   .slots { grid-template-columns: repeat(3, 1fr); }

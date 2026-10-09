@@ -28,15 +28,24 @@ export class Camera {
     }, { passive: false });
   }
 
+  private cw = 0;
+  private ch = 0;
+
   get w(): number {
-    return this.el.clientWidth;
+    return this.cw || (this.cw = this.el.clientWidth);
   }
 
   get h(): number {
-    return this.el.clientHeight;
+    return this.ch || (this.ch = this.el.clientHeight);
+  }
+
+  resized(): void {
+    this.cw = this.el.clientWidth;
+    this.ch = this.el.clientHeight;
   }
 
   fitMin(): void {
+    this.resized();
     this.minZoom = Math.max(this.w / this.worldW, this.h / this.worldH);
     this.zoom = Math.max(this.zoom, this.minZoom);
   }

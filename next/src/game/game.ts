@@ -19,6 +19,7 @@ import { BRO_BETRAY, BRO_MAX, BRO_MODS, LAST_WORDS, NEM_MAX, NEM_TRAITS, REVENGE
 import { RIVAL_DEFS, RIVAL_LINES, RIVAL_TRAITS, STATUS_NAME, giftCost, oneOf, rivalArmy, rivalBoss, rivalName, tribute, type Rival } from "./rivals";
 import { ENGINE_GOLD, FEAST_GOLD, SIEGE_LV, SIEGE_RENOWN, TAX, cityGarrison, cityTax, wallBonus } from "./conquest";
 import { DEEP_LORE, DEEP_PERKS, DOORS, DOOR_KEYS, RIDDLES, TOMBS, deepBoss, deepGuard, deepTier, tombOf, type DeepPerk, type DeepRun, type DoorKind } from "./deep";
+import { SEASONS, SEASON_DAYS, seasonOf, type Season, type SeasonId } from "./seasons";
 import { FACTIONS, FACTION_KEYS, HOSTILE, REP_RANKS, RANK_PERKS, factionOf, repRank, type FactionId } from "./factions";
 import { CLASS_BY_ID, CLASS_SKILLS, SKILL_MAX, WEAPON_NAME, WEAPON_STAT, skillPow, skillRank, type ClassDef, type ClassId, type ClassSkill, type WeaponKind } from "./classes";
 import { ACT2, CHAPTERS, COMP_BY_ID, COMP_MAX, ERLIK, ERLIK_SHADE, FORT_GUARD, GATE_GUARD, KARA_HAN, KASIM, SHADE_GUARD, type Chapter, type CompId, type CompMods, type Companion } from "./story";
@@ -79,6 +80,7 @@ export class Game {
   birdFly: BirdFlight | null = null;
   birdAim = false;
   fogRev = 0;
+  private lastSeason: SeasonId | null = null;
   private wasNight = false;
   private deepBest0 = 0;
   private afterBattle: (() => void) | null = null;
@@ -617,7 +619,7 @@ export class Game {
   ratePerMin(k: keyof Res): number {
     let r = 0;
     if (this.s.beylik) for (const b of BUILDINGS) if (b.produces === k) r += prodPerMin(b, this.bld(b.id));
-    if (k === "food") r -= this.upkeepPerMin();
+    if (k === "food") r = r * this.sea().food - this.upkeepPerMin();
     if (k === "gold") r -= this.wagePerMin();
     return r;
   }
@@ -673,6 +675,7 @@ export class Game {
         if (s.free) this.hud.toast(night ? `Gece çöktü. Haramiler cesurlaştı; Kurgan Taşları güçlendi ama daha çok Ruh Taşı verir.${this.nightEyes() ? " Gözlerin karanlığa alışkın." : ""}` : "Şafak söktü. Yollar yeniden canlanıyor.", "info");
       }
       this.stormTick(dt);
+      this.seasonTick();
       this.marches(dt, now);
     }
     this.fogT += dt;
@@ -984,7 +987,7 @@ export class Game {
     const ci = CITIES.findIndex((c) => c.id === city);
     const day = this.dayOf().day;
     const wave = 1 + 0.12 * Math.sin(day * 1.7 + ci * 2.3 + GOOD_KEYS.indexOf(g) * 1.1);
-    return GOODS[g].base * goodMult(city, g) * wave * this.eventMult(city, g) * (1 + 0.6 * (this.market(city)[g] ?? 0));
+    return GOODS[g].base * goodMult(city, g) * wave * (this.sea().goods[g] ?? 1) * this.eventMult(city, g) * (1 + 0.6 * (this.market(city)[g] ?? 0));
   }
 
   buyFactor(): number {
@@ -1798,7 +1801,7 @@ export class Game {
 
   heroSpeed(): number {
     const n = armySize(this.s.hero.army);
-    return HERO_SPEED * (1 + this.stat("cev") * 0.02 + (this.eq("at")?.spd ?? 0) + this.compMods().speed + 0.04 * this.tal("ruzgar") + (this.gearMods().spd ?? 0)) * (1 - Math.min(0.35, n / 300)) * this.stormSlow(this.s.hero.x, this.s.hero.y);
+    return HERO_SPEED * (1 + this.stat("cev") * 0.02 + (this.eq("at")?.spd ?? 0) + this.compMods().speed + 0.04 * this.tal("ruzgar") + (this.gearMods().spd ?? 0)) * (1 - Math.min(0.35, n / 300)) * this.stormSlow(this.s.hero.x, this.s.hero.y) * this.sea().speed;
   }
 
   stormSlow(x: number, y: number): number {
@@ -1874,7 +1877,7 @@ export class Game {
       const max = 1 + Math.floor(c.tier / 2);
       const at = this.spawnAt.get(i) ?? 0;
       if (mine < max && now >= at) {
-        this.spawnAt.set(i, now + 90000 + Math.random() * 60000);
+        this.spawnAt.set(i, now + (90000 + Math.random() * 60000) * (this.season() === "kis" ? 1.6 : 1));
         const nb: Bandit = { id: s.nextId++, camp: i, tier: c.tier, x: c.x + (Math.random() - 0.5) * 40, y: c.y + (Math.random() - 0.5) * 40, army: banditArmy(c.tier), tx: c.x, ty: c.y, wait: 1, chase: false };
         const nm = s.nemeses.find((n) => n.alive && n.camp === i && !s.bandits.some((x) => x.nem === n.id));
         if (nm && Math.random() < 0.6) this.nemGang(nb, nm);
@@ -2166,18 +2169,19 @@ export class Game {
     const s = this.s;
     this.stormT -= dt;
     if (this.stormT <= 0 && s.free && s.storms.length < 2) {
-      this.stormT = 70 + Math.random() * 80;
+      const se = this.sea();
+      this.stormT = (70 + Math.random() * 80) / se.storm;
       const h = s.hero;
       const a = Math.random() * Math.PI * 2;
       const d = 520 + Math.random() * 380;
       const x = Math.max(200, Math.min(W - 200, h.x + Math.cos(a) * d));
       const y = Math.max(200, Math.min(H - 200, h.y + Math.sin(a) * d));
       const m = this.world.moist[Math.floor((y / H) * GH) * GW + Math.floor((x / W) * GW)] ?? 0.5;
-      const kind = m < 0.32 ? "kum" : "yagmur";
+      const kind = m < 0.32 + se.sandBias ? "kum" : "yagmur";
       const sp = 10 + Math.random() * 8;
       const back = a + Math.PI + (Math.random() - 0.5) * 1.2;
       s.storms.push({ id: s.nextId++, kind, x, y, r: 240 + Math.random() * 180, vx: Math.cos(back) * sp, vy: Math.sin(back) * sp, age: 0, life: 120 + Math.random() * 90 });
-      if (this.isExplored(x, y) || d < 700) this.hud.toast(kind === "kum" ? "Ufukta bir kum fırtınası yükseliyor…" : "Gökyüzü karardı, sağanak yaklaşıyor…", "info");
+      if (this.isExplored(x, y) || d < 700) this.hud.toast(kind === "kum" ? "Ufukta bir kum fırtınası yükseliyor…" : this.season() === "kis" ? "Kuzeyden bir tipi geliyor…" : "Gökyüzü karardı, sağanak yaklaşıyor…", "info");
     }
     for (const st of s.storms) {
       st.age += dt;
@@ -2191,7 +2195,7 @@ export class Game {
     const id = hs?.id ?? 0;
     if (id !== this.inStorm) {
       this.inStorm = id;
-      if (hs) this.hud.toast(hs.kind === "kum" ? "Kum fırtınasına girdin: yavaşladın, görüşün daraldı. Muhafızlar izini kaybeder." : "Sağanak altındasın: yollar çamur, yürüyüş yavaşladı.", "info");
+      if (hs) this.hud.toast(hs.kind === "kum" ? "Kum fırtınasına girdin: yavaşladın, görüşün daraldı. Muhafızlar izini kaybeder." : this.season() === "kis" ? "Tipiye yakalandın: kar dizlere vuruyor, yürüyüş yavaşladı." : "Sağanak altındasın: yollar çamur, yürüyüş yavaşladı.", "info");
     }
   }
 
@@ -3962,6 +3966,31 @@ export class Game {
   isNight(): boolean {
     const { t } = this.dayOf();
     return t > 0.32 && t < 0.68;
+  }
+
+  season(): SeasonId {
+    return seasonOf(this.dayOf().day);
+  }
+
+  sea(): Season {
+    return SEASONS[this.season()];
+  }
+
+  seasonLeft(): number {
+    const t = this.s.time / DAY_SEC;
+    return (SEASON_DAYS - (t % SEASON_DAYS)) * DAY_SEC;
+  }
+
+  private seasonTick(): void {
+    const se = this.season();
+    if (se === this.lastSeason) return;
+    const first = this.lastSeason === null;
+    this.lastSeason = se;
+    if (first || !this.s.free) return;
+    const S = SEASONS[se];
+    this.chron(`${S.name} başladı.`);
+    this.hud.toast(`${S.icon} ${S.arrive}`, "info");
+    audio.play("story");
   }
 
   nightEyes(): boolean {

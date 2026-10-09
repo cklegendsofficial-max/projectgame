@@ -7,6 +7,7 @@ import { CAPITAL, SLAVE_RADIUS } from "../game/state";
 import { FACTIONS, type FactionId } from "../game/factions";
 import { nemName } from "../game/nemesis";
 import { TOMBS, tombOf } from "../game/deep";
+import { SEASONS } from "../game/seasons";
 
 const urls: Record<string, string> = {};
 for (const [p, u] of Object.entries(import.meta.glob<string>("../assets/**/*.webp", { eager: true, query: "?url", import: "default" }))) {
@@ -139,6 +140,9 @@ export class WorldView {
   private fogCanvas = document.createElement("canvas");
   private fogSmall = document.createElement("canvas");
   private night = new Graphics();
+  private seasonG = new Graphics();
+  private snowG = new Graphics();
+  private seasonK = "";
   private clouds = new Container();
   private lights = new Container();
   private troops = new Container();
@@ -182,6 +186,7 @@ export class WorldView {
     this.layer.addChild(this.pathG);
     this.buildDeco();
     this.layer.addChild(this.deco);
+    this.layer.addChild(this.seasonG);
     this.buildPlaces();
     this.layer.addChild(this.places);
     this.layer.addChild(this.labels);
@@ -227,6 +232,7 @@ export class WorldView {
       this.clouds.addChild(s);
     }
     this.layer.addChild(this.clouds);
+    this.layer.addChild(this.snowG);
     this.layer.addChild(this.night);
     for (const c of CITIES) {
       const s = new Sprite(glow);
@@ -916,6 +922,31 @@ export class WorldView {
     }
 
     this.drawStorms(game, dt);
+
+    const sk = game.season();
+    if (sk !== this.seasonK) {
+      this.seasonK = sk;
+      const S = SEASONS[sk];
+      this.seasonG.clear().rect(0, 0, W, H).fill({ color: S.tint, alpha: S.tintA });
+      this.deco.tint = S.deco;
+    }
+    this.snowG.clear();
+    if (sk === "kis") {
+      const vw = cam.w / cam.zoom;
+      const vh = cam.h / cam.zoom;
+      const x0 = cam.x - vw / 2;
+      const y0 = cam.y - vh / 2;
+      const r = Math.max(1.4, 2.2 / cam.zoom);
+      for (let i = 0; i < 140; i++) {
+        const fx = ((i * 7919) % 1000) / 1000;
+        const fy = ((i * 104729) % 1000) / 1000;
+        const sp = 0.06 + ((i * 31) % 10) / 100;
+        const px = x0 + (((fx + Math.sin(this.time * 0.7 + i) * 0.015 + this.time * 0.01) % 1) + 1) % 1 * vw;
+        const py = y0 + ((fy + this.time * sp) % 1) * vh;
+        this.snowG.circle(px, py, r * (0.7 + (i % 3) * 0.25));
+      }
+      this.snowG.fill({ color: 0xffffff, alpha: 0.85 });
+    }
 
     const { t } = game.dayOf();
     const dark = Math.max(0, Math.cos(t * Math.PI * 2) * -1) * 0.38;
