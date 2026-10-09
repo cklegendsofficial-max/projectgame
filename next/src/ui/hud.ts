@@ -24,6 +24,7 @@ import { SING_GOLD, TAMGA_COLORS, TAMGA_DEFAULT, TAMGA_MARKS, TAMGA_SHAPES, sing
 import { CITIES, H, NH, NW, W } from "../world/gen";
 import { assetUrl } from "../render/worldView";
 import { audio } from "../audio";
+import { LANGS, lang, t, type Lang } from "../i18n";
 import { SETS, SET_FORGE, SET_KEYS, SET_SLOTS, UNIQUES, modsText, type SetId } from "../game/legend";
 import { FACTIONS, FACTION_KEYS, HOSTILE, REP_RANKS, RANK_PERKS, factionOf } from "../game/factions";
 import { BRO_MODS, NEM_TRAITS, nemName } from "../game/nemesis";
@@ -149,10 +150,10 @@ export class Hud {
       <div class="toasts"></div>
       <div class="actbar hidden"></div>
       <div class="bottom">
-        <button data-b="capital"><img class="bi" src="${assetUrl("cities/samarkand")}" alt=""><span>Semerkant</span></button>
-        <button data-b="hero"><img class="bi round" src="${assetUrl("heroes/slave")}" alt=""><span>Kahraman</span></button>
-        <button data-b="find">${ic("tug", "bi")}<span>Birliğim</span></button>
-        <button data-b="snd" class="snd ${audio.muted ? "off" : ""}"><b class="bi">♪</b><span>Ses</span></button>
+        <button data-b="capital"><img class="bi" src="${assetUrl("cities/samarkand")}" alt=""><span>${t("Semerkant")}</span></button>
+        <button data-b="hero"><img class="bi round" src="${assetUrl("heroes/slave")}" alt=""><span>${t("Kahraman")}</span></button>
+        <button data-b="find">${ic("tug", "bi")}<span>${t("Birliğim")}</span></button>
+        <button data-b="snd" class="snd ${audio.muted ? "off" : ""}"><b class="bi">♪</b><span>${t("Ses")}</span></button>
       </div>
       <canvas class="mini" width="220" height="128"></canvas>
       <button class="birdbtn hidden"><img alt=""><span></span></button>
@@ -288,15 +289,15 @@ export class Hud {
     const detail = () => {
       const c = CLASSES.find((x) => x.id === pick)!;
       return `<img class="cbig" src="${assetUrl(c.portrait)}" alt=""><div class="cinfo">
-        <h2 style="color:${c.color}">${c.name}</h2><em>${c.role}</em><p>${c.desc}</p>
-        <div class="cstats">${STAT_KEYS.map((k) => `<div class="${c.primary.includes(k) ? "prim" : ""}"><span>${c.primary.includes(k) ? "★ " : ""}${STAT_INFO[k].name}</span><b>${pips(c.start[k])}</b></div>`).join("")}</div>
-        <div class="cgear">${ic("swords")} ${c.weapons.map((w) => WEAPON_NAME[w]).join(", ")} · ${ARMOR_NAME[c.armor]}${c.shield ? " · Kalkan" : ""}</div>
-        <div class="cpass">${c.passive}</div></div>`;
+        <h2 style="color:${c.color}">${c.name}</h2><em>${t(c.role)}</em><p>${t(c.desc)}</p>
+        <div class="cstats">${STAT_KEYS.map((k) => `<div class="${c.primary.includes(k) ? "prim" : ""}"><span>${c.primary.includes(k) ? "★ " : ""}${t(STAT_INFO[k].name)}</span><b>${pips(c.start[k])}</b></div>`).join("")}</div>
+        <div class="cgear">${ic("swords")} ${c.weapons.map((w) => WEAPON_NAME[w]).join(", ")} · ${ARMOR_NAME[c.armor]}${c.shield ? ` · ${t("Kalkan")}` : ""}</div>
+        <div class="cpass">${t(c.passive)}</div></div>`;
     };
-    el.innerHTML = `<div class="bbox cbox"><h2>Yolunu seç</h2><p class="dim">Seçtiğin yol hangi silahları ve zırhları kullanabileceğini, hangi özelliklerin seni güçlendireceğini belirler. Daha sonra değiştirilemez.</p>
-      <div class="ccards">${CLASSES.map((c) => `<button class="ccard ${c.id === pick ? "on" : ""}" data-c="${c.id}" style="--cc:${c.color}"><img src="${assetUrl(c.portrait)}" alt=""><b>${c.name}</b><small>${c.role.split(" · ")[0]}</small></button>`).join("")}</div>
+    el.innerHTML = `<div class="bbox cbox"><h2>${t("Yolunu seç")}</h2><p class="dim">${t("Seçtiğin yol hangi silahları ve zırhları kullanabileceğini, hangi özelliklerin seni güçlendireceğini belirler. Daha sonra değiştirilemez.")}</p>
+      <div class="ccards">${CLASSES.map((c) => `<button class="ccard ${c.id === pick ? "on" : ""}" data-c="${c.id}" style="--cc:${c.color}"><img src="${assetUrl(c.portrait)}" alt=""><b>${c.name}</b><small>${t(c.role).split(" · ")[0]}</small></button>`).join("")}</div>
       <div class="cdet">${detail()}</div>
-      <div class="cname"><label>Adın</label><input maxlength="14" value="${g.s.hero.name}"><button class="btn go big">Bu yolu seç</button></div></div>`;
+      <div class="cname"><label>${t("Adın")}</label><input maxlength="14" value="${g.s.hero.name}"><button class="btn go big">${t("Bu yolu seç")}</button></div></div>`;
     this.root.appendChild(el);
     el.querySelector(".ccards")!.addEventListener("click", (e) => {
       const b = (e.target as HTMLElement).closest("[data-c]") as HTMLElement | null;
@@ -1290,13 +1291,13 @@ export class Hud {
     const p = PERSONAS[d.p];
     const cards = PERSONA_KEYS.map((k) => {
       const x = PERSONAS[k];
-      return `<div class="persona ${k === d.p ? "on" : ""}" data-a="${this.act(() => g.setPersona(k))}">${ic(x.icon)}<b>${x.name}</b><small>${x.desc}</small></div>`;
+      return `<div class="persona ${k === d.p ? "on" : ""}" data-a="${this.act(() => g.setPersona(k))}">${ic(x.icon)}<b>${t(x.name)}</b><small>${t(x.desc)}</small></div>`;
     }).join("");
     const log = d.log.slice(0, 4).map((l) => `<li class="${l.bad ? "dear" : "cheap"}">${l.d}. gün · ${l.t}</li>`).join("");
-    return `<h3>${ic(p.icon)} Hikâye Anlatıcısı</h3>
-      <p class="dim">Anlatıcı destanının temposunu belirler: işler fazla yolunda giderse bela gönderir, zor anında yardım eli uzatabilir.</p>
+    return `<h3>${ic(p.icon)} ${t("Hikâye Anlatıcısı")}</h3>
+      <p class="dim">${t("Anlatıcı destanının temposunu belirler: işler fazla yolunda giderse bela gönderir, zor anında yardım eli uzatabilir.")}</p>
       <div class="personas">${cards}</div>
-      ${bar(d.t, p.limit, "en", `Gerilim ${d.t.toFixed(1)}/${p.limit}`)}
+      ${bar(d.t, p.limit, "en", `${t("Gerilim")} ${d.t.toFixed(1)}/${p.limit}`)}
       ${log ? `<ul class="runs">${log}</ul>` : ""}`;
   }
 
@@ -1310,44 +1311,53 @@ export class Hud {
         saveSettings();
         applyUi();
         if (note) this.toast(note, "good");
-      })}">${settings[k] ? "Açık" : "Kapalı"}</button></div>`;
+      })}">${settings[k] ? t("Açık") : t("Kapalı")}</button></div>`;
     const slots = Array.from({ length: SAVE_SLOTS }, (_, i) => {
       const inf = slotInfo(i);
       const cl = inf?.cls ? CLASSES.find((c) => c.id === inf.cls) : null;
       const when = inf?.at ? new Date(inf.at).toLocaleString("tr-TR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
       const btn = i === cur
-        ? `<em class="cheap">Aktif</em>`
-        : `<button class="btn sm ${inf ? "go" : ""}" data-a="${this.act(() => g.switchSlot(i))}">${inf ? "Yükle" : "Yeni oyun"}</button>`;
-      return `<div class="sslot ${i === cur ? "cur" : ""}">${ic("scroll")}<div><b>Yuva ${i + 1}${inf ? ` · ${inf.name}` : ""}</b><small>${inf ? `${cl?.name ?? "Köle"} · Sv ${inf.lv} · ${ic("crown")}${inf.renown} · ${ic("coins")}${fmt(inf.gold)}${inf.owned ? ` · ${inf.owned} şehir` : ""}${when ? ` · ${when}` : ""}` : "Boş yuva"}</small></div>${btn}</div>`;
+        ? `<em class="cheap">${t("Aktif")}</em>`
+        : `<button class="btn sm ${inf ? "go" : ""}" data-a="${this.act(() => g.switchSlot(i))}">${inf ? t("Yükle") : t("Yeni oyun")}</button>`;
+      return `<div class="sslot ${i === cur ? "cur" : ""}">${ic("scroll")}<div><b>${t("Yuva")} ${i + 1}${inf ? ` · ${inf.name}` : ""}</b><small>${inf ? `${cl?.name ?? "Köle"} · Sv ${inf.lv} · ${ic("crown")}${inf.renown} · ${ic("coins")}${fmt(inf.gold)}${inf.owned ? ` · ${inf.owned} şehir` : ""}${when ? ` · ${when}` : ""}` : t("Boş yuva")}</small></div>${btn}</div>`;
     }).join("");
-    return `${this.directorHtml()}<h3>Ses</h3>
-      <div class="setrow"><span>Müzik</span><input type="range" min="0" max="100" value="${pct(settings.music)}" data-set="music"><b data-so="music">${pct(settings.music)}</b></div>
-      <div class="setrow"><span>Efektler</span><input type="range" min="0" max="100" value="${pct(settings.fx)}" data-set="fx"><b data-so="fx">${pct(settings.fx)}</b></div>
-      <h3>Görüntü</h3>
-      <div class="setrow"><span>Arayüz boyutu</span>${[0.85, 1, 1.15, 1.3].map((v) => `<button class="btn sm ${settings.ui === v ? "on" : ""}" data-a="${this.act(() => {
+    return `${this.directorHtml()}<h3>${lang() === "tr" ? "Dil · Language" : "Language · Dil"}</h3>
+      <div class="setrow">${(Object.keys(LANGS) as Lang[]).map((l) => `<button class="btn sm ${lang() === l ? "on" : ""}" data-a="${this.act(() => {
+        if (lang() === l) return;
+        settings.lang = l;
+        saveSettings();
+        g.saveNow();
+        location.reload();
+      })}">${LANGS[l]}</button>`).join("")}</div>
+      <p class="dim">${t("Dil değişikliği sayfa yenilenince tamamlanır. Hikâye metinlerinin çevirisi sürüyor.")}</p>
+      <h3>${t("Ses")}</h3>
+      <div class="setrow"><span>${t("Müzik")}</span><input type="range" min="0" max="100" value="${pct(settings.music)}" data-set="music"><b data-so="music">${pct(settings.music)}</b></div>
+      <div class="setrow"><span>${t("Efektler")}</span><input type="range" min="0" max="100" value="${pct(settings.fx)}" data-set="fx"><b data-so="fx">${pct(settings.fx)}</b></div>
+      <h3>${t("Görüntü")}</h3>
+      <div class="setrow"><span>${t("Arayüz boyutu")}</span>${[0.85, 1, 1.15, 1.3].map((v) => `<button class="btn sm ${settings.ui === v ? "on" : ""}" data-a="${this.act(() => {
         settings.ui = v;
         saveSettings();
         applyUi();
       })}">%${pct(v)}</button>`).join("")}</div>
-      <div class="setrow"><span>Tam ekran</span><button class="btn sm ${document.fullscreenElement ? "on" : ""}" data-a="${this.act(() => toggleFullscreen())}">${document.fullscreenElement ? "Açık" : "Kapalı"}</button><small class="dim">F11 / F</small></div>
-      ${toggle("mini", "Mini harita")}
-      ${toggle("eco", "Pil tasarrufu", "Pil tasarrufu sayfa yenilenince devreye girer (30 FPS, düşük çözünürlük).")}
-      ${"vibrate" in navigator ? toggle("haptic", "Titreşim") : ""}
-      <h3>Kayıt yuvaları</h3>
-      <p class="dim">Oyun her birkaç saniyede bir etkin yuvaya kaydedilir. Yuva değiştirince mevcut oyunun kaydedilir ve sayfa yeniden yüklenir.</p>
+      <div class="setrow"><span>${t("Tam ekran")}</span><button class="btn sm ${document.fullscreenElement ? "on" : ""}" data-a="${this.act(() => toggleFullscreen())}">${document.fullscreenElement ? t("Açık") : t("Kapalı")}</button><small class="dim">F11 / F</small></div>
+      ${toggle("mini", t("Mini harita"))}
+      ${toggle("eco", t("Pil tasarrufu"), "Pil tasarrufu sayfa yenilenince devreye girer (30 FPS, düşük çözünürlük).")}
+      ${"vibrate" in navigator ? toggle("haptic", t("Titreşim")) : ""}
+      <h3>${t("Kayıt yuvaları")}</h3>
+      <p class="dim">${t("Oyun her birkaç saniyede bir etkin yuvaya kaydedilir. Yuva değiştirince mevcut oyunun kaydedilir ve sayfa yeniden yüklenir.")}</p>
       ${slots}
-      <div class="setrow"><button class="btn sm" data-a="${this.act(() => this.exportFile())}">${ic("scroll")} Dışa aktar</button><button class="btn sm" data-a="${this.act(() => this.importFile())}">${ic("chest")} İçe aktar</button></div>
-      <h3>Klavye kısayolları</h3>
+      <div class="setrow"><button class="btn sm" data-a="${this.act(() => this.exportFile())}">${ic("scroll")} ${t("Dışa aktar")}</button><button class="btn sm" data-a="${this.act(() => this.importFile())}">${ic("chest")} ${t("İçe aktar")}</button></div>
+      <h3>${t("Klavye kısayolları")}</h3>
       <p class="dim keys"><kbd>H</kbd> Kahraman · <kbd>C</kbd> Semerkant · <kbd>Boşluk</kbd> Birliğine dön · <kbd>B</kbd> Kuşu uçur · <kbd>M</kbd> Ses · <kbd>F</kbd> Tam ekran · <kbd>WASD</kbd>/<kbd>Oklar</kbd> Kamera · <kbd>+</kbd>/<kbd>−</kbd> Yakınlaş · <kbd>Esc</kbd> Kapat</p>
       ${this.achHtml()}
       ${this.legacyHtml()}
-      <button class="btn sm red reset" data-a="${this.act(() => confirm("Bu yuvadaki tüm ilerlemen silinip yeni bir oyun başlayacak. Emin misin?") && g.resetGame())}">Bu yuvada yeni oyun başlat</button>`;
+      <button class="btn sm red reset" data-a="${this.act(() => confirm("Bu yuvadaki tüm ilerlemen silinip yeni bir oyun başlayacak. Emin misin?") && g.resetGame())}">${t("Bu yuvada yeni oyun başlat")}</button>`;
   }
 
   private achHtml(): string {
     const g = this.g;
     const n = ACHIEVEMENTS.filter((a) => g.achDone(a.id)).length;
-    return `<h3>${ic("trophy")} Başarımlar <em class="dim">${n}/${ACHIEVEMENTS.length}</em></h3><div class="achs">${ACHIEVEMENTS.map((a) => `<div class="ach ${g.achDone(a.id) ? "on" : ""}" title="${a.desc}">${ic(a.icon)}<b>${a.name}</b><small>${a.desc}</small></div>`).join("")}</div>`;
+    return `<h3>${ic("trophy")} ${t("Başarımlar")} <em class="dim">${n}/${ACHIEVEMENTS.length}</em></h3><div class="achs">${ACHIEVEMENTS.map((a) => `<div class="ach ${g.achDone(a.id) ? "on" : ""}" title="${a.desc}">${ic(a.icon)}<b>${a.name}</b><small>${a.desc}</small></div>`).join("")}</div>`;
   }
 
   private otagHtml(): string {
@@ -1364,12 +1374,12 @@ export class Hud {
   private kutHtml(): string {
     const s = this.g.s;
     const k = s.kut ?? 50;
-    const t = kutTier(k);
+    const tier = kutTier(k);
     const pct = (x: number): string => `${x >= 0 ? "+" : ""}${Math.round(x * 100)}%`;
     const left = Math.max(0, (s.tore?.next ?? 0) - this.g.dayOf().day);
-    return `<h3>${ic("crown")} Kut ve Töre <em class="${k >= 45 ? "cheap" : "dear"}">${t.name}</em></h3>
+    return `<h3>${ic("crown")} ${t("Kut ve Töre")} <em class="${k >= 45 ? "cheap" : "dear"}">${tier.name}</em></h3>
       ${bar(k, 100, "kut", `Kut ${Math.round(k)}/100`)}
-      <p class="dim">${t.desc}</p>
+      <p class="dim">${tier.desc}</p>
       <div class="stats"><div>${ic("tug")}Ordu <b>${pct(kutArmy(k))}</b></div><div>${ic("lord_bey")}Kurultay oyu <b>${pct(kutVote(k))}</b></div><div>${ic("scroll")}Davalar <b>${s.c.tore ?? 0}</b></div></div>
       <small class="dim">Kut; zaferle, adil hükümle, şölen ve fetihle artar. Yenilgi, soygun, ağır vergi ve kaybedilen şehirle söner. ${left ? `Sıradaki töre davası ~${left} gün sonra.` : "Yakında bir töre davası gelecek."} Kademeler: ${KUT_TIERS.map((x) => x.name).join(" · ")}</small>`;
   }
@@ -1383,7 +1393,7 @@ export class Hud {
     g.battleLock = true;
     const el = document.createElement("div");
     el.className = "archery";
-    el.innerHTML = `<canvas></canvas><div class="ahud"></div><div class="ahint">Hedefe dokun ya da <kbd>Boşluk</kbd> · kabak 10 · kurt 20 · kartal 35 · art arda isabet çarpan verir</div><button class="btn sm aclose">Bırak</button><div class="aresult"></div>`;
+    el.innerHTML = `<canvas></canvas><div class="ahud"></div><div class="ahint">${t("Hedefe dokun ya da <kbd>Boşluk</kbd> · kabak 10 · kurt 20 · kartal 35 · art arda isabet çarpan verir")}</div><button class="btn sm aclose">${t("Bırak")}</button><div class="aresult"></div>`;
     this.root.appendChild(el);
     const hudEl = el.querySelector(".ahud") as HTMLElement;
     const res = el.querySelector(".aresult") as HTMLElement;
@@ -1406,7 +1416,7 @@ export class Hud {
     const game = new Archery(el.querySelector("canvas")!, (score, hits) => {
       const note = g.archeryReward(score, hits);
       audio.play(score >= 150 ? "level" : "quest");
-      res.innerHTML = `<div class="bbox"><h2>Kabak Atma bitti</h2><p><b>${score}</b> puan · ${hits} isabet<br>En iyi: <b>${g.s.ok.best}</b></p><p>${note}</p><div class="row"><button class="btn go again">Tekrar</button><button class="btn quit">Kapat</button></div></div>`;
+      res.innerHTML = `<div class="bbox"><h2>${t("Kabak Atma bitti")}</h2><p><b>${score}</b> ${t("puan")} · ${hits} ${t("isabet")}<br>${t("En iyi")}: <b>${g.s.ok.best}</b></p><p>${note}</p><div class="row"><button class="btn go again">${t("Tekrar")}</button><button class="btn quit">${t("Kapat")}</button></div></div>`;
       res.classList.add("on");
       res.querySelector(".again")!.addEventListener("click", () => { finish(); this.openArchery(); });
       res.querySelector(".quit")!.addEventListener("click", finish);
@@ -1423,8 +1433,8 @@ export class Hud {
   private gamesHtml(): string {
     const g = this.g;
     const paid = g.archeryPaid();
-    return `<h3>${ic("u_archer")} Bozkır Oyunları</h3>
-      <div class="grow">${ic("u_cavalry", "gimg")}<div class="bi2"><b>Kabak Atma <em>atlı okçuluk</em></b><small>Dörtnala giderken kabakları, kurtları ve kartalları vur. 30 saniye, 20 ok.</small><small class="${paid ? "cheap" : "dim"}">${paid ? "Bugünün ödülü hazır" : "Bugün ödül alındı · antrenman"} · Rekor: ${g.s.ok?.best ?? 0}</small></div><button class="btn sm go" data-a="${this.act(() => this.openArchery())}">Oyna</button></div>`;
+    return `<h3>${ic("u_archer")} ${t("Bozkır Oyunları")}</h3>
+      <div class="grow">${ic("u_cavalry", "gimg")}<div class="bi2"><b>${t("Kabak Atma")} <em>${t("atlı okçuluk")}</em></b><small>Dörtnala giderken kabakları, kurtları ve kartalları vur. 30 saniye, 20 ok.</small><small class="${paid ? "cheap" : "dim"}">${paid ? "Bugünün ödülü hazır" : "Bugün ödül alındı · antrenman"} · Rekor: ${g.s.ok?.best ?? 0}</small></div><button class="btn sm go" data-a="${this.act(() => this.openArchery())}">${t("Oyna")}</button></div>`;
   }
 
   private korkutHtml(): string {
@@ -1437,22 +1447,22 @@ export class Hud {
       const fin = done.includes(b.id);
       const why = g.boyReason(b);
       const btn = isCur
-        ? `<button class="btn sm go" data-a="${this.act(() => { this.close(); const at = s.boy!.at!; g.cam.flyTo(at.x, at.y, 0.8); })}">Bul</button>`
-        : fin ? `<em class="cheap">✓</em>` : `<button class="btn sm ${why ? "off" : "go"}" title="${why}" data-a="${this.act(() => g.boyStart(b.id))}">Dinle</button>`;
+        ? `<button class="btn sm go" data-a="${this.act(() => { this.close(); const at = s.boy!.at!; g.cam.flyTo(at.x, at.y, 0.8); })}">${t("Bul")}</button>`
+        : fin ? `<em class="cheap">✓</em>` : `<button class="btn sm ${why ? "off" : "go"}" title="${why}" data-a="${this.act(() => g.boyStart(b.id))}">${t("Dinle")}</button>`;
       const sub = isCur ? `<small class="cheap">Adım ${cur!.n + 1}/${b.steps.length}: ${cur!.st.place} (${CITY_NAME[cur!.st.near]} yakınları)</small>` : fin ? `<small class="dim">Destan tamamlandı</small>` : `<small class="dim">${b.lv}. seviye${why && why !== "Dede Korkut şehir hanlarında anlatır" ? ` · ${why}` : ""}</small>`;
       return `<div class="grow ${fin ? "dim" : ""}">${ic(b.icon, "gimg")}<div class="bi2"><b>${b.name}</b>${sub}</div>${btn}</div>`;
     }).join("");
-    return `<h3>${ic("scroll")} Dede Korkut Boyları <em class="dim">${done.length}/${BOYS.length}</em></h3><p class="dim">Dede Korkut şehir hanlarında Oğuz destanlarını anlatır. Dinlediğin boyu kendi kılıcınla yeniden yaz.</p>${rows}`;
+    return `<h3>${ic("scroll")} ${t("Dede Korkut Boyları")} <em class="dim">${done.length}/${BOYS.length}</em></h3><p class="dim">Dede Korkut şehir hanlarında Oğuz destanlarını anlatır. Dinlediğin boyu kendi kılıcınla yeniden yaz.</p>${rows}`;
   }
 
   private familyHtml(): string {
     const g = this.g;
     const f = g.family();
     const day = g.dayOf().day;
-    if (!f.spouse) return `<h3>${ic("lord_bey")} Hanedan</h3><p class="dim">Bir hanedan kur: dostluğu 40'ı geçen bir beyle karşılaşınca kızı için dünürcü gönder. Dünürün ittifakı asla bozmaz; doğan oğulların ordunda sancak taşır.</p>`;
+    if (!f.spouse) return `<h3>${ic("lord_bey")} ${t("Hanedan")}</h3><p class="dim">Bir hanedan kur: dostluğu 40'ı geçen bir beyle karşılaşınca kızı için dünürcü gönder. Dünürün ittifakı asla bozmaz; doğan oğulların ordunda sancak taşır.</p>`;
     const from = g.s.rivals.find((r) => r.id === f.spouse!.from);
     const kids = f.kids.map((k) => `<div class="qrow">${ic(k.son ? "u_spear" : "healer")} ${k.name} <span>${k.son ? "oğul" : "kız"} · ${kidAge(k, day) || "<1"} yaşında${k.son && kidAge(k, day) >= 1 ? " · sancak taşır" : ""}</span></div>`).join("");
-    return `<h3>${ic("lord_bey")} Hanedan <em class="cheap">+%${Math.round(g.famBonus() * 100)} ordu · +%3 müttefik</em></h3>
+    return `<h3>${ic("lord_bey")} ${t("Hanedan")} <em class="cheap">+%${Math.round(g.famBonus() * 100)} ordu · +%3 müttefik</em></h3>
       <div class="grow">${ic("healer", "gimg")}<div class="bi2"><b>${f.spouse.name} Hatun</b><small>${from ? `${from.name} ${from.title} kızı · dünürün` : "Eşin"}</small></div></div>
       ${kids || `<p class="dim">Henüz çocuğun yok. Tengri bir varis bağışlasın.</p>`}`;
   }
@@ -1460,15 +1470,15 @@ export class Hud {
   private ozanHtml(): string {
     const g = this.g;
     const s = g.s;
-    const t: Tamga = { ...TAMGA_DEFAULT, ...s.tamga };
+    const tg: Tamga = { ...TAMGA_DEFAULT, ...s.tamga };
     const chips = (part: keyof Tamga, opts: [string, string][]): string =>
-      `<div class="tchips">${opts.map(([id, label]) => `<button class="tchip ${t[part] === id ? "on" : ""}" data-a="${this.act(() => g.setTamga(part, id))}">${label}</button>`).join("")}</div>`;
+      `<div class="tchips">${opts.map(([id, label]) => `<button class="tchip ${tg[part] === id ? "on" : ""}" data-a="${this.act(() => g.setTamga(part, id))}">${label}</button>`).join("")}</div>`;
     const songs = s.songs ?? [];
     const why = g.singReason();
     const list = songs.slice(0, this.allSongs ? songs.length : 2).map((sg) => `<div class="song"><b>${sg.title}</b> <small class="dim">${sg.d}. gün</small><i class="poem">${sg.lines.join("<br>")}</i></div>`).join("");
-    return `<h3>${ic("scroll")} Tamga ve Destan Defteri</h3>
-      <div class="tamgaed">${tamgaSvg(t, 84)}<div>
-        ${chips("shape", Object.keys(TAMGA_SHAPES).map((id) => [id, tamgaSvg({ ...t, shape: id }, 26)]))}
+    return `<h3>${ic("scroll")} ${t("Tamga ve Destan Defteri")}</h3>
+      <div class="tamgaed">${tamgaSvg(tg, 84)}<div>
+        ${chips("shape", Object.keys(TAMGA_SHAPES).map((id) => [id, tamgaSvg({ ...tg, shape: id }, 26)]))}
         ${chips("mark", Object.entries(TAMGA_MARKS).map(([id, x]) => [id, x.name]))}
         ${chips("color", Object.keys(TAMGA_COLORS).map((id) => [id, `<span class="tdot" style="background:${TAMGA_COLORS[id]}"></span>`]))}
       </div></div>
@@ -1494,7 +1504,7 @@ export class Hud {
       return `<div class="ach ${on ? "on" : ""}" title="${on ? p.desc : "Henüz görülmedi"}">${ic(e.img)}<b>${on ? e.name : "???"}</b><small>${on ? `${p.name}: ${p.desc}` : "Bu sonu gör, mirası aç."}</small></div>`;
     }).join("");
     const runs = l.runs.slice(0, 5).map((r) => `<li><b>${r.name}</b> · ${endingOf(r.ending)?.name ?? r.ending} · Sv ${r.lv} · ${r.day}. gün</li>`).join("");
-    return `<h3>${ic("scroll")} Miras <em class="dim">${l.endings.length}/${ENDINGS.length} son</em></h3>
+    return `<h3>${ic("scroll")} ${t("Miras")} <em class="dim">${l.endings.length}/${ENDINGS.length} ${t("son")}</em></h3>
       <p class="dim">Gök Tengri Destanı'nın her sonu, sonraki bütün destanlarında geçerli kalıcı bir miras açar.</p>
       <div class="achs">${cards}</div>${runs ? `<ul class="runs">${runs}</ul>` : ""}`;
   }
@@ -1530,7 +1540,7 @@ export class Hud {
     const s = g.s;
     const h = s.hero;
     const need = xpNeed(h.lv);
-    const tabs = this.tabs([["karakter", "Karakter"], ["beceri", `Beceriler${h.spts ? ` (${h.spts})` : ""}`], ["yetenek", `Yetenekler${h.tpts ? ` (${h.tpts})` : ""}`], ["techizat", `Teçhizat${h.bag.length ? ` (${h.bag.length})` : ""}`], ["ordu", "Birlik"], ...(s.free ? ([["unvan", `Hedefler${g.dailyClaimable() ? " ●" : ""}`]] as [string, string][]) : []), ["ayar", "⚙"]]);
+    const tabs = this.tabs([["karakter", t("Karakter")], ["beceri", `${t("Beceriler")}${h.spts ? ` (${h.spts})` : ""}`], ["yetenek", `${t("Yetenekler")}${h.tpts ? ` (${h.tpts})` : ""}`], ["techizat", `${t("Teçhizat")}${h.bag.length ? ` (${h.bag.length})` : ""}`], ["ordu", t("Birlik")], ...(s.free ? ([["unvan", `${t("Hedefler")}${g.dailyClaimable() ? " ●" : ""}`]] as [string, string][]) : []), ["ayar", "⚙"]]);
     let body = "";
     if (this.tab === "karakter") {
       const cl = g.cls();
@@ -1819,7 +1829,7 @@ export class Hud {
     else if (ct) this.setHtml(this.taskEl, `${ic("j_caravan", "qi")}<div><small>Kervan sözleşmesi · ${dur(ct.until - g.now)}</small><b>${ct.cargo} → ${CITY_NAME[ct.to]}</b></div>`);
     else if (vy) this.setHtml(this.taskEl, `${ic(GOODS[vy.good].icon, "qi")}<div><small>⚓ Denizde · %${Math.floor(Math.min(1, (s.time - vy.at) / vy.dur) * 100)}${vy.escort ? " · muhafızlı" : ""}</small><b>${vy.qty} ${GOODS[vy.good].name} → ${CITY_NAME[vy.to]}</b></div>`);
     const bld = g.building();
-    this.root.querySelector('[data-b="capital"] span')!.textContent = bld ? `⏱ ${dur(s.buildings[bld].until - g.now)}` : "Semerkant";
+    this.root.querySelector('[data-b="capital"] span')!.textContent = bld ? `⏱ ${dur(s.buildings[bld].until - g.now)}` : t("Semerkant");
     const hb = this.root.querySelector('[data-b="hero"]')!;
     (hb.querySelector("img") as HTMLImageElement).src = assetUrl(g.face());
     hb.classList.toggle("pulse", h.points > 0 || g.dailyClaimable());

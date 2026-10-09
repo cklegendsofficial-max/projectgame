@@ -10,6 +10,7 @@ import { applyUi, settings } from "./settings";
 async function boot(): Promise<void> {
   extensions.add(CullerPlugin);
   applyUi();
+  document.documentElement.lang = settings.lang ?? "tr";
   window.addEventListener("contextmenu", (e) => e.preventDefault());
   const host = document.getElementById("game")!;
   const app = new Application();
