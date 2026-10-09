@@ -22,7 +22,7 @@ import { Archery } from "./archery";
 import { Gamepad, type PadButton } from "./gamepad";
 import { KUT_TIERS, kutArmy, kutTier, kutVote } from "../game/kut";
 import { SING_GOLD, TAMGA_COLORS, TAMGA_DEFAULT, TAMGA_MARKS, TAMGA_SHAPES, singRenown, tamgaSvg, type Tamga } from "../game/ozan";
-import { CITIES, H, NH, NW, W } from "../world/gen";
+import { CITIES, H, NAV, NH, NW, W } from "../world/gen";
 import { assetUrl } from "../render/worldView";
 import { audio } from "../audio";
 import { LANGS, lang, t, type Lang } from "../i18n";
@@ -245,7 +245,13 @@ export class Hud {
     window.addEventListener("keydown", (e) => {
       if ((e.target as HTMLElement).closest?.("input, textarea")) return;
       const k = e.key.toLowerCase();
-      if (k === "escape") return this.close();
+      if (k === "escape") {
+        if (this.menuOpen) return this.closeMenu();
+        if (!this.panel.classList.contains("hidden")) return this.close();
+        if (!this.archery && !this.modal() && !g.battleLock) this.openMenu();
+        return;
+      }
+      if (this.menuOpen) return;
       if (PAN.includes(k)) {
         g.cam.keys.add(k);
         e.preventDefault();
@@ -284,8 +290,12 @@ export class Hud {
       },
       zoom: (f) => g.cam.zoomBy(f),
     });
-    if (g.s.cls === null) setTimeout(() => this.classSelect(), 300);
-    else if (!g.s.free && g.s.c.shifts === 0 && g.s.quest === 0) setTimeout(() => this.intro(), 400);
+    const begin = (): void => {
+      if (g.s.cls === null) setTimeout(() => this.classSelect(), 300);
+      else if (!g.s.free && g.s.c.shifts === 0 && g.s.quest === 0) setTimeout(() => this.intro(), 400);
+    };
+    if (!navigator.webdriver || location.search.includes("title")) this.openMenu(true, begin);
+    else begin();
   }
 
   private intro(): void {
@@ -615,7 +625,7 @@ export class Hud {
   }
 
   modal(): boolean {
-    return this.storyOpen || this.battleOpen;
+    return this.storyOpen || this.battleOpen || this.menuOpen;
   }
 
   gamepad: Gamepad | null = null;
@@ -624,6 +634,10 @@ export class Hud {
     const g = this.g;
     if (this.archery) {
       if (b === "b") window.dispatchEvent(new KeyboardEvent("keydown", { code: "Escape", key: "Escape" }));
+      return;
+    }
+    if (this.menuOpen) {
+      if (b === "b" || b === "back" || b === "start") this.closeMenu();
       return;
     }
     if (this.modal()) return;
@@ -638,7 +652,7 @@ export class Hud {
     }
     if (b === "a") g.cam.onTap(g.cam.x, g.cam.y);
     else if (b === "start") this.openHero();
-    else if (b === "back") this.openPlace({ kind: "capital" });
+    else if (b === "back") this.openMenu();
     else if (b === "y") g.cam.flyTo(g.s.hero.x, g.s.hero.y, Math.max(g.cam.zoom, 0.7));
     else if (b === "x" && g.s.bird && g.s.free) g.aimBird();
     else if (b === "lb") g.cam.zoomBy(1 / 1.25);
@@ -655,7 +669,92 @@ export class Hud {
   }
 
   panelOpen(): boolean {
-    return !this.panel.classList.contains("hidden") || this.battleOpen || this.storyOpen;
+    return !this.panel.classList.contains("hidden") || this.battleOpen || this.storyOpen || this.menuOpen;
+  }
+
+  menuOpen = false;
+  private menuEl: HTMLElement | null = null;
+  private menuDone: (() => void) | null = null;
+  private menuFly = 0;
+  private menuCity = 0;
+
+  openMenu(title = false, done: (() => void) | null = null): void {
+    const g = this.g;
+    if (this.menuOpen || this.archery || this.battleOpen || this.storyOpen) return;
+    this.close();
+    g.cam.keys.clear();
+    this.menuOpen = true;
+    this.menuDone = done;
+    this.menuFly = 0;
+    const s = g.s;
+    const started = s.cls !== null;
+    const inf = slotInfo(curSlot());
+    const cl = s.cls ? CLASSES.find((c) => c.id === s.cls) : null;
+    const desktop = navigator.userAgent.includes("Electron");
+    const items: [string, string, string, () => void][] = [
+      [title ? (started ? t("Destana devam et") : t("Yeni destan")) : t("Oyuna dön"), started ? `${s.hero.name} · ${cl?.name ?? ""} · ${t("Sv")} ${s.hero.lv}${inf?.renown ? ` · ${ic("crown")}${inf.renown}` : ""}` : t("Bir köle olarak başla, hakan olarak öl"), "go", () => this.closeMenu()],
+      [t("Kayıt yuvaları"), t("Yükle, yeni yuva aç, dışa/içe aktar"), "", () => this.menuTo("ayar")],
+      [t("Ayarlar"), t("Ses, görüntü, anlatıcı, dil"), "", () => this.menuTo("ayar")],
+      ...(desktop ? ([[t("Oyundan çık"), t("İlerlemen kaydedilir"), "red", () => { g.saveNow(); window.close(); }]] as [string, string, string, () => void][]) : []),
+    ];
+    const el = document.createElement("div");
+    el.className = `battle kkmenu${title ? " title" : ""}`;
+    el.innerHTML = `<div class="mwrap">
+      <div class="mlogo">${tamgaSvg({ ...TAMGA_DEFAULT, ...s.tamga }, 64)}<h1>Kervan Krallık</h1><p>${t("İpek Yolu'nda bir köleden hakana")}</p></div>
+      <div class="mbtns">${items.map(([label, sub, cls], i) => `<button class="mbtn ${cls}" data-m="${i}"><b>${label}</b><small>${sub}</small></button>`).join("")}</div>
+      <div class="mfoot">${(Object.keys(LANGS) as Lang[]).map((l) => `<button class="btn sm ${lang() === l ? "on" : ""}" data-l="${l}">${LANGS[l]}</button>`).join("")}<span class="dim">${title ? "" : t("Oyun duraklatıldı")}</span></div>
+    </div>`;
+    el.addEventListener("click", (e) => {
+      const tg = e.target as HTMLElement;
+      const m = tg.closest("[data-m]") as HTMLElement | null;
+      if (m) {
+        audio.play("click");
+        items[Number(m.dataset.m)][3]();
+        return;
+      }
+      const l = (tg.closest("[data-l]") as HTMLElement | null)?.dataset.l as Lang | undefined;
+      if (l && l !== lang()) {
+        settings.lang = l;
+        saveSettings();
+        if (started) g.saveNow();
+        location.reload();
+      }
+    });
+    this.root.appendChild(el);
+    this.menuEl = el;
+    document.body.classList.toggle("titled", title);
+  }
+
+  closeMenu(): void {
+    if (!this.menuOpen) return;
+    if (this.menuEl?.classList.contains("title")) this.g.cam.flyTo(this.g.s.hero.x, this.g.s.hero.y, 0.75);
+    this.menuEl?.remove();
+    this.menuEl = null;
+    this.menuOpen = false;
+    document.body.classList.remove("titled");
+    const done = this.menuDone;
+    this.menuDone = null;
+    done?.();
+  }
+
+  private menuTo(tab: string): void {
+    this.closeMenu();
+    if (this.storyOpen) return;
+    this.openHero();
+    this.tab = tab;
+    this.render();
+  }
+
+  menuTick(dt: number): void {
+    if (!this.menuEl?.classList.contains("title")) return;
+    this.menuFly -= dt;
+    if (this.menuFly > 0) return;
+    this.menuFly = 7;
+    const s = this.g.s;
+    const seen = CITIES.filter((c) => s.explored[Math.floor(c.y / NAV) * NW + Math.floor(c.x / NAV)]);
+    const spots = seen.length > 1 ? seen : [{ x: s.hero.x, y: s.hero.y }, ...seen];
+    const c = spots[this.menuCity++ % spots.length];
+    this.g.cam.flyTo(c.x, c.y, 0.62);
   }
 
   toast(text: string, kind: "good" | "bad" | "info" = "info"): void {
@@ -1393,9 +1492,9 @@ export class Hud {
       ${slots}
       <div class="setrow"><button class="btn sm" data-a="${this.act(() => this.exportFile())}">${ic("scroll")} ${t("Dışa aktar")}</button><button class="btn sm" data-a="${this.act(() => this.importFile())}">${ic("chest")} ${t("İçe aktar")}</button></div>
       <h3>${t("Klavye kısayolları")}</h3>
-      <p class="dim keys"><kbd>H</kbd> Kahraman · <kbd>C</kbd> Semerkant · <kbd>Boşluk</kbd> Birliğine dön · <kbd>B</kbd> Kuşu uçur · <kbd>M</kbd> Ses · <kbd>F</kbd> Tam ekran · <kbd>WASD</kbd>/<kbd>Oklar</kbd> Kamera · <kbd>+</kbd>/<kbd>−</kbd> Yakınlaş · <kbd>Esc</kbd> Kapat</p>
+      <p class="dim keys"><kbd>H</kbd> Kahraman · <kbd>C</kbd> Semerkant · <kbd>Boşluk</kbd> Birliğine dön · <kbd>B</kbd> Kuşu uçur · <kbd>M</kbd> Ses · <kbd>F</kbd> Tam ekran · <kbd>WASD</kbd>/<kbd>Oklar</kbd> Kamera · <kbd>+</kbd>/<kbd>−</kbd> Yakınlaş · <kbd>Esc</kbd> Kapat / Menü</p>
       <h3>${t("Oyun kolu")}</h3>
-      <p class="dim keys">${t("<kbd>Sol çubuk</kbd> Kamera / seçim · <kbd>A</kbd> Nişangâha git, seç · <kbd>B</kbd> Kapat · <kbd>Y</kbd> Birliğine dön · <kbd>X</kbd> Kuşu uçur · <kbd>LB</kbd>/<kbd>RB</kbd> Yakınlaş, sekme · <kbd>LT</kbd>/<kbd>RT</kbd> Yakınlaş · <kbd>Start</kbd> Kahraman · <kbd>Back</kbd> Semerkant")}</p>
+      <p class="dim keys">${t("<kbd>Sol çubuk</kbd> Kamera / seçim · <kbd>A</kbd> Nişangâha git, seç · <kbd>B</kbd> Kapat · <kbd>Y</kbd> Birliğine dön · <kbd>X</kbd> Kuşu uçur · <kbd>LB</kbd>/<kbd>RB</kbd> Yakınlaş, sekme · <kbd>LT</kbd>/<kbd>RT</kbd> Yakınlaş · <kbd>Start</kbd> Kahraman · <kbd>Back</kbd> Menü")}</p>
       ${this.achHtml()}
       ${this.legacyHtml()}
       <button class="btn sm red reset" data-a="${this.act(() => confirm("Bu yuvadaki tüm ilerlemen silinip yeni bir oyun başlayacak. Emin misin?") && g.resetGame())}">${t("Bu yuvada yeni oyun başlat")}</button>`;
@@ -1450,7 +1549,10 @@ export class Hud {
         e.preventDefault();
         e.stopPropagation();
         this.archery?.shootAuto();
-      } else if (e.code === "Escape") finish();
+      } else if (e.code === "Escape") {
+        e.stopImmediatePropagation();
+        finish();
+      }
     };
     const finish = (): void => {
       clearInterval(tick);

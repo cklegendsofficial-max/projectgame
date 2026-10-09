@@ -33,7 +33,8 @@ async function boot(): Promise<void> {
   cam.onTap = (x, y) => game.tap(x, y);
   app.ticker.add((tk) => {
     const dt = Math.min(0.1, tk.deltaMS / 1000);
-    game.update(dt);
+    if (hud.menuOpen) hud.menuTick(dt);
+    else game.update(dt);
     cam.update(dt, view.layer);
     view.update(dt, game, cam);
     hud.update();

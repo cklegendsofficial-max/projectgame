@@ -105,6 +105,7 @@ export class Game {
   private wasNight = false;
   private deepBest0 = 0;
   private afterBattle: (() => void) | null = null;
+  private songLater = false;
   private retreatHook: (() => void) | null = null;
   private kurAnn = -1;
 
@@ -3055,7 +3056,8 @@ export class Game {
     const dir = this.dir();
     dir.fight = this.dayOf().day;
     dir.losses = res.win ? 0 : dir.losses + 1;
-    if (res.win && boss && (this.s.songs?.length ?? 0) === songs0) this.sing("zafer", { foe: boss.name });
+    if (res.win && boss && !this.songLater && (this.s.songs?.length ?? 0) === songs0) this.sing("zafer", { foe: boss.name });
+    this.songLater = false;
     let fled = "";
     if (!res.win) {
       const near = CITIES.map((c, i) => ({ i, d: Math.hypot(c.x - h.x, c.y - h.y) })).sort((a, b) => a.d - b.d)[0];
@@ -3871,6 +3873,7 @@ export class Game {
     if (st.act === "fight") {
       this.battle(`${b.name} · ${st.place}`, st.army!(s.hero.lv), st.bonus ?? 0, (win) => {
         if (!win) return `<p class="warn">Geri çekilmek zorunda kaldın. ${st.place} seni bekliyor.</p>`;
+        if (s.boy && s.boy.step >= b.steps.length - 1) this.songLater = true;
         this.afterBattle = () => this.boyNext(st.done);
         return `<p class="good">${st.boss ? `${st.boss.name} yenildi!` : "Zafer!"}</p>`;
       }, st.boss ?? null, st.boss?.name ?? st.place);

@@ -12,6 +12,7 @@ body.nomini .mini { display: none; }
 .ach b { font-size: 12px; color: #ffe7a8; }
 .ach small { font-size: 10px; opacity: .75; }
 .runs { margin: 6px 0 0; padding-left: 18px; font-size: 12px; opacity: .85; }
+.runs li.dear { color: #ffb347; } .runs li.cheap { color: #8fe07a; }
 .grow.cev.bad { border-color: #ff5a3c; background: #ff5a3c18; }
 .grow.cev.good { border-color: #7fd36a; background: #7fd36a14; }
 .grow.req { margin: -4px 0 8px 22px; border-style: dashed; border-color: #e0b04a; background: #e0b04a12; }
@@ -369,6 +370,27 @@ body.nomini .mini { display: none; }
 .bar.boss { height: 16px; }
 .bar.boss i { background: linear-gradient(#c58cff, #6a2a9a); }
 .bar.kut i { background: linear-gradient(#bfe6ff, #3a7ac8); }
+.kkmenu { background: radial-gradient(ellipse at center, #0000 0%, #0007 55%, #000c 100%); z-index: 40; }
+.kkmenu.title { background: radial-gradient(ellipse at center, #0005 0%, #000a 60%, #000d 100%); }
+body.titled #hud > .top, body.titled #hud > .track, body.titled #hud > .actbar, body.titled #hud > .bottom, body.titled #hud > .mini, body.titled #hud > .birdbtn { opacity: 0; pointer-events: none; }
+#hud > .top, #hud > .track, #hud > .bottom, #hud > .mini { transition: opacity .5s; }
+.kkmenu .mfoot .btn:not(.on) { opacity: .55; }
+.kkmenu h1 { white-space: nowrap; }
+.kkmenu .mwrap { display: flex; flex-direction: column; align-items: center; gap: 18px; width: min(420px, 92vw); }
+.kkmenu .mlogo { text-align: center; animation: qin .6s cubic-bezier(.2, 1.4, .5, 1); }
+.kkmenu .mlogo svg { filter: drop-shadow(0 0 14px rgba(255, 200, 90, .55)); }
+.kkmenu h1 { margin: 4px 0 2px; font: bold clamp(38px, 7vw, 60px) Georgia, serif; color: #ffd56a; letter-spacing: 1px; text-shadow: 0 4px 0 #5a3008, 0 0 34px rgba(255, 200, 90, .4); }
+.kkmenu .mlogo p { margin: 0; font: italic 15px Georgia, serif; color: #f0d8a8; text-shadow: 0 2px 4px #000; }
+.kkmenu:not(.title) .mlogo h1 { font-size: 34px; }
+.kkmenu .mbtns { display: flex; flex-direction: column; gap: 9px; width: 100%; }
+.mbtn { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; padding: 11px 18px; border-radius: 12px; cursor: pointer; text-align: left; color: #f4e6c6; background: linear-gradient(90deg, #3b2614f2, #24170cf0); border: 1px solid #8a5d2a; box-shadow: 0 6px 18px #0009; transition: transform .1s, border-color .1s, filter .1s; }
+.mbtn b { font: bold 17px Georgia, serif; color: #ffe7a8; }
+.mbtn small { font-size: 12px; color: #cdb48a; display: flex; align-items: center; gap: 3px; }
+.mbtn small .ic { width: 14px; height: 14px; }
+.mbtn:hover, .mbtn.padfocus { transform: translateX(4px); border-color: #ffd27a; filter: brightness(1.12); }
+.mbtn.go { background: linear-gradient(90deg, #6a4210f2, #3b2614f0); border-color: #d9a33a; }
+.mbtn.red b { color: #ffb0a0; }
+.kkmenu .mfoot { display: flex; gap: 6px; align-items: center; font-size: 12px; }
 .padcross { position: fixed; left: 50%; top: 50%; width: 34px; height: 34px; margin: -17px 0 0 -17px; border: 2px solid rgba(255, 220, 140, .9); border-radius: 50%; box-shadow: 0 0 0 2px rgba(0, 0, 0, .45), 0 0 12px rgba(255, 200, 90, .5); pointer-events: none; z-index: 5; display: none; }
 .padcross::after { content: ""; position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: #ffd98a; }
 .padcross.on { display: block; }
