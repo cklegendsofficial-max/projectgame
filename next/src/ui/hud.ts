@@ -4,6 +4,7 @@ import { ORDERS, ORDER_KEYS, TACTICS, TACTIC_KEYS, type BattleResult, type Boss,
 import { BattleField } from "./battleField";
 import { SpiritView, type Realm } from "./spirit";
 import { openDestan } from "./destan";
+import { CityScene, JourneyView, type CitySceneData } from "./journey";
 import { GOODS, GOOD_KEYS, PLUS_CHANCE, SKILL_INFO, SKILL_KEYS, SLOTS, SLOT_NAME, STAT_INFO, STAT_KEYS, canPlus, itemStats, kindName, plusCost, skillLv, skillNext, type Item, type Slot } from "../game/rpg";
 import { ARMOR_NAME, CLASSES, SKILL_MAX, WEAPON_NAME, skillPow, skillRank, type ClassId } from "../game/classes";
 import { CAPITAL, SAVE_SLOTS, curSlot, exportSave, kurganBoss, slotInfo } from "../game/state";
@@ -68,6 +69,7 @@ const WEAPON_ICON: Record<string, string> = { kilic: "it_sword_", balta: "it_axe
 
 const ic = (k: string, cls = "ic") => `<img class="${cls}" src="${assetUrl(k)}" alt="">`;
 const CAP_I = CITIES.findIndex((c) => c.id === "samarkand");
+const JOURNEY_SPEED = 4;
 const RIVAL_CSS: Record<string, string> = { peace: "#e8d39a", ally: "#6fe07a", war: "#ff4a3a", vassal: "#ffc94a", dead: "#888" };
 
 function fmt(n: number): string {
@@ -106,6 +108,8 @@ export class Hud {
   private sagaEl!: HTMLElement;
   private taskEl!: HTMLElement;
   private mogEl!: HTMLElement;
+  private jv: JourneyView | null = null;
+  private cs: CityScene | null = null;
   private actEl!: HTMLElement;
   private panel!: HTMLElement;
   private toasts!: HTMLElement;
@@ -897,7 +901,36 @@ export class Hud {
 
   speed(): number {
     if (this.g.battleLock || this.modal() || this.archery || this.minigame) return 1;
+    if (this.jv) return Math.max(JOURNEY_SPEED, settings.speed ?? 1);
     return settings.speed ?? 1;
+  }
+
+  journeyOpen(from: string, to: string): void {
+    this.jv?.close();
+    const g = this.g;
+    this.jv = new JourneyView(this.root, from, to, {
+      env: () => g.tripEnv(),
+      prog: () => g.tripProg(),
+      clock: () => g.tripClock(),
+      skip: () => g.tripEnd(),
+      stop: () => g.tripEnd(true),
+    });
+    audio.play("story");
+  }
+
+  journeyLog(text: string): void {
+    this.jv?.log(text);
+  }
+
+  journeyClose(): void {
+    this.jv?.close();
+    this.jv = null;
+  }
+
+  cityScene(d: Omit<CitySceneData, "img">): void {
+    this.cs?.close();
+    this.cs = new CityScene(this.root, { ...d, img: assetUrl("cities/" + d.id) }, () => (this.cs = null));
+    audio.play("story");
   }
 
   cycleSpeed(): void {
@@ -1768,7 +1801,7 @@ export class Hud {
     const g = this.g;
     const cur = curSlot();
     const pct = (v: number) => Math.round(v * 100);
-    const toggle = (k: "eco" | "mini" | "haptic" | "narrate" | "dynMusic", label: string, note = "") =>
+    const toggle = (k: "eco" | "mini" | "haptic" | "narrate" | "dynMusic" | "cine", label: string, note = "") =>
       `<div class="setrow"><span>${label}</span><button class="btn sm ${settings[k] ? "on" : ""}" data-a="${this.act(() => {
         settings[k] = !settings[k];
         saveSettings();
@@ -1808,6 +1841,7 @@ export class Hud {
       <div class="setrow"><span>${t("Tam ekran")}</span><button class="btn sm ${document.fullscreenElement ? "on" : ""}" data-a="${this.act(() => toggleFullscreen())}">${document.fullscreenElement ? t("Açık") : t("Kapalı")}</button><small class="dim">F11 / F</small></div>
       <div class="setrow"><span>${t("Fotoğraf modu")}</span><button class="btn sm" data-a="${this.act(() => this.openPhoto())}">${ic("scroll")} ${t("Aç")}</button><small class="dim">P</small></div>
       ${toggle("mini", t("Mini harita"))}
+      ${toggle("cine", t("Sinematik sahneler"), "Şehre girişte ve uzun yolculuklarda ara sahne gösterilir.")}
       ${toggle("eco", t("Pil tasarrufu"), "Pil tasarrufu sayfa yenilenince devreye girer (30 FPS, düşük çözünürlük).")}
       ${"vibrate" in navigator ? toggle("haptic", t("Titreşim")) : ""}
       <h3>${t("Kayıt yuvaları")}</h3>
@@ -2511,6 +2545,7 @@ export class Hud {
     const g = this.g;
     const s = g.s;
     const now = performance.now();
+    if (this.cs && (this.modal() || g.battleLock)) this.cs.close();
     if (g.act) {
       this.actEl.classList.remove("hidden");
       this.setHtml(this.actEl, `<b>${g.act.label}…</b>${bar(Math.round((g.act.t / g.act.dur) * 200), 200, "", "")}`);

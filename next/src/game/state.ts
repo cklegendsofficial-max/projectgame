@@ -304,6 +304,8 @@ export interface GameState {
   intel?: Record<string, { day: number; p: Partial<Record<Good, [number, number]>> }>;
   /** yolda olan söylentiler (s.time saniyesinde ulaşır) */
   news?: { at: number; text: string }[];
+  /** Kapısından girilen şehirler (ilk giriş sahnesi için). */
+  visited?: string[];
 }
 
 export interface Voyage {

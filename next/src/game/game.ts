@@ -2,6 +2,7 @@ import { astar, CITIES, GH, GW, H, NAV, NH, NW, W, type World } from "../world/g
 import type { Camera } from "../render/camera";
 import type { WorldView } from "../render/worldView";
 import type { Hud } from "../ui/hud";
+import type { Biome, Env } from "../ui/journey";
 import { ROW_NEED, TALENT_BY_ID, branchSpent, type Talent } from "./talents";
 import { CONS_BY_ID, REFINES, gearCost, type Cost, type Mat } from "./crafting";
 import { GIVERS, SIDE_TEXT, type SideKind, type SideQuest } from "./sidequests";
@@ -83,6 +84,21 @@ const HERO_SPEED = 32;
 const BANDIT_SPEED = 21;
 const MARCH_SPEED = 26;
 export const NEWS_GOLD = 30;
+const TRIP_MIN = 600;
+const TRIP_BIOME: Record<Biome, string[]> = {
+  kum: ["Kum tepeleri başladı; develer ağırlaştı, su tulumları sayılıyor.", "Çöl başladı. Kılavuz yıldızlara ve rüzgârın izine bakıyor."],
+  bozkir: ["Uçsuz bucaksız bozkır açıldı; rüzgâr otları dalgalandırıyor.", "Bozkıra çıkıldı. Uzakta bir tarla kuşu ötüyor."],
+  cayir: ["Yeşil çayırlara inildi; atlar otlamak için başını eğiyor.", "Sulak ovalar başladı. Dereler kervanın yanında akıyor."],
+  dag: ["Dağ geçidine tırmanılıyor; develer taşlı yolda dikkatle basıyor.", "Sarp yamaçlar başladı. Kartallar kervanın üstünde süzülüyor."],
+};
+const TRIP_NIGHT = ["Gece çöktü. Kervan yıldızlarla yön buluyor.", "Güneş battı; çıngırakların sesi karanlıkta yankılanıyor.", "Gece oldu. Kılavuz Demir Kazık'ı gösterdi."];
+const TRIP_DAWN = ["Şafak söktü. Develer homurdanarak doğruldu.", "Gün ağardı; ufuk pembeye kesti.", "Sabah oldu. Kervanbaşı yola koyulma emrini verdi."];
+const TRIP_SEASON: Record<string, string[]> = {
+  bahar: ["Bahar yağmuru toprağı kokuttu; lale tarlaları göz alıyor.", "Kuzulu sürüler yolun kıyısında meliyor.", "Kervancılar bir türkü tutturdu."],
+  yaz: ["Güneş tepede kavuruyor; tulumlardan su paylaştırıldı.", "Sıcak hava ufku titretiyor; serap mı, vaha mı?", "Çıngıraklar ağır ağır çalıyor; yol uzun."],
+  guz: ["Güz rüzgârı sararmış yaprakları savuruyor.", "Göçmen kuşlar güneye doğru uçuyor.", "Kervancılar kış hazırlığını konuşuyor."],
+  kis: ["Kar diz boyu; develer buhar soluyor.", "Ayaz yüzleri kesiyor; keçeler sıkıca sarıldı.", "Donmuş bir derenin üstünden dikkatle geçildi."],
+};
 const CAP_I = CITIES.findIndex((c) => c.id === "samarkand");
 const RES_SELL: Record<keyof Res, number> = { gold: 1, wood: 3, stone: 4, food: 2 };
 const WAGE: Record<Unit, number> = { spear: 0.5, archer: 0.8, horse: 1.4 };
@@ -106,6 +122,8 @@ export class Game {
   private desertT = 0;
   private ambushT = 30;
   private lastCity = -2;
+  private trip: { to: number; cum: number[]; total: number; t: number; night: boolean; biome: Biome; half: boolean; seen: Set<number>; storm: boolean; flavor: number } | null = null;
+  private sceneDay: Record<string, number> = {};
   lastTactic: Tactic = "hucum";
   private spawnAt = new Map<number, number>();
   battleLock = false;
@@ -1235,6 +1253,7 @@ export class Game {
     this.kipTick(dt);
     this.mongolTick(dt);
     this.intelTick(dt);
+    this.tripTick(dt);
     this.storyTick();
     this.worldEvents(dt, now);
     this.checkContract();
@@ -2319,6 +2338,135 @@ export class Game {
     this.s.hero.pathI = 0;
     this.s.c.moved++;
     this.view.marker(p.x, p.y);
+    if (this.trip) this.tripEnd();
+    if ((t.kind === "city" || t.kind === "capital") && this.s.free && settings.cine) this.tripStart(t.kind === "city" ? t.i : CAP_I, path);
+  }
+
+  biomeAt(x: number, y: number): Biome {
+    const i = Math.min(GH - 1, Math.max(0, Math.floor((y / H) * GH))) * GW + Math.min(GW - 1, Math.max(0, Math.floor((x / W) * GW)));
+    const h = this.world.height[i] ?? 0.2;
+    const m = this.world.moist[i] ?? 0.4;
+    return h > 0.46 ? "dag" : m < 0.26 ? "kum" : m > 0.5 ? "cayir" : "bozkir";
+  }
+
+  tripEnv(): Env {
+    const h = this.s.hero;
+    return { t: this.dayOf().t, season: this.season(), biome: this.biomeAt(h.x, h.y) };
+  }
+
+  tripClock(): string {
+    const { day, t } = this.dayOf();
+    const hr = (12 + t * 24) % 24;
+    return `${tr("Gün")} ${day} · ${String(Math.floor(hr)).padStart(2, "0")}:${String(Math.floor((hr % 1) * 60)).padStart(2, "0")}`;
+  }
+
+  tripProg(): number {
+    const tp = this.trip;
+    const h = this.s.hero;
+    if (!tp || !h.path) return tp ? 1 : 0;
+    const j = h.pathI / 2;
+    const left = j < h.path.length / 2 ? Math.hypot(h.path[h.pathI] - h.x, h.path[h.pathI + 1] - h.y) : 0;
+    return (tp.cum[Math.min(tp.cum.length - 1, j + 1)] - left) / tp.total;
+  }
+
+  private tripStart(to: number, path: number[]): void {
+    const h = this.s.hero;
+    const cum = [0];
+    let px = h.x;
+    let py = h.y;
+    for (let k = 0; k < path.length; k += 2) {
+      cum.push(cum[cum.length - 1] + Math.hypot(path[k] - px, path[k + 1] - py));
+      px = path[k];
+      py = path[k + 1];
+    }
+    const total = cum[cum.length - 1];
+    if (total < TRIP_MIN || this.nearCity() === to) return;
+    const from = this.nearCity(420);
+    const biome = this.biomeAt(h.x, h.y);
+    this.trip = { to, cum, total, t: 0, night: this.isNight(), biome, half: false, seen: new Set(), storm: false, flavor: 4 };
+    this.hud.journeyOpen(from >= 0 && from !== to ? this.cityName(from) : tr("Bozkır"), this.cityName(to));
+    const days = total / (this.heroSpeed() * DAY_SEC);
+    this.hud.journeyLog(`${tr("Kervan yola çıktı.")} ${CITY_NAME[CITIES[to].id]}: ${days < 0.5 ? tr("yarım günlük yol") : `${Math.max(1, Math.round(days))} ${tr("günlük yol")}`}.`);
+  }
+
+  tripEnd(stop = false): void {
+    if (!this.trip) return;
+    this.trip = null;
+    this.hud.journeyClose();
+    if (stop) {
+      this.s.hero.path = null;
+      this.target = null;
+      this.hud.toast(tr("Kervan mola verdi."), "info");
+    }
+  }
+
+  private tripTick(dt: number): void {
+    const tp = this.trip;
+    if (!tp) return;
+    const h = this.s.hero;
+    const tg = this.target;
+    if (this.nearCity() === tp.to) return this.tripEnd();
+    if (!h.path || !tg || (tg.kind !== "city" && tg.kind !== "capital") || this.battleLock || this.hud.modal() || (tp.t > 0.5 && this.hud.panelOpen())) return this.tripEnd();
+    tp.t += dt;
+    const log = (s: string) => this.hud.journeyLog(s);
+    const se = this.season();
+    const b = this.biomeAt(h.x, h.y);
+    if (b !== tp.biome) {
+      tp.biome = b;
+      log(oneOf(TRIP_BIOME[b]));
+    }
+    const night = this.isNight();
+    if (night !== tp.night) {
+      tp.night = night;
+      log(oneOf(night ? TRIP_NIGHT : TRIP_DAWN));
+    }
+    if (!tp.half && this.tripProg() > 0.5) {
+      tp.half = true;
+      log(tr("Yolun yarısı geride kaldı."));
+    }
+    const st = !!this.heroStorm();
+    if (st && !tp.storm) log(tr("Fırtına! Develer çöktü, yüzler sarıldı; kervan ağır ağır ilerliyor."));
+    tp.storm = st;
+    this.s.villages.forEach((v, i) => {
+      if (!tp.seen.has(i) && Math.hypot(v.x - h.x, v.y - h.y) < 170) {
+        tp.seen.add(i);
+        log(`${v.name} ${v.yurt ? tr("obasının çadırları yolun kıyısında tütüyor.") : tr("köyünün yanından geçildi.")}`);
+      }
+    });
+    tp.flavor -= dt;
+    if (tp.flavor <= 0) {
+      tp.flavor = 9 + Math.random() * 6;
+      log(oneOf(TRIP_SEASON[se] ?? TRIP_SEASON.yaz));
+    }
+  }
+
+  private cityArrive(ci: number): void {
+    const s = this.s;
+    if (!s.free || !settings.cine || this.battleLock || this.hud.modal()) return;
+    const id = CITIES[ci].id;
+    if (this.trip && this.trip.to !== ci) {
+      this.hud.journeyLog(`${CITY_NAME[id]} ${tr("surlarının dibinden geçildi; kervan durmadan yoluna devam ediyor.")}`);
+      return;
+    }
+    const day = this.dayOf().day;
+    const last = this.sceneDay[id];
+    if (last !== undefined && day - last < 3) return;
+    this.sceneDay[id] = day;
+    const vis = (s.visited ??= []);
+    const first = !vis.includes(id);
+    if (first) vis.push(id);
+    const lines: string[] = [];
+    const fac = FACTIONS[factionOf(id)];
+    lines.push(s.owned[id] ? tr("Senin şehrin") : `${fac.name} · ${this.hostile(id) ? tr("Düşman") : REP_RANKS[this.cityRank(id)].name}`);
+    const rel = GOOD_KEYS.map((k) => ({ k, b: this.buyPrice(id, k) / GOODS[k].base, sl: this.sellPrice(id, k) / GOODS[k].base }));
+    const cheap = [...rel].sort((a, b) => a.b - b.b).slice(0, 2).map((r) => GOODS[r.k].name);
+    const dear = [...rel].sort((a, b) => b.sl - a.sl).slice(0, 2).map((r) => GOODS[r.k].name);
+    lines.push(`${tr("Ucuz")}: ${cheap.join(", ")}`, `${tr("Kârlı satış")}: ${dear.join(", ")}`);
+    if (this.sacked(id)) lines.push(tr("Moğol yağması: fiyatlar yüksek"));
+    const ev = this.cityEv(id);
+    if (ev) lines.push(ev.name);
+    if (s.serais[id]) lines.push(tr("Kervansarayın burada"));
+    this.hud.cityScene({ id, name: CITY_NAME[id], env: this.tripEnv(), tag: s.owned[id] ? tr("Beyliğinin şehri") : fac.short, lines, sacked: this.sacked(id), first });
   }
 
   tap(x: number, y: number): void {
@@ -6197,8 +6345,10 @@ export class Game {
   private seraiVisit(): void {
     const ci = this.nearCity();
     if (ci === this.lastCity) return;
+    const prev = this.lastCity;
     this.lastCity = ci;
     if (ci < 0) return;
+    if (prev !== -2) this.cityArrive(ci);
     const sr = this.s.serais[CITIES[ci].id];
     if (!sr || sr.coffer < 1) return;
     const g = Math.floor(sr.coffer);
