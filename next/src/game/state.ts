@@ -312,6 +312,8 @@ export interface GameState {
   tabsSeen?: string[];
   /** Görülmüş kölelik olayları. */
   slaveEv?: string[];
+  /** Şehir başına günlük pazarlık sonucu; m>0 lehte, m<0 aleyhte fiyat. */
+  haggle?: Record<string, { day: number; m: number }>;
 }
 
 export interface Voyage {

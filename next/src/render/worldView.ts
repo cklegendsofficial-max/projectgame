@@ -140,12 +140,16 @@ export class WorldView {
   private deco = new Container();
   private places = new Container();
   private labels = new Container();
+  /** Sisin üstünde kalan şehir adları; eski haritalardaki mürekkep yazılar gibi. */
+  private ink = new Container();
   private units = new Container();
   private pathG = new Graphics();
   private fxG = new Graphics();
   private fog!: Sprite;
   private fogCanvas = document.createElement("canvas");
   private fogSmall = document.createElement("canvas");
+  private fogPaper = document.createElement("canvas");
+  private paperTex: HTMLCanvasElement | null = null;
   private night = new Graphics();
   private seasonG = new Graphics();
   private snowG = new Graphics();
@@ -224,13 +228,58 @@ export class WorldView {
     this.buildAmbience();
     this.fogSmall.width = NW;
     this.fogSmall.height = NH;
-    this.fogCanvas.width = NW * FOG_UP;
-    this.fogCanvas.height = NH * FOG_UP;
+    this.fogCanvas.width = this.fogPaper.width = NW * FOG_UP;
+    this.fogCanvas.height = this.fogPaper.height = NH * FOG_UP;
     this.fog = new Sprite(Texture.from(this.fogCanvas));
     this.fog.scale.set(W / this.fogCanvas.width, H / this.fogCanvas.height);
     this.layer.addChild(this.fog);
+    this.layer.addChild(this.ink);
     this.app.stage.addChild(this.layer);
     this.buildHero();
+  }
+
+  /** Keşfedilmemiş toprakların eski harita kâğıdı: lekeler, lifler, ince tarama. */
+  private parchment(): HTMLCanvasElement {
+    if (this.paperTex) return this.paperTex;
+    const c = document.createElement("canvas");
+    const w = (c.width = this.fogCanvas.width);
+    const h = (c.height = this.fogCanvas.height);
+    const g = c.getContext("2d")!;
+    let seed = 7;
+    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    const base = g.createRadialGradient(w / 2, h / 2, h * 0.2, w / 2, h / 2, w * 0.7);
+    base.addColorStop(0, "#b8935a");
+    base.addColorStop(1, "#7a5a32");
+    g.fillStyle = base;
+    g.fillRect(0, 0, w, h);
+    for (let i = 0; i < 900; i++) {
+      const r = 3 + rnd() ** 3 * 46;
+      g.fillStyle = rnd() < 0.55 ? `rgba(70,44,18,${0.03 + rnd() * 0.05})` : `rgba(235,210,160,${0.03 + rnd() * 0.05})`;
+      g.beginPath();
+      g.ellipse(rnd() * w, rnd() * h, r, r * (0.5 + rnd() * 0.5), rnd() * Math.PI, 0, Math.PI * 2);
+      g.fill();
+    }
+    g.lineWidth = 0.6;
+    for (let i = 0; i < 700; i++) {
+      const x = rnd() * w;
+      const y = rnd() * h;
+      const a = rnd() * Math.PI;
+      const l = 3 + rnd() * 10;
+      g.strokeStyle = `rgba(60,38,16,${0.08 + rnd() * 0.1})`;
+      g.beginPath();
+      g.moveTo(x, y);
+      g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l);
+      g.stroke();
+    }
+    g.strokeStyle = "rgba(60,38,16,0.07)";
+    g.lineWidth = 0.8;
+    for (let d = -h; d < w; d += 9) {
+      g.beginPath();
+      g.moveTo(d, h);
+      g.lineTo(d + h, 0);
+      g.stroke();
+    }
+    return (this.paperTex = c);
   }
 
   private glowTex(): Texture {
@@ -501,7 +550,7 @@ export class WorldView {
       const above = key.startsWith("cities/");
       label = this.label(name, x, above ? y - w * 0.62 : y + w * 0.18, lsize);
       if (above) label.anchor.set(0.5, 1);
-      this.labels.addChild(label);
+      (above ? this.ink : this.labels).addChild(label);
     }
     return { sp: c, x, y, label };
   }
@@ -1163,18 +1212,33 @@ export class WorldView {
       const img = sg.createImageData(NW, NH);
       for (let i = 0; i < NW * NH; i++) {
         const o = i * 4;
-        img.data[o] = 28;
+        img.data[o] = 34;
         img.data[o + 1] = 20;
-        img.data[o + 2] = 12;
-        img.data[o + 3] = s.explored[i] ? 0 : 236;
+        img.data[o + 2] = 8;
+        img.data[o + 3] = s.explored[i] ? 0 : 255;
       }
       sg.putImageData(img, 0, 0);
+      const fw = this.fogCanvas.width;
+      const fh = this.fogCanvas.height;
+      const stretch = (c: CanvasRenderingContext2D, blur: number) => {
+        c.filter = `blur(${blur}px)`;
+        c.imageSmoothingEnabled = true;
+        c.drawImage(this.fogSmall, -FOG_UP, -FOG_UP, fw + FOG_UP * 2, fh + FOG_UP * 2);
+        c.filter = "none";
+      };
       const g = this.fogCanvas.getContext("2d")!;
-      g.clearRect(0, 0, this.fogCanvas.width, this.fogCanvas.height);
-      g.filter = `blur(${FOG_UP * 0.9}px)`;
-      g.imageSmoothingEnabled = true;
-      g.drawImage(this.fogSmall, -FOG_UP, -FOG_UP, this.fogCanvas.width + FOG_UP * 2, this.fogCanvas.height + FOG_UP * 2);
-      g.filter = "none";
+      g.clearRect(0, 0, fw, fh);
+      g.globalAlpha = 0.62;
+      stretch(g, FOG_UP * 2.6);
+      const pc = this.fogPaper.getContext("2d")!;
+      pc.globalCompositeOperation = "copy";
+      stretch(pc, FOG_UP * 0.9);
+      pc.globalCompositeOperation = "source-in";
+      pc.drawImage(this.parchment(), 0, 0);
+      pc.globalCompositeOperation = "source-over";
+      g.globalAlpha = 0.8;
+      g.drawImage(this.fogPaper, 0, 0);
+      g.globalAlpha = 1;
       this.fog.texture.source.update();
     }
 
@@ -1209,6 +1273,11 @@ export class WorldView {
     const dark = Math.max(0, Math.cos(t * Math.PI * 2) * -1) * 0.38;
     this.night.clear();
     if (dark > 0.01) this.night.rect(0, 0, W, H).fill({ color: 0x0c1430, alpha: dark });
+    {
+      const k = 1 - dark * 1.15;
+      const ch = (v: number) => Math.round(Math.min(1, v) * 255);
+      this.fog.tint = (ch(k) << 16) | (ch(k + dark * 0.12) << 8) | ch(k + dark * 0.4);
+    }
     {
       const vw = cam.w / cam.zoom / 2;
       const vh = cam.h / cam.zoom / 2;

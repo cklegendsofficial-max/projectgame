@@ -74,11 +74,11 @@ export function localizeData(): void {
   words(ARMOR_NAME, { agir: "Heavy armor", hafif: "Light armor" });
 
   const cls: Record<string, { name: string; role: string; desc: string; passive: string }> = {
-    alp: { name: "Alp", role: "Knight · Tank and commander", desc: "A heavily armored steppe knight with a shield. Stands before the band and empowers the troops. For those who want to fight with large armies.", passive: "Shield Wall: +25% defense, +15% troop strength." },
+    alp: { name: "Alp", role: "Armoured horseman · Bulwark and commander", desc: "A heavily armoured steppe alp with a shield. Stands before the band and empowers the troops. For those who want to fight with large armies.", passive: "Shield Wall: +25% defense, +15% troop strength." },
     bahadir: { name: "Bahadır", role: "Warrior · Melee damage", desc: "A furious warrior who charges in with a two-handed axe. Carries no shield, but fells whatever he strikes.", passive: "Rage: +20% attack; another +30% when below half health." },
-    suikastci: { name: "Assassin", role: "Ninja · Critical hits and first strike", desc: "A master of dagger and bow who strikes from the shadows. Hits first before battle begins; critical hits are deadly.", passive: "Shadow Strike: a free attack at battle start; 30% crit chance, crits deal 2.2x." },
-    hirsiz: { name: "Thief", role: "Rogue · Evasion, loot and trade", desc: "A sweet-tongued, quick-handed road wolf. Slips past blows, empties enemy purses and fools everyone at the bazaar.", passive: "Nimble Hand: dodge 25% of attacks; +40% gold and item loot; better bazaar prices." },
-    kam: { name: "Kam", role: "Shaman · Healing and support", desc: "A shaman who speaks with the spirits of Sky Tengri. Heals in battle and brings fallen soldiers back to life.", passive: "Spirit Call: regain 7% health each round; 25% of lost troops return after victory; troops are 8% stronger." },
+    suikastci: { name: "Assassin", role: "Fedai · Critical hits and first strike", desc: "A master of dagger and bow who strikes from the shadows. Hits first before battle begins; critical hits are deadly.", passive: "Shadow Strike: a free attack at battle start; 30% crit chance, crits deal 2.2x." },
+    hirsiz: { name: "Thief", role: "Highwayman · Evasion, loot and trade", desc: "A sweet-tongued, quick-handed road wolf. Slips past blows, empties enemy purses and fools everyone at the bazaar.", passive: "Nimble Hand: dodge 25% of attacks; +40% gold and item loot; better bazaar prices." },
+    kam: { name: "Kam", role: "Spirit caller · Healing and support", desc: "A kam who speaks with the spirits of Sky Tengri. Heals in battle and brings fallen soldiers back to life.", passive: "Spirit Call: regain 7% health each round; 25% of lost troops return after victory; troops are 8% stronger." },
   };
   for (const c of CLASSES) Object.assign(c, cls[c.id] ?? {});
 

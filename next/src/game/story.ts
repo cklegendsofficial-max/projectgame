@@ -285,6 +285,7 @@ export const ENDINGS: Ending[] = [
     name: "Zincir Kıran",
     label: "Kut'un gücüyle bozkırdaki bütün zincirleri kır",
     img: "companions/ayse",
+    why: (g) => (g.s.mongol?.pact === "join" ? "Moğol tuğunu taşıyan el zincir kıramaz" : null),
     text: (g) => `Kut'u göğe kaldırdın ve bir dilek tuttun: <b>bir daha hiçbir çocuk zincire vurulmasın</b>.<br><br>O gece Merv'den Konstantinopolis'e kadar bütün esir pazarlarında kilitler kendiliğinden açıldı. Demir halkalar paslanıp toza döndü.${g.hasComp("ayse") ? " Ayşe omzundaki kara damgaya baktı: damga yoktu." : ""}<br><br>Köylüler adını ocak başlarında dua gibi anar. Senin tuğun bir hanedanın değil, hürriyetin bayrağı oldu.`,
   },
   {
@@ -301,6 +302,14 @@ export const ENDINGS: Ending[] = [
     img: "boss_erlik",
     why: (g) => (g.s.mats.ruh >= 50 ? null : "50 Ruh Taşı gerekir"),
     text: (g) => `Elli esir ruhunu Kut'un alevine fırlattın ve alevi kendi göğsüne çektin. Gök gürledi, Kök Börü uludu, Umay Kam'ın davulu yarıldı.<br><br>Artık yaşlanmıyorsun. Kılıcın göğün ağırlığını taşıyor. Ama beyler senden korkuyor; korku sadakat değildir. Yeni bir Erlik doğdu mu, yoksa Erlik'i yenen tek kişi mi göğün yerini aldı? Bunu ${gen(g.s.hero.name)} kılıcı yazacak.`,
+  },
+  {
+    id: "noyan",
+    name: "Noyan'ın Gölgesi",
+    label: "Kut'u Cengiz'in otağına götür: bozkırı Moğol adına yönet",
+    img: "heroes/boss_hakan",
+    why: (g) => (g.s.mongol?.pact === "join" ? null : "Yalnızca Moğol'a boyun eğenler bu yolu seçebilir"),
+    text: (g) => `Kut'u keçeye sardın ve doğuya, Cengiz'in altın otağına götürdün. Büyük Han alevi avucunda tarttı, sonra sana döndü: <i>"Bozkırın kutunu getiren, bozkırın noyanı olur."</i><br><br>Artık ${g.s.mongol?.fallen.length ? `${g.s.mongol.fallen.length} yanmış şehrin` : "bütün İpek Yolu'nun"} vergisi senin defterinden geçiyor. Beyler önünde eğiliyor; ama gözlerinde sadakat değil, korku var.<br><br>Bir zamanlar zincirli bir çocuktun. Şimdi zincirlerin anahtarı senin kemerinde asılı.`,
   },
 ];
 

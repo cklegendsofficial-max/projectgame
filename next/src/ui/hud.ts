@@ -657,6 +657,17 @@ export class Hud {
 
   private chronAll = false;
 
+  private haggleHtml(city: string, near: boolean): string {
+    const g = this.g;
+    if (!near || !g.s.free) return "";
+    const m = g.haggleMod(city);
+    if (g.haggleDone(city)) {
+      const n = Math.round(Math.abs(m) * 100);
+      return `<div class="odds haggle ${m > 0 ? "good" : "bad"}">${ic("merchant")} ${m > 0 ? t("Bugünkü pazarlık: fiyatlar %{n} lehine.", { n }) : t("Tüccar küstü: bugün fiyatlar %{n} aleyhine.", { n })}</div>`;
+    }
+    return `<div class="odds haggle mid">${ic("merchant")} ${t("Çarşıda pazarlık günde bir kez yapılır; başarı bütün gün fiyatlarını iyileştirir.")} <button class="btn sm go" data-a="${this.act(() => g.haggleMenu(city))}">${t("Pazarlık et")}</button></div>`;
+  }
+
   private newsHtml(city: string, near: boolean): string {
     const g = this.g;
     if (near) return "";
@@ -1293,9 +1304,8 @@ export class Hud {
   private tabs(list: [string, string][]): string {
     if (!list.some(([id]) => id === this.tab)) this.tab = list[0][0];
     const s = this.g.s;
-    const fresh = !s.tabsSeen;
     const seen = (s.tabsSeen ??= []);
-    if (fresh) seen.push(...list.map(([id]) => id));
+    if (!list.some(([id]) => seen.includes(id))) seen.push(...list.map(([id]) => id));
     if (!seen.includes(this.tab)) seen.push(this.tab);
     return `<div class="tabs">${list.map(([id, n]) => `<button class="tab ${this.tab === id ? "on" : ""} ${seen.includes(id) ? "" : "new"}" data-a="${this.act(() => {
       this.tab = id;
@@ -1592,6 +1602,7 @@ export class Hud {
         <p class="dim">${tr("Malın üretildiği şehirde ucuz, talep edildiği şehirde pahalıdır. Çok alırsan fiyat yükselir, çok satarsan düşer; zamanla eski haline döner.")}</p>
         <div class="odds mid">${g.sea().icon} ${g.sea().name}: ${Object.entries(g.sea().goods).map(([k, m]) => `${GOODS[k as keyof typeof GOODS].name} <b class="${m! > 1 ? "neg" : "cheap"}">${m! > 1 ? "▲" : "▼"}%${Math.round(Math.abs(m! - 1) * 100)}</b>`).join(" · ")}</div>` +
         this.newsHtml(c.id, near) +
+        this.haggleHtml(c.id, near) +
         GOOD_KEYS.map((k) => {
           const intel = near ? null : g.intelOf(c.id);
           const known = near || !!intel?.p[k];

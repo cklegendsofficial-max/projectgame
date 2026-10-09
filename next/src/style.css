@@ -658,6 +658,7 @@ body.pad .padfocus { outline: 3px solid #ffd27a !important; outline-offset: 2px;
 @keyframes tabnew { 50% { transform: scale(.6); opacity: .55; } }
 .intel .tell { display: block; font-style: italic; color: #ffe2a8; margin: 3px 0 2px; }
 .qmore { display: none; }
+.bbox ul { display: inline-block; text-align: left; margin: 6px 0 8px; padding-left: 20px; }
 .quest.fold { display: none; }
 .bottom .ufukbtn b.bi { display: flex; align-items: center; justify-content: center; font-size: 30px; color: #ffd56a; text-shadow: 0 0 8px #ffb24a88; }
 .bottom .ufukbtn.hidden { display: none; }

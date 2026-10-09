@@ -25,7 +25,7 @@ await page.waitForTimeout(1200);
 await ev(`g.s.res.gold = 300; const c = g.targetPos({kind:"capital"}); g.s.hero.x = c.x; g.s.hero.y = c.y; g.buyFreedom();`);
 await page.waitForTimeout(400);
 await dismiss();
-await ev(`g.s.res.gold = 5000; g.hud.openHero(); g.hud.tab = "kervan"; g.hud.render();`);
+await ev(`g.s.res.gold = 5000; g.s.hero.lv = Math.max(4, g.s.hero.lv); g.hud.openHero(); g.hud.tab = "kervan"; g.hud.render();`);
 await page.waitForTimeout(300);
 await page.locator(".panel .btn", { hasText: "Kervan kur" }).click();
 await page.waitForTimeout(300);

@@ -42,9 +42,9 @@ export const CLASSES: ClassDef[] = [
   {
     id: "alp",
     name: "Alp",
-    role: "Şövalye · Tank ve komutan",
+    role: "Zırhlı süvari · Siper ve komutan",
     portrait: "heroes/cls_alp",
-    desc: "Ağır zırhlı, kalkanlı bozkır şövalyesi. Birliğinin önünde durur, askerlerini güçlendirir. Büyük ordularla savaşmak isteyenler için.",
+    desc: "Ağır zırhlı, kalkanlı bozkır alpı. Birliğinin önünde durur, askerlerini güçlendirir. Büyük ordularla savaşmak isteyenler için.",
     primary: ["day", "lid"],
     start: { guc: 2, cev: 1, day: 3, lid: 3, kar: 1 },
     weapons: ["kilic"],
@@ -72,7 +72,7 @@ export const CLASSES: ClassDef[] = [
   {
     id: "suikastci",
     name: "Suikastçı",
-    role: "Ninja · Kritik vuruş ve ilk darbe",
+    role: "Fedai · Kritik vuruş ve ilk darbe",
     portrait: "heroes/cls_suikastci",
     desc: "Gölgelerden çıkan, hançer ve yay ustası. Savaş başlamadan ilk darbeyi vurur, kritik vuruşları ölümcüldür.",
     primary: ["cev", "guc"],
@@ -87,7 +87,7 @@ export const CLASSES: ClassDef[] = [
   {
     id: "hirsiz",
     name: "Hırsız",
-    role: "Haydut · Kaçınma, ganimet ve ticaret",
+    role: "Yol kesen · Kaçınma, ganimet ve ticaret",
     portrait: "heroes/cls_hirsiz",
     desc: "Dili tatlı, eli çabuk bir yol kurdu. Darbelerden sıyrılır, düşmanın kesesini boşaltır, pazarda herkesi kandırır.",
     primary: ["cev", "kar"],
@@ -102,9 +102,9 @@ export const CLASSES: ClassDef[] = [
   {
     id: "kam",
     name: "Kam",
-    role: "Şaman · İyileştirme ve destek",
+    role: "Ruh çağıran · İyileştirme ve destek",
     portrait: "heroes/cls_kam",
-    desc: "Gök Tengri'nin ruhlarıyla konuşan şaman. Savaşta kendini iyileştirir, düşen askerlerini hayata döndürür.",
+    desc: "Gök Tengri'nin ruhlarıyla konuşan kam. Savaşta kendini iyileştirir, düşen askerlerini hayata döndürür.",
     primary: ["kar", "day"],
     start: { guc: 1, cev: 1, day: 3, lid: 2, kar: 3 },
     weapons: ["asa"],

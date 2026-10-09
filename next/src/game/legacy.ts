@@ -16,6 +16,7 @@ export const LEGACY_PERKS: Record<string, { name: string; desc: string }> = {
   hurriyet: { name: "Zincirsiz Yürek", desc: "En yüksek can +%10" },
   ozan: { name: "Ozanın Kopuzu", desc: "Kazanılan tecrübe +%15" },
   tengri: { name: "Gök Mührü", desc: "Ordu gücü +%6" },
+  noyan: { name: "Tümen Disiplini", desc: "Yürüyüş hızı +%6" },
 };
 
 const KEY = "kk_legacy";

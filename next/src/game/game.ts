@@ -95,6 +95,11 @@ export interface Hint {
 
 const TRIP_MIN = 600;
 const TELL_TRUE = 0.7;
+const HAGGLE = [
+  { label: "Nazikçe iste", gain: 0.04, base: 0.7, loss: 0.02 },
+  { label: "Sıkı pazarlık", gain: 0.08, base: 0.42, loss: 0.04 },
+  { label: "Yüzsüzce dayat", gain: 0.14, base: 0.2, loss: 0.08 },
+];
 const TACTIC_TELLS: Record<Tactic, string[]> = {
   hucum: ["Toynak sesleri yaklaşıyor; atlılar ön safta toplanıyor.", "Düşman başı kılıcını havaya kaldırdı; adamları mahmuzlamaya hazır.", "Toz bulutu büyüyor: üstüne doğru at sürüyorlar."],
   duvar: ["Kalkanlar birbirine kenetleniyor; mızrak uçları güneşte parlıyor.", "Düşman tepenin üstünde sık saf tuttu, kımıldamıyor.", "Davullar ağır ağır vuruyor; kimse saftan çıkmıyor."],
@@ -1549,6 +1554,21 @@ export class Game {
     const pts = h.points + h.spts + h.tpts;
     if (pts) out.push({ kind: "firsat", icon: "crown", title: tr("{n} dağıtılmamış puan", { n: pts }), text: tr("Kahraman ekranında güç, beceri ve yeteneklerine dağıt."), open: "hero" });
     if (s.free) {
+      const today = this.dayOf().day;
+      const evs = s.events.filter((e) => CITY_NAME[e.city] && !this.hostile(e.city));
+      const short = evs.find((e) => e.mult > 1 && (h.cargo[e.good] ?? 0) > 0);
+      const glut = evs.find((e) => e.mult < 1);
+      const ev = short ?? glut;
+      if (ev) {
+        const left = Math.max(1, ev.until - today + 1);
+        out.push({
+          kind: "firsat",
+          icon: GOODS[ev.good].icon,
+          title: tr(ev === short ? "Sıcak fırsat: {c} çarşısında {g} kıtlığı" : "Sıcak fırsat: {c} çarşısında {g} bolluğu", { c: CITY_NAME[ev.city], g: GOODS[ev.good].name }),
+          text: ev === short ? tr("Elindeki {n} {g} orada çok pahalıya gider. {d} gün içinde yetiş.", { n: h.cargo[ev.good] ?? 0, g: GOODS[ev.good].name, d: left }) : tr("Ucuza al, başka bir şehirde sat. Fırsat {d} gün sürer.", { d: left }),
+          at: CITIES.find((c) => c.id === ev.city),
+        });
+      }
       const ci = this.nearCity();
       const known = (id: string): Partial<Record<Good, [number, number]>> | undefined =>
         ci >= 0 && CITIES[ci].id === id ? Object.fromEntries(GOOD_KEYS.map((k) => [k, [this.buyPrice(id, k), this.sellPrice(id, k)]])) : s.intel?.[id]?.p;
@@ -1722,11 +1742,80 @@ export class Game {
   }
 
   buyPrice(city: string, g: Good): number {
-    return Math.max(1, Math.round(this.price(city, g) * this.buyFactor() * (1 - 0.02 * (this.s.serais[city]?.lv ?? 0) - this.repTrade(city))));
+    return Math.max(1, Math.round(this.price(city, g) * this.buyFactor() * (1 - 0.02 * (this.s.serais[city]?.lv ?? 0) - this.repTrade(city) - this.haggleMod(city))));
   }
 
   sellPrice(city: string, g: Good): number {
-    return Math.max(1, Math.round(this.price(city, g) * this.sellFactor() * (1 + 0.02 * (this.s.serais[city]?.lv ?? 0) + this.repTrade(city))));
+    return Math.max(1, Math.round(this.price(city, g) * this.sellFactor() * (1 + 0.02 * (this.s.serais[city]?.lv ?? 0) + this.repTrade(city) + this.haggleMod(city))));
+  }
+
+  haggleMod(city: string): number {
+    const h = this.s.haggle?.[city];
+    return h && h.day === this.dayOf().day ? h.m : 0;
+  }
+
+  haggleDone(city: string): boolean {
+    return this.s.haggle?.[city]?.day === this.dayOf().day;
+  }
+
+  haggleChance(i: number): number {
+    return Math.min(0.95, HAGGLE[i].base + this.stat("kar") * 0.025 + this.skill("ticaret") * 0.02 + 0.05 * this.tal("pazarlik"));
+  }
+
+  haggleMenu(city: string): void {
+    const s = this.s;
+    if (!s.free || !this.atCity(city) || this.haggleDone(city)) return;
+    const pct = (x: number) => Math.round(x * 100);
+    const opts = HAGGLE.map((o, i) => ({
+      label: `${tr(o.label)} · ${tr("fiyatlar %{n} lehine", { n: pct(o.gain) })} · ${tr("şans")} %${pct(this.haggleChance(i))}`,
+      cls: "",
+      fn: () => this.haggle(city, i),
+    }));
+    opts.push({ label: tr("Vazgeç"), cls: "", fn: () => {} });
+    this.hud.choice(tr("Pazarlık"), "merchant", tr("Çarşının en eski tüccarı tespihini çekerek seni süzüyor. \"Bugün mal az, yolcu çok,\" diyor. Bir gün boyunca bu şehirdeki alış ve satış fiyatların bu pazarlığa bağlı. Başaramazsan tüccar alınır, fiyatlar aleyhine döner.<br><br><small>Şansı karizma, ticaret becerisi ve Pazarlık yeteneği artırır.</small>"), opts);
+  }
+
+  private haggle(city: string, i: number): void {
+    const s = this.s;
+    const o = HAGGLE[i];
+    const day = this.dayOf().day;
+    const won = Math.random() < this.haggleChance(i);
+    (s.haggle ??= {})[city] = { day, m: won ? o.gain : -o.loss };
+    if (!won) {
+      audio.play("bad");
+      this.hud.toast(tr("Tüccar kaşlarını çattı: bugün fiyatlar %{n} aleyhine.", { n: Math.round(o.loss * 100) }), "bad");
+      return;
+    }
+    s.hero.skills.ticaret += 6 + i * 6;
+    audio.play("coin");
+    const tip = this.hotTip(city);
+    this.hud.toast(tr("El sıkıştınız! Bugün {c} çarşısında fiyatlar %{n} lehine.", { c: CITY_NAME[city], n: Math.round(o.gain * 100) }), "good");
+    if (tip) this.hud.story(tr("Tüccarın fısıltısı"), "merchant", tip, tr("Aklımda"));
+  }
+
+  /** Başarılı pazarlığın ardından tüccarın verdiği tüyo: elindeki ya da buranın ucuz malı için en iyi alıcı şehir. */
+  private hotTip(city: string): string | null {
+    const h = this.s.hero;
+    const carried = GOOD_KEYS.filter((k) => (h.cargo[k] ?? 0) > 0);
+    const pool = carried.length ? carried : GOOD_KEYS.filter((k) => this.price(city, k) < GOODS[k].base * 0.9);
+    let best: { to: string; k: Good; sell: number; gain: number } | null = null;
+    for (const k of pool) {
+      const here = carried.length ? Math.round((h.paid[k] ?? 0) / Math.max(1, h.cargo[k] ?? 1)) : this.buyPrice(city, k);
+      for (const c of CITIES) {
+        if (c.id === city || this.hostile(c.id)) continue;
+        const sell = this.sellPrice(c.id, k);
+        if (!best || sell - here > best.gain) best = { to: c.id, k, sell, gain: sell - here };
+      }
+    }
+    if (!best || best.gain <= 0) return null;
+    this.noteIntel(best.to);
+    const ev = this.s.events.find((e) => e.city === best!.to && e.good === best!.k && e.mult > 1);
+    return tr("\"Sana bir sır vereyim, yiğit: {c} çarşısında {g} şu an ~{p} altına alıcı buluyor{w}. Kimseye söyleme.\"<br><br><small>{c} çarşısının güncel fiyatlarını artık biliyorsun.</small>", {
+      c: CITY_NAME[best.to],
+      g: GOODS[best.k].name,
+      p: best.sell,
+      w: ev ? tr(" (kıtlık var)") : "",
+    });
   }
 
   // ---------- factions ----------
@@ -2673,7 +2762,7 @@ export class Game {
 
   heroSpeed(): number {
     const n = armySize(this.s.hero.army);
-    return HERO_SPEED * (1 + this.stat("cev") * 0.02 + (this.eq("at")?.spd ?? 0) + this.compMods().speed + 0.04 * this.tal("ruzgar") + (this.gearMods().spd ?? 0)) * (1 - Math.min(0.35, n / 300)) * this.stormSlow(this.s.hero.x, this.s.hero.y) * this.sea().speed;
+    return HERO_SPEED * (1 + this.stat("cev") * 0.02 + (this.eq("at")?.spd ?? 0) + this.compMods().speed + 0.04 * this.tal("ruzgar") + (this.gearMods().spd ?? 0) + (hasLegacy("noyan") ? 0.06 : 0)) * (1 - Math.min(0.35, n / 300)) * this.stormSlow(this.s.hero.x, this.s.hero.y) * this.sea().speed;
   }
 
   stormSlow(x: number, y: number): number {
@@ -4833,9 +4922,10 @@ export class Game {
     const id = ROUTE[m.next];
     const lv = s.hero.lv;
     const cost = tributeCost(m.next, lv);
-    const pct = Math.round(this.odds(mongolArmy(lv, m.str), 0.05, mongolBoss(lv, m.str)) * 100);
+    const last = m.str === 1 && m.pact === "war";
+    const pct = Math.round(this.odds(mongolArmy(lv, m.str), 0.05 - (last ? this.finalAid().aid : 0), mongolBoss(lv, m.str)) * 100);
     const opts: { label: string; cls: string; fn: () => void }[] = [];
-    if (this.mongolNear()) opts.push({ label: m.pact === "join" ? "İhanet et: arkadan vur" : `Tümene saldır (%${pct})`, cls: "red", fn: () => this.mongolAttack() });
+    if (this.mongolNear()) opts.push({ label: m.pact === "join" ? "İhanet et: arkadan vur" : last ? `Son Savaş: tümene saldır (%${pct})` : `Tümene saldır (%${pct})`, cls: "red", fn: () => this.mongolAttack() });
     else opts.push({ label: "Tümene yürü", cls: "go", fn: () => this.goTo({ kind: "mongol" }) });
     if (m.pact === "war" && m.spared !== id) opts.push({ label: `Haraç: ${CITY_NAME[id]} bağışlansın (${cost} altın)`, cls: s.res.gold >= cost ? "" : "off", fn: () => this.mongolTribute() });
     if (m.pact === "war") opts.push({ label: "Moğol'a boyun eğ", cls: "", fn: () => this.mongolJoin() });
@@ -4898,17 +4988,59 @@ export class Game {
     return "Moğol tümeni bozguna uğradı!";
   }
 
-  mongolAttack(): void {
+  /** Son savaşta yanına gelenler: müttefik beyler, şehir garnizonları, yoldaşlar. Düşman gücünden düşülür. */
+  finalAid(): { lines: string[]; aid: number } {
+    const s = this.s;
+    const lines: string[] = [];
+    let aid = 0;
+    for (const r of s.rivals) {
+      if (r.status !== "ally" && r.status !== "vassal") continue;
+      lines.push(`${r.name} ${r.title} tuğuyla geldi`);
+      aid += 0.04;
+    }
+    const owned = Object.keys(s.owned).length;
+    if (owned) {
+      lines.push(`${owned} şehrinin garnizonu yürüdü`);
+      aid += 0.02 * owned;
+    }
+    for (const c of s.comps) {
+      lines.push(`${COMP_BY_ID[c as CompId].name} yanında`);
+      aid += 0.02;
+    }
+    if (s.kagan) {
+      lines.push("Kurultayın bütün boyları at bindi");
+      aid += 0.06;
+    }
+    if (s.c.rescued >= 10) {
+      lines.push(`Zincirden kurtardığın ${s.c.rescued} esir kılıç kuşandı`);
+      aid += 0.03;
+    }
+    return { lines, aid: Math.min(0.3, aid) };
+  }
+
+  mongolAttack(ready = false): void {
     const s = this.s;
     const m = this.mongol();
     if (m.stage !== 2) return;
     const lv = s.hero.lv;
     const betray = m.pact === "join";
+    const last = m.str === 1 && !betray;
+    if (last && !ready) {
+      const { lines, aid } = this.finalAid();
+      const who = lines.length ? `<ul>${lines.map((l) => `<li>${l}</li>`).join("")}</ul><b class="cheap">Tümenin gücü %${Math.round(aid * 100)} kırıldı.</b>` : `<i>Yanında kimse yok. Bozkır, yalnız yiğidin cesaretini de yalnızlığını da unutmaz.</i>`;
+      this.hud.choice("Son Savaş", "heroes/boss_hakan", `İki yenilgiden sonra noyanlar son tümenlerini topladı. Bu savaş İpek Yolu'nun kaderini belirleyecek: kazanırsan dalga kırılır, kaybedersen yol yanar.<br><br>Kurduğun her dostluk bu sabah karşılığını veriyor:${who}`, [
+        { label: "Tuğu kaldır: saldır!", cls: "red", fn: () => this.mongolAttack(true) },
+        { label: "Henüz değil", cls: "", fn: () => {} },
+      ]);
+      return;
+    }
     if (betray) {
       m.pact = "war";
       this.chron(`${s.hero.name} Moğol'a verdiği sözü bozdu ve tümene arkadan vurdu.`);
     }
-    this.battle(`Moğol Tümeni`, mongolArmy(lv, m.str), betray ? -0.1 : 0.05, (win) => (win ? this.mongolWin(m) : "Moğol okları gökyüzünü kararttı. Geri çekilmek zorunda kaldın."), mongolBoss(lv, m.str), "Moğol Tümeni");
+    const aid = last ? this.finalAid().aid : 0;
+    if (last) this.chron(`${s.hero.name} Moğol'un son tümeninin karşısına dikildi.`);
+    this.battle(last ? "Son Savaş" : "Moğol Tümeni", mongolArmy(lv, m.str), (betray ? -0.1 : 0.05) - aid, (win) => (win ? this.mongolWin(m) : "Moğol okları gökyüzünü kararttı. Geri çekilmek zorunda kaldın."), mongolBoss(lv, m.str), "Moğol Tümeni");
   }
 
   private mongolAdvance(m: MongolState): void {
@@ -4935,7 +5067,7 @@ export class Game {
     if (m.pact === "war" && m.spared !== id && (near || mine)) {
       this.mongBusy = true;
       this.hud.toast(`Moğollar ${CITY_NAME[id]} surlarına dayandı!`, "bad");
-      this.battle(`${CITY_NAME[id]} Savunması`, mongolArmy(lv, m.str), -0.08, (win) => {
+      this.battle(`${CITY_NAME[id]} Savunması`, mongolArmy(lv, m.str), -0.08 - (m.str === 1 ? this.finalAid().aid : 0), (win) => {
         this.mongBusy = false;
         if (win) {
           const txt = this.mongolWin(m);
@@ -6589,7 +6721,7 @@ export class Game {
       `Zirvede rüzgâr sustu. Buzun içinde mavi bir alev gibi Kut duruyor; içinde bozkırın bütün sesleri: at kişnemeleri, ninniler, kılıç şakırtıları.<br><br>Korkut arkandan fısıldadı: <i>"Ne seçersen seç, ${s.hero.name}, ozanlar bunu bin yıl söyleyecek."</i>`,
       ENDINGS.map((e) => {
         const why = e.why?.(this);
-        return { label: why ? `${e.label} (${why})` : e.label, cls: why ? "off" : e.id === "tengri" ? "red" : "go", fn: () => this.chooseEnding(e.id) };
+        return { label: why ? `${e.label} (${why})` : e.label, cls: why ? "off" : e.id === "tengri" || e.id === "noyan" ? "red" : "go", fn: () => this.chooseEnding(e.id) };
       }).concat([{ label: "Henüz değil, düşüneceğim", cls: "", fn: () => {} }]),
     );
   }
@@ -6614,6 +6746,10 @@ export class Game {
       s.mats.ruh -= 50;
       s.hero.points += 20;
       for (const r of s.rivals) if (r.status !== "dead" && r.status !== "vassal") r.status = "war";
+    } else if (id === "noyan") {
+      for (const r of s.rivals) if (r.status === "war" || r.status === "peace") r.status = "vassal";
+      for (const v of s.villages) v.rep = Math.max(0, v.rep - 30);
+      for (const o of Object.values(s.owned)) if (o) o.loy = Math.max(0, o.loy - 20);
     }
     const it = uniqueItem(s.nextId++, this.cls(), UNIQUES[Math.floor(Math.random() * UNIQUES.length)], 5);
     this.chron(`${s.hero.name} Tengri Dağı'nda Kut'un kaderini seçti: ${e.name}.`);
@@ -6640,6 +6776,19 @@ export class Game {
     if (fam?.spouse) {
       const heir = fam.kids.find((k) => k.son) ?? fam.kids[0];
       lines.push(`${fam.spouse.name} Hatun ile kurduğu hanedan ${fam.kids.length ? `${fam.kids.length} çocukla büyüdü; tuğu ${heir.name} devraldı.` : "varissiz kaldı."}`);
+    }
+    const m = s.mongol;
+    if (m && m.stage >= 2) {
+      const burnt = m.fallen.length;
+      lines.push(
+        m.stage === 3
+          ? `Kara Bulut'u durdurdu; ${ROUTE.length - burnt} şehir onun sayesinde ayakta kaldı.`
+          : m.pact === "join"
+            ? `Moğol tuğunu taşıdı; ${burnt} şehrin külleri adını fısıltıyla anar.`
+            : m.stage === 4
+              ? `Moğol dalgası ${burnt} şehri yaktı; o, küllerin üstüne yeni bir yurt kurdu.`
+              : `Kara Bulut hâlâ batıya yürüyor; ${burnt} şehir şimdiden düştü.`,
+      );
     }
     if (s.songs?.length) lines.push(`Ozanlar onun için ${s.songs.length} destan yaktı.`);
     lines.push(`Destan ${this.dayOf().day}. günde tamamlandı.`);
