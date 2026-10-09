@@ -196,23 +196,28 @@ export class PhotoMode {
   }
 
   private async save(blob: Blob): Promise<void> {
-    const name = `kervan-krallik-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.png`;
-    const file = new File([blob], name, { type: "image/png" });
-    const nav = navigator as Navigator & { canShare?: (d: { files: File[] }) => boolean };
-    if (matchMedia("(pointer: coarse)").matches && nav.canShare?.({ files: [file] })) {
-      try {
-        await navigator.share({ files: [file], title: "Kervan Krallık" });
-        return;
-      } catch {
-        /* share cancelled: fall back to download */
-      }
-    }
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = name;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    await shareImage(blob, "kervan-krallik");
   }
+}
+
+/** PNG'yi dokunmatik cihazda paylaşım menüsüyle, masaüstünde indirme olarak verir. */
+export async function shareImage(blob: Blob, prefix: string): Promise<void> {
+  const name = `${prefix}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.png`;
+  const file = new File([blob], name, { type: "image/png" });
+  const nav = navigator as Navigator & { canShare?: (d: { files: File[] }) => boolean };
+  if (matchMedia("(pointer: coarse)").matches && nav.canShare?.({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: "Kervan Krallık" });
+      return;
+    } catch {
+      /* share cancelled: fall back to download */
+    }
+  }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }

@@ -3,6 +3,7 @@ import { BUILDINGS, DAY_SEC, NODE_NAME, RES_ICON, RES_KEYS, RES_NAME, UNITS, UNI
 import { ORDERS, ORDER_KEYS, TACTICS, TACTIC_KEYS, type BattleResult, type Boss, type Order, type Sim, type Tactic } from "../game/battle";
 import { BattleField } from "./battleField";
 import { SpiritView, type Realm } from "./spirit";
+import { openDestan } from "./destan";
 import { GOODS, GOOD_KEYS, PLUS_CHANCE, SKILL_INFO, SKILL_KEYS, SLOTS, SLOT_NAME, STAT_INFO, STAT_KEYS, canPlus, itemStats, kindName, plusCost, skillLv, skillNext, type Item, type Slot } from "../game/rpg";
 import { ARMOR_NAME, CLASSES, SKILL_MAX, WEAPON_NAME, skillPow, skillRank, type ClassId } from "../game/classes";
 import { CAPITAL, SAVE_SLOTS, curSlot, exportSave, kurganBoss, slotInfo } from "../game/state";
@@ -630,12 +631,21 @@ export class Hud {
 
   private chronAll = false;
 
+  openDestan(): void {
+    const g = this.g;
+    const s = g.s;
+    const end = s.act3.ending ? endingOf(s.act3.ending) : null;
+    const tl = s.title ? titleOf(s.title) : null;
+    const title = [end?.name, s.kagan ? "Kağan" : s.beylik ? "Bey" : s.free ? "Hür yiğit" : "Köle", tl?.name].filter(Boolean).join(" · ");
+    void openDestan(this.root, { name: s.hero.name, title, portrait: assetUrl(g.face()), lv: s.hero.lv, day: g.dayOf().day, kills: s.kills, renown: Math.round(s.renown), verses: s.chron });
+  }
+
   private chronHtml(): string {
     const c = this.g.s.chron;
     if (!c.length) return "";
     const list = [...c].reverse().slice(0, this.chronAll ? 80 : 6);
     return (
-      `<h3>${ic("parsomen")} Ozanın Defteri</h3><div class="chron">` +
+      `<h3>${ic("parsomen")} Ozanın Defteri <button class="btn sm go dsbtn" data-a="${this.act(() => this.openDestan())}">${ic("scroll")} Destan Kitabı</button></h3><div class="chron">` +
       list.map((e) => `<div class="cr"><em>Gün ${e.d}</em><p>${e.t}</p></div>`).join("") +
       `</div>` +
       (c.length > 6 ? `<button class="btn sm" style="width:100%" data-a="${this.act(() => (this.chronAll = !this.chronAll))}">${this.chronAll ? "Kısalt" : `Bütün destanı oku (${c.length})`}</button>` : "")

@@ -596,3 +596,11 @@ body.pad .padfocus { outline: 3px solid #ffd27a !important; outline-offset: 2px;
 .spbtn .ic { width: 20px; height: 20px; }
 @keyframes spfade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes spup { from { opacity: 0; transform: translate(-50%, 24px); } to { opacity: 1; transform: translate(-50%, 0); } }
+/* Destan kitabı */
+.destan { z-index: 24; background: #000c; }
+.dsbox { display: flex; flex-direction: column; align-items: center; gap: 10px; max-height: 96vh; }
+.dspage { height: min(82vh, 150vw); aspect-ratio: 2 / 3; display: grid; place-items: center; background: #2a1a0c; border-radius: 6px; box-shadow: 0 10px 50px #000c; overflow: hidden; }
+.dspage canvas { width: 100%; height: 100%; display: block; animation: qin .5s ease; }
+.dsload { color: #f4e7c4; font: italic 18px Georgia, serif; }
+.dsbtn { float: right; display: inline-flex; align-items: center; gap: 4px; margin-top: -4px; }
+.dsbtn .ic { width: 16px; height: 16px; }
