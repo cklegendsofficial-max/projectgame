@@ -27,6 +27,7 @@ import { CITIES, H, NAV, NH, NW, W } from "../world/gen";
 import { assetUrl } from "../render/worldView";
 import { audio } from "../audio";
 import { LANGS, lang, t, type Lang } from "../i18n";
+import { BOND_LIKES, BOND_LIKES_EN, BOND_QUEST, COMP_QUESTS, SWORN_MULT, bondTier } from "../game/bonds";
 import { SETS, SET_FORGE, SET_KEYS, SET_SLOTS, UNIQUES, modsText, type SetId } from "../game/legend";
 import { FACTIONS, FACTION_KEYS, HOSTILE, REP_RANKS, RANK_PERKS, factionOf } from "../game/factions";
 import { BRO_MODS, NEM_TRAITS, nemName } from "../game/nemesis";
@@ -1824,7 +1825,13 @@ export class Hud {
         ${s.free ? this.birdHtml() : ""}
         <h3>${ic("tug")} Yoldaşlar (${s.comps.length})</h3>${s.comps.map((id) => {
           const cp = COMP_BY_ID[id as CompId];
-          return cp ? `<div class="comp on"><img src="${assetUrl(cp.icon)}" alt=""><div class="bi2"><b>${cp.name} <em>${cp.role}</em></b><small class="cheap">${cp.perk}</small></div></div>` : "";
+          if (!cp) return "";
+          const bv = g.bond(cp.id), tier = bondTier(bv), en = lang() === "en";
+          const q = COMP_QUESTS[cp.id], done = (s.cqDone ?? []).includes(cp.id);
+          const qs = done ? `<small class="good">${t("Kan kardeşi")} · ${t("güçler")} ×${SWORN_MULT}</small>`
+            : s.cq?.id === cp.id ? `<small class="cheap">${q.title}: ${CITY_NAME[q.steps[s.cq.step]?.city ?? q.steps[0].city]}</small>${g.cqTarget() ? this.walkBtn(g.cqTarget()!, t("Yola çık")).replace("btn go", "btn sm go cqgo") : ""}`
+            : q ? `<small class="dim">${q.title} · ${t("bağ")} ${BOND_QUEST}+</small>` : "";
+          return `<div class="comp on"><img src="${assetUrl(cp.icon)}" alt=""><div class="bi2"><b>${cp.name} <em>${cp.role}</em></b><small class="cheap">${cp.perk}</small>${bar(Math.max(0, bv + 100), 200, `bond ${tier.cls}`, `${en ? tier.en : tier.name} ${Math.round(bv)}`)}<small class="dim">${t("Sever")}: ${(en ? BOND_LIKES_EN : BOND_LIKES)[cp.id]}</small>${qs}</div></div>`;
         }).join("") || `<p class="dim">Henüz yoldaşın yok. Destan seni yeni dostlarla buluşturacak; bazı şehirlerin hanlarında da yolcular bekler (en fazla ${COMP_MAX} paralı yoldaş).</p>`}
         <p class="dim">${s.free ? "Köylerden gönüllü topla ya da şehir hanlarından paralı asker tut. Askerlerin ücretini altınla ödersin; altının biterse terk ederler. Liderlik birlik sınırını ve askerlerin gücünü artırır." : "Henüz bir kölesin. Hürriyetini kazanınca birlik kurabilirsin."}</p>
         <h3>Toplam</h3><div class="stats"><div>${ic("j_bandit")}Yenilen düşman: <b>${s.kills}</b></div><div>${ic("quest")}Görev: <b>${s.quest}/${g.QUESTS.length}</b></div><div>Ticaret kârı: <b>${s.c.profit}</b></div></div>`;

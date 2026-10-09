@@ -32,6 +32,7 @@ import { TORE_CASES, kutArmy, kutLoy, kutTier, kutVote, type ToreCase } from "./
 import { SCARS, VET_LV_MAX, VET_MAX, VET_RANKS, VET_XP, makeVet, vetBonus, vetTitle } from "./vets";
 import { ACHIEVEMENTS, steamUnlock, storeUnlocked, unlockedSet } from "./achievements";
 import { CODEX, codexTitle } from "./codex";
+import { BOND_FX, BOND_LEAVE, BOND_QUEST, BOND_START, COMP_QUESTS, SWORN_MULT, type BondEvent, type CompQuest, type CqChoice } from "./bonds";
 import { t as tr } from "../i18n";
 import { SEASONS, SEASON_DAYS, seasonOf, type Season, type SeasonId } from "./seasons";
 import { FACTIONS, FACTION_KEYS, HOSTILE, REP_RANKS, RANK_PERKS, factionOf, repRank, type FactionId } from "./factions";
@@ -657,6 +658,7 @@ export class Game {
     s.renown += r;
     this.addRep(factionOf(city), 5, "ozan destanını okudu");
     this.addKut(1);
+    this.bondEvent("sing");
     const song = s.songs[Math.floor(Math.random() * Math.min(5, s.songs.length))];
     audio.play("quest");
     this.hud.story(`${CITY_NAME[city]} hanında ozan`, "icons/scroll", `Ozan kopuzunu akortladı, han sustu:<br><br><i class="poem">${song.lines.join("<br>")}</i><br><br><b class="cheap">+${r} şöhret</b> · ${FACTIONS[factionOf(city)].short} itibarı +5`, "Kopuzun dilli olsun");
@@ -991,6 +993,7 @@ export class Game {
     s.c.tore = (s.c.tore ?? 0) + 1;
     this.addKut(f.kut ?? 0);
     const k = f.kut ?? 0;
+    this.bondEvent(k >= 0 ? "toreFair" : "toreHarsh");
     this.chron(`Töre davası (${c.title}): ${o.out}`);
     if (k >= 8) this.sing("tore", { foe: c.title });
     this.hud.story(c.title, c.icon, `${o.out}<br><br><b class="${k >= 0 ? "cheap" : "dear"}">Kut ${k >= 0 ? "+" : ""}${k}</b> → ${Math.round(s.kut)} · ${kutTier(s.kut).name}${f.loy ? `<br>Şehir bağlılığı ${f.loy > 0 ? "+" : ""}${f.loy}` : ""}${f.renown ? `<br>Şöhret +${f.renown}` : ""}`, "Hüküm verildi");
@@ -1203,6 +1206,7 @@ export class Game {
     this.quests();
     this.titleTick(dt);
     this.achTick(dt);
+    this.cqTick(dt);
     this.storyTick();
     this.worldEvents(dt, now);
     this.checkContract();
@@ -1642,6 +1646,7 @@ export class Game {
     const profit = Math.round(got - basis);
     if (profit > 0) this.s.c.profit += profit;
     if (profit >= 120) this.addRep(factionOf(city), Math.floor(profit / 120), "ticaret");
+    if (profit >= 150) this.bondEvent("trade");
     h.skills.ticaret += Math.ceil(got / 20);
     this.addXp(Math.max(0, Math.floor(profit / 15)));
     this.hud.toast(`${k0} ${GOODS[g].name} satıldı: +${got} altın (${profit >= 0 ? "kâr" : "zarar"} ${Math.abs(profit)})`, profit >= 0 ? "good" : "bad");
@@ -2862,6 +2867,7 @@ export class Game {
       this.gain({ gold });
       s.c.robbed++;
       this.addKut(-4, "kervan soygunu töreye aykırı");
+      this.bondEvent("robbed");
       if (s.c.robbed === 1) this.chron(`${FACTIONS[fac].name} kervanı yolda soyuldu. O günden beri hanlarda ${gen(s.hero.name)} adı fısıltıyla anılıyor.`);
       const lg = this.legendDrop(0.03);
       return `Kervan senin! +${k} ${GOODS[cv.good].name}${k < cv.qty ? ` (yükün doldu, ${cv.qty - k} adet geride kaldı)` : ""}, +${gold} altın.<br><b class="dear">Aranıyorsun (${"★".repeat(s.wanted)}) · ${FACTIONS[fac].name} itibarı −60</b>${lg ? `<br>Efsane: <b class="r4">${lg.name}</b>` : ""}`;
@@ -2875,6 +2881,7 @@ export class Game {
     this.s.c.rescued++;
     this.addRep(fac, 25, "kervanı kurtardın");
     this.addKut(2);
+    this.bondEvent("rescue");
     const k = Math.min(3, cv.qty, Math.max(0, this.carryCap() - this.cargoUsed()));
     if (k) {
       this.s.hero.cargo[cv.good] = (this.s.hero.cargo[cv.good] ?? 0) + k;
@@ -3055,6 +3062,7 @@ export class Game {
     const songs0 = this.s.songs?.length ?? 0;
     const extra = after(res.win);
     this.addKut(res.win ? (boss ? 3 : 1) : -2);
+    this.bondEvent(res.win ? (boss ? "boss" : "win") : "lose");
     const dir = this.dir();
     dir.fight = this.dayOf().day;
     dir.losses = res.win ? 0 : dir.losses + 1;
@@ -3296,6 +3304,7 @@ export class Game {
       s.c.conquests = (s.c.conquests ?? 0) + 1;
       s.renown += 60;
       this.addKut(5, `${name} fethi`);
+      this.bondEvent("conquer");
       this.sing("fetih", { place: name });
       if (!s.counterAt) s.counterAt = this.now + 8 * DAY_SEC * 1000;
       this.chron(`${name} surlarına ${gen(s.hero.name)} tuğu dikildi. ${fac.ruler} bu hakareti unutmayacak.`);
@@ -3517,6 +3526,7 @@ export class Game {
     const profit = Math.round(got - v.paid);
     if (profit > 0) s.c.profit += profit;
     s.c.voyages++;
+    this.bondEvent("voyage");
     s.hero.skills.ticaret += Math.ceil(got / 20);
     this.addXp(Math.max(0, Math.floor(profit / 15)));
     if (profit >= 120) this.addRep(factionOf(v.to), Math.floor(profit / 120), "deniz ticareti");
@@ -3596,6 +3606,8 @@ export class Game {
     this.toreTick(day);
     this.directorDaily();
     for (const o of Object.values(s.owned)) this.addKut(o.tax === 2 ? -1 : o.tax === 0 ? 0.5 : 0);
+    if (Object.values(s.owned).some((o) => o.tax === 2)) this.bondEvent("taxHeavy");
+    this.bondDaily();
     if (this.kurAnn !== s.kurultay.held && /Semerkant|^$/.test(this.kurultayReason())) {
       this.kurAnn = s.kurultay.held;
       this.hud.toast("Beyler Semerkant'ta kurultaya hazır. Hedefler sekmesinden topla.", "good");
@@ -4255,6 +4267,7 @@ export class Game {
           this.sing("biat", { foe: dead });
           this.hud.toast(`${dead} öldü. +80 şöhret, +3 Ruh Taşı. Diğer beyler tedirgin.`, "bad");
           this.succeed(r, "kilic");
+          this.bondEvent("kilic");
         } },
         { label: "Serbest bırak (dostluk +30)", cls: "", fn: () => {
           r.status = "peace";
@@ -4404,6 +4417,7 @@ export class Game {
     this.s.res.gold -= FEAST_GOLD;
     o.loy = Math.min(100, o.loy + 25);
     this.addKut(3, "şölen");
+    this.bondEvent("feast");
     audio.play("quest");
     this.hud.toast(`${CITY_NAME[city]} meydanında şölen! Halk adını anıyor (+25 bağlılık).`, "good");
     saveGame(this.s);
@@ -5258,11 +5272,117 @@ export class Game {
 
   compMods(): CompMods {
     const m: CompMods = { atk: 0, army: 0, heal: 0, xp: 0, trade: 0, carry: 0, speed: 0, sight: 0 };
+    const done = this.s.cqDone ?? [];
     for (const id of this.s.comps) {
       const c = COMP_BY_ID[id as CompId];
-      if (c) for (const k of Object.keys(c.mods) as (keyof CompMods)[]) m[k] += c.mods[k] ?? 0;
+      const k2 = done.includes(id) ? SWORN_MULT : 1;
+      if (c) for (const k of Object.keys(c.mods) as (keyof CompMods)[]) m[k] += (c.mods[k] ?? 0) * k2;
     }
     return m;
+  }
+
+  bond(id: CompId): number {
+    return this.s.bond?.[id] ?? BOND_START;
+  }
+
+  bondEvent(k: BondEvent): void {
+    for (const id of [...this.s.comps] as CompId[]) {
+      const d = BOND_FX[k][id];
+      if (d) this.bondAdd(id, d);
+    }
+  }
+
+  private bondAdd(id: CompId, d: number): void {
+    const b = (this.s.bond ??= {});
+    const v = Math.max(-100, Math.min(100, this.bond(id) + d));
+    b[id] = v;
+    const c = COMP_BY_ID[id];
+    if (Math.abs(d) >= 3) this.hud.toast(`${c.name}: ${d > 0 ? tr("bunu sevdi") : tr("bundan hoşlanmadı")} (${d > 0 ? "+" : ""}${d})`, d > 0 ? "good" : "bad");
+    if (v <= BOND_LEAVE && c.hire && this.hasComp(id)) {
+      this.s.comps = this.s.comps.filter((x) => x !== id);
+      this.chron(`${c.name}, ${this.s.hero.name}'in yolundan ayrıldı.`);
+      this.hud.story(`${c.name} ayrıldı`, c.icon, `${c.name} eşyalarını topladı: "Senin yolun benim yolum değil artık." Arkasına bakmadan gitti.`, "Hoşça kal");
+    }
+  }
+
+  private cqWait = 0;
+
+  private bondDaily(): void {
+    const s = this.s;
+    if (s.cq || !s.free) return;
+    const day = this.dayOf().day;
+    for (const id of s.comps as CompId[]) {
+      const q = COMP_QUESTS[id];
+      if (!q || (s.cqDone ?? []).includes(id) || this.bond(id) < BOND_QUEST || (s.cqAsk?.[id] ?? -1) > day) continue;
+      const c = COMP_BY_ID[id];
+      this.hud.choice(q.title, c.icon, `${q.offer}<br><br><small class="dim">${tr("Kişisel görev")} · ${CITY_NAME[q.steps[0].city]}</small>`, [
+        { label: tr("Yanındayım"), cls: "go", fn: () => {
+          s.cq = { id, step: 0 };
+          this.hud.toast(`${q.title}: ${CITY_NAME[q.steps[0].city]}`, "info");
+        } },
+        { label: tr("Şimdi olmaz"), cls: "", fn: () => {
+          (s.cqAsk ??= {})[id] = day + 3;
+          this.bondAdd(id, -2);
+        } },
+      ]);
+      return;
+    }
+  }
+
+  cqTarget(): Target | null {
+    const cq = this.s.cq;
+    const st = cq && COMP_QUESTS[cq.id]?.steps[cq.step];
+    if (!st) return null;
+    const i = CITIES.findIndex((c) => c.id === st.city);
+    return i < 0 ? null : i === CAP_I ? { kind: "capital" } : { kind: "city", i };
+  }
+
+  private cqTick(dt: number): void {
+    const s = this.s;
+    if (!s.cq) return;
+    this.cqWait -= dt;
+    if (this.cqWait > 0 || this.battleLock || this.hud.modal()) return;
+    this.cqWait = 1;
+    const q = COMP_QUESTS[s.cq.id];
+    const st = q?.steps[s.cq.step];
+    if (!q || !st || !this.hasComp(q.id)) {
+      s.cq = null;
+      return;
+    }
+    const ci = CITIES.findIndex((c) => c.id === st.city);
+    if (this.nearCity() !== ci) return;
+    this.cqWait = 25;
+    const c = COMP_BY_ID[q.id];
+    if (!st.choices) {
+      this.hud.story(q.title, c.icon, st.text, st.btn ?? tr("Devam"));
+      s.cq.step++;
+      const nx = q.steps[s.cq.step];
+      if (nx && nx.city === st.city) this.cqWait = 1.5;
+      return;
+    }
+    this.hud.choice(q.title, c.icon, st.text, st.choices.map((ch) => {
+      const poor = (ch.fx.gold ?? 0) < 0 && s.res.gold < -(ch.fx.gold ?? 0);
+      return { label: ch.label, cls: poor ? "off" : "go", fn: () => {
+        if (!ch.fight) return this.cqFinish(q, ch);
+        this.battle(q.title, ch.fight(s.hero.lv), 0, (win) => {
+          if (!win) return `<p class="warn">${tr("Geri çekildin. Yoldaşın seni bekliyor.")}</p>`;
+          this.afterBattle = () => this.cqFinish(q, ch);
+          return `<p class="good">${tr("Zafer!")}</p>`;
+        }, null, CITY_NAME[st.city]);
+      } };
+    }));
+  }
+
+  private cqFinish(q: CompQuest, ch: CqChoice): void {
+    const s = this.s;
+    const fx = this.roadFx(ch.fx);
+    this.bondAdd(q.id, ch.bond);
+    s.cqDone = [...(s.cqDone ?? []), q.id];
+    s.cq = null;
+    const c = COMP_BY_ID[q.id];
+    this.chron(`${c.name} ile "${q.title}" yolculuğu tamamlandı; artık kan kardeşi.`);
+    this.hud.story(`${q.title} · ${tr("tamamlandı")}`, c.icon, `${ch.text}${fx}<br><br><b class="cheap">${tr("Kan kardeşi")}:</b> ${q.sworn}`, tr("Devam"));
+    saveGame(s);
   }
 
   recruitCost(): number {

@@ -15,6 +15,7 @@ import { TAMGA_DEFAULT, type Song, type Tamga } from "./ozan";
 import { DIR_DEFAULT, type DirState } from "./director";
 import { FAMILY_DEFAULT, type Family } from "./dynasty";
 import type { BoyState } from "./korkut";
+import type { CompId } from "./story";
 
 export interface Village {
   name: string;
@@ -276,6 +277,10 @@ export interface GameState {
   ok: { day: number; best: number };
   act3: { ch: number; ending: string; peak: { x: number; y: number } | null };
   bitig: string[];
+  bond: Record<string, number>;
+  cq: { id: CompId; step: number } | null;
+  cqDone: string[];
+  cqAsk: Record<string, number>;
 }
 
 export interface Voyage {
@@ -526,6 +531,10 @@ export function newGame(w: World): GameState {
     ok: { day: -1, best: 0 },
     act3: { ch: 0, ending: "", peak: null },
     bitig: [],
+    bond: {},
+    cq: null,
+    cqDone: [],
+    cqAsk: {},
   };
 }
 
