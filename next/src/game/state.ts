@@ -300,6 +300,10 @@ export interface GameState {
   kip?: KipState;
   mongol?: MongolState;
   spirit?: { day: number; n: number; met: string[] };
+  /** şehirlerin son bilinen fiyatları: [alış, satış] */
+  intel?: Record<string, { day: number; p: Partial<Record<Good, [number, number]>> }>;
+  /** yolda olan söylentiler (s.time saniyesinde ulaşır) */
+  news?: { at: number; text: string }[];
 }
 
 export interface Voyage {

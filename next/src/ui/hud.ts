@@ -1,4 +1,4 @@
-import { LORD_SERAIS, type Game, type Quest, type Target } from "../game/game";
+import { LORD_SERAIS, NEWS_GOLD, type Game, type Quest, type Target } from "../game/game";
 import { BUILDINGS, DAY_SEC, NODE_NAME, RES_ICON, RES_KEYS, RES_NAME, UNITS, UNIT_KEYS, armySize, buildCost, buildTime, prodPerMin, unitUnlocked, xpNeed, type Army, type Res, type Unit } from "../game/data";
 import { ORDERS, ORDER_KEYS, TACTICS, TACTIC_KEYS, type BattleResult, type Boss, type Order, type Sim, type Tactic } from "../game/battle";
 import { BattleField } from "./battleField";
@@ -630,6 +630,16 @@ export class Hud {
   }
 
   private chronAll = false;
+
+  private newsHtml(city: string, near: boolean): string {
+    const g = this.g;
+    if (near) return "";
+    const age = g.newsAge(city);
+    const canBuy = g.nearCity() >= 0;
+    const msg = age === null ? t("Bu şehrin fiyatlarından haberin yok.") : age === 0 ? t("Bugünkü haber: fiyatlar taze.") : t("Fiyatlar {n} gün önceki habere göre; değişmiş olabilir.", { n: age });
+    const net = g.s.serais[city] ? ` · ${t("kervansaray ağın her gün haber taşır")}` : "";
+    return `<div class="odds news ${age === null ? "bad" : age > 1 ? "mid" : "good"}">${ic("scroll")} ${msg}${net}${canBuy ? ` <button class="btn sm ${g.s.res.gold < NEWS_GOLD ? "off" : ""}" data-a="${this.act(() => g.buyNews())}">${t("Kervancılardan haber al")} (${NEWS_GOLD})</button>` : ""}</div>`;
+  }
 
   openDestan(): void {
     const g = this.g;
@@ -1467,7 +1477,7 @@ export class Hud {
     const tabs = this.tabs(list);
     let body = "";
     const off = !near ? "off" : "";
-    const nearNote = near ? "" : `<p class="warn">Burada iş yapmak için şehre gitmelisin. Fiyatları uzaktan görebilirsin.</p>${this.walkBtn(t, "Şehre yürü")}`;
+    const nearNote = near ? "" : `<p class="warn">Burada iş yapmak için şehre gitmelisin. Uzaktan yalnızca son duyduğun fiyatları bilirsin.</p>${this.walkBtn(t, "Şehre yürü")}`;
     if (this.tab === "efendi") {
       const cost = g.freedomCost();
       body = `<div class="brow">${ic("master", "bimg")}<div class="bi2"><b>Efendin Tüccar Bahadır</b><small>"Çalış, akçeni biriktir. ${cost} akçeyi getirdiğin gün özgürsün."</small></div></div>
@@ -1480,15 +1490,19 @@ export class Hud {
       body = `${nearNote}<div class="stats"><div>${ic("j_caravan")}Yük: <b>${g.cargoUsed()}/${cap}</b></div><div>${ic("merchant")}Ticaret: <b>${g.skill("ticaret")}</b></div><div>${ic("coins")}<b>${fmt(s.res.gold)}</b></div></div>
         <p class="dim">${tr("Malın üretildiği şehirde ucuz, talep edildiği şehirde pahalıdır. Çok alırsan fiyat yükselir, çok satarsan düşer; zamanla eski haline döner.")}</p>
         <div class="odds mid">${g.sea().icon} ${g.sea().name}: ${Object.entries(g.sea().goods).map(([k, m]) => `${GOODS[k as keyof typeof GOODS].name} <b class="${m! > 1 ? "neg" : "cheap"}">${m! > 1 ? "▲" : "▼"}%${Math.round(Math.abs(m! - 1) * 100)}</b>`).join(" · ")}</div>` +
+        this.newsHtml(c.id, near) +
         GOOD_KEYS.map((k) => {
-          const bp = g.buyPrice(c.id, k);
-          const sp = g.sellPrice(c.id, k);
+          const intel = near ? null : g.intelOf(c.id);
+          const known = near || !!intel?.p[k];
+          const bp = near ? g.buyPrice(c.id, k) : intel?.p[k]?.[0] ?? 0;
+          const sp = near ? g.sellPrice(c.id, k) : intel?.p[k]?.[1] ?? 0;
           const have = s.hero.cargo[k] ?? 0;
           const avg = have > 0 ? Math.round((s.hero.paid[k] ?? 0) / have) : 0;
-          const rel = g.price(c.id, k) / GOODS[k].base;
-          const em = g.eventMult(c.id, k);
-          const tag = em > 1.2 ? `<em class="dear">kıtlık!</em>` : em < 0.8 ? `<em class="cheap">bolluk!</em>` : rel < 0.75 ? `<em class="cheap">ucuz</em>` : rel > 1.3 ? `<em class="dear">pahalı</em>` : "";
-          return `<div class="grow">${ic(GOODS[k].icon, "gimg")}<div class="bi2"><b>${GOODS[k].name} ${tag}</b><small>Al ${bp} · Sat ${sp}${have ? ` · Elinde ${have} (ort. ${avg})` : ""}</small></div>
+          const rel = near ? g.price(c.id, k) / GOODS[k].base : bp / g.buyFactor() / GOODS[k].base;
+          const em = near ? g.eventMult(c.id, k) : 1;
+          const tag = !known ? "" : em > 1.2 ? `<em class="dear">kıtlık!</em>` : em < 0.8 ? `<em class="cheap">bolluk!</em>` : rel < 0.75 ? `<em class="cheap">ucuz</em>` : rel > 1.3 ? `<em class="dear">pahalı</em>` : "";
+          const pr = known ? `${near ? "" : "~"}Al ${bp} · ${near ? "" : "~"}Sat ${sp}` : `<span class="dim">${tr("Fiyat bilinmiyor")}</span>`;
+          return `<div class="grow">${ic(GOODS[k].icon, "gimg")}<div class="bi2"><b>${GOODS[k].name} ${tag}</b><small>${pr}${have ? ` · Elinde ${have} (ort. ${avg})` : ""}</small></div>
             <div class="col2"><button class="btn sm ${off}" data-a="${this.act(() => g.buyGood(c.id, k, 1))}">Al</button><button class="btn sm ${off}" data-a="${this.act(() => g.buyGood(c.id, k, 5))}">Al 5</button><button class="btn sm ${!near || !have ? "off" : ""}" data-a="${this.act(() => g.sellGood(c.id, k, have))}">Sat</button></div></div>`;
         }).join("") +
         `<h3>Ham madde sat</h3><div class="row">${(["wood", "stone", "food"] as const).map((k) => `<button class="btn ${!near || s.res[k] < 1 ? "off" : ""}" data-a="${this.act(() => g.sellRes(k, s.res[k]))}">${ic(RES_ICON[k])} ${fmt(s.res[k])} sat · ${g.resPrice(k)}/adet</button>`).join("")}</div>`;

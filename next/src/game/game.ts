@@ -82,6 +82,7 @@ export interface Activity {
 const HERO_SPEED = 32;
 const BANDIT_SPEED = 21;
 const MARCH_SPEED = 26;
+export const NEWS_GOLD = 30;
 const CAP_I = CITIES.findIndex((c) => c.id === "samarkand");
 const RES_SELL: Record<keyof Res, number> = { gold: 1, wood: 3, stone: 4, food: 2 };
 const WAGE: Record<Unit, number> = { spear: 0.5, archer: 0.8, horse: 1.4 };
@@ -1233,6 +1234,7 @@ export class Game {
     this.myCvTick(dt);
     this.kipTick(dt);
     this.mongolTick(dt);
+    this.intelTick(dt);
     this.storyTick();
     this.worldEvents(dt, now);
     this.checkContract();
@@ -6005,6 +6007,66 @@ export class Game {
     }
   }
 
+  // ---------- söylenti ve haber hızı ----------
+
+  intelOf(city: string): { day: number; p: Partial<Record<Good, [number, number]>> } | null {
+    return this.s.intel?.[city] ?? null;
+  }
+
+  private noteIntel(city: string, day = this.dayOf().day): void {
+    const p: Partial<Record<Good, [number, number]>> = {};
+    for (const k of GOOD_KEYS) p[k] = [this.buyPrice(city, k), this.sellPrice(city, k)];
+    (this.s.intel ??= {})[city] = { day, p };
+  }
+
+  /** Haberin kahramana ulaşma süresi (saniye): uzaklıkla artar, kervansaray ağı kısaltır. */
+  newsDelay(city: string): number {
+    const c = this.cityPos(city);
+    const h = this.s.hero;
+    const d = Math.hypot(c.x - h.x, c.y - h.y);
+    if (d < 200) return 0;
+    const net = this.s.serais[city] ? 0.35 : 1;
+    return Math.min(DAY_SEC * 1.2, (d / W) * DAY_SEC * 2.2) * net;
+  }
+
+  newsAge(city: string): number | null {
+    const it = this.intelOf(city);
+    return it ? Math.max(0, this.dayOf().day - it.day) : null;
+  }
+
+  buyNews(): void {
+    const s = this.s;
+    if (s.res.gold < NEWS_GOLD) return this.hud.toast("Kervancılar bedava konuşmaz", "bad");
+    s.res.gold -= NEWS_GOLD;
+    const day = this.dayOf().day;
+    for (const c of CITIES) this.noteIntel(c.id, day - Math.round(this.newsDelay(c.id) / DAY_SEC));
+    this.hud.toast("Kervancılar bütün şehirlerin fiyatlarını anlattı (uzaktakiler eski haber).", "good");
+  }
+
+  private intelT = 0;
+  private intelDay = 0;
+
+  private intelTick(dt: number): void {
+    this.intelT -= dt;
+    if (this.intelT > 0) return;
+    this.intelT = 2;
+    const s = this.s;
+    const ci = this.nearCity(220);
+    if (ci >= 0) this.noteIntel(CITIES[ci].id);
+    const day = this.dayOf().day;
+    if (day !== this.intelDay) {
+      this.intelDay = day;
+      for (const id of Object.keys(s.serais)) this.noteIntel(id);
+    }
+    if (s.news?.length) {
+      const due = s.news.filter((n) => n.at <= s.time);
+      if (due.length) {
+        s.news = s.news.filter((n) => n.at > s.time);
+        for (const n of due) this.hud.toast(`Söylenti: ${n.text}`, "info");
+      }
+    }
+  }
+
   private newMarketEvent(day: number): void {
     const good = GOOD_KEYS[Math.floor(Math.random() * GOOD_KEYS.length)];
     const ci = CITIES[Math.floor(Math.random() * CITIES.length)];
@@ -6014,7 +6076,9 @@ export class Game {
     const mult = short ? 1.6 + Math.random() * 0.5 : 0.45 + Math.random() * 0.15;
     const text = `${CITY_NAME[ci.id]}: ${why[Math.floor(Math.random() * why.length)]}. ${GOODS[good].name} ${short ? "çok pahalı" : "çok ucuz"}!`;
     this.s.events.push({ city: ci.id, good, mult, until: day + 2, text });
-    this.hud?.toast(`Söylenti: ${text}`, "info");
+    const late = this.newsDelay(ci.id);
+    if (late < 5) this.hud?.toast(`Söylenti: ${text}`, "info");
+    else (this.s.news ??= []).push({ at: this.s.time + late, text: `${text} <small>(${late > DAY_SEC * 0.6 ? "bir günlük" : "taze"} haber)</small>` });
   }
 
   eventMult(city: string, g: Good): number {
