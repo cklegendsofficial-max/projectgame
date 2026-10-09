@@ -10,7 +10,8 @@ import { BRANCHES, BRANCH_KEYS, ROW_NEED, TALENTS, branchSpent } from "../game/t
 import { CONSUMABLES, CONS_BY_ID, CRAFT_SLOTS, REFINES, gearCost, type Cost, type Mat } from "../game/crafting";
 import { SIDE_TEXT, type SideQuest } from "../game/sidequests";
 import { CITY_NAME } from "../game/data";
-import { COMPANIONS, COMP_BY_ID, COMP_MAX, ERLIK, FORT_GUARD, GATE_GUARD, KARA_HAN, KOK_BORU, PEAK_GUARD, endingOf, type CompId } from "../game/story";
+import { COMPANIONS, COMP_BY_ID, COMP_MAX, ERLIK, FORT_GUARD, GATE_GUARD, KARA_HAN, ENDINGS, KOK_BORU, PEAK_GUARD, endingOf, type CompId } from "../game/story";
+import { LEGACY_PERKS, legacy } from "../game/legacy";
 import { CITIES, H, NH, NW, W } from "../world/gen";
 import { assetUrl } from "../render/worldView";
 import { audio } from "../audio";
@@ -1274,6 +1275,7 @@ export class Hud {
       <h3>Klavye kısayolları</h3>
       <p class="dim keys"><kbd>H</kbd> Kahraman · <kbd>C</kbd> Semerkant · <kbd>Boşluk</kbd> Birliğine dön · <kbd>B</kbd> Kuşu uçur · <kbd>M</kbd> Ses · <kbd>F</kbd> Tam ekran · <kbd>WASD</kbd>/<kbd>Oklar</kbd> Kamera · <kbd>+</kbd>/<kbd>−</kbd> Yakınlaş · <kbd>Esc</kbd> Kapat</p>
       ${this.achHtml()}
+      ${this.legacyHtml()}
       <button class="btn sm red reset" data-a="${this.act(() => confirm("Bu yuvadaki tüm ilerlemen silinip yeni bir oyun başlayacak. Emin misin?") && g.resetGame())}">Bu yuvada yeni oyun başlat</button>`;
   }
 
@@ -1281,6 +1283,19 @@ export class Hud {
     const g = this.g;
     const n = ACHIEVEMENTS.filter((a) => g.achDone(a.id)).length;
     return `<h3>${ic("trophy")} Başarımlar <em class="dim">${n}/${ACHIEVEMENTS.length}</em></h3><div class="achs">${ACHIEVEMENTS.map((a) => `<div class="ach ${g.achDone(a.id) ? "on" : ""}" title="${a.desc}">${ic(a.icon)}<b>${a.name}</b><small>${a.desc}</small></div>`).join("")}</div>`;
+  }
+
+  private legacyHtml(): string {
+    const l = legacy();
+    const cards = ENDINGS.map((e) => {
+      const on = l.endings.includes(e.id);
+      const p = LEGACY_PERKS[e.id];
+      return `<div class="ach ${on ? "on" : ""}" title="${on ? p.desc : "Henüz görülmedi"}">${ic(e.img)}<b>${on ? e.name : "???"}</b><small>${on ? `${p.name}: ${p.desc}` : "Bu sonu gör, mirası aç."}</small></div>`;
+    }).join("");
+    const runs = l.runs.slice(0, 5).map((r) => `<li><b>${r.name}</b> · ${endingOf(r.ending)?.name ?? r.ending} · Sv ${r.lv} · ${r.day}. gün</li>`).join("");
+    return `<h3>${ic("scroll")} Miras <em class="dim">${l.endings.length}/${ENDINGS.length} son</em></h3>
+      <p class="dim">Gök Tengri Destanı'nın her sonu, sonraki bütün destanlarında geçerli kalıcı bir miras açar.</p>
+      <div class="achs">${cards}</div>${runs ? `<ul class="runs">${runs}</ul>` : ""}`;
   }
 
   private exportFile(): void {

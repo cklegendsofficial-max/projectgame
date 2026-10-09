@@ -21,6 +21,7 @@ import { CITY_BLDS, CITY_EVENTS, ENGINE_GOLD, FEAST_GOLD, GOVERNORS, GOV_GOLD, S
 import { DEEP_LORE, DEEP_PERKS, DOORS, DOOR_KEYS, RIDDLES, TOMBS, deepBoss, deepGuard, deepTier, tombOf, type DeepPerk, type DeepRun, type DoorKind } from "./deep";
 import { BRIBE_GOLD, DECREES, KAGAN_RENOWN, KURULTAY_EVERY, KURULTAY_MAX, decreeOf } from "./kurultay";
 import { ESCORT_GOLD, PIRATE_RISK, SHIP_CAP, SHIP_GOLD, SHIP_MAX, pirateArmy, portOf, routeDays } from "./hazar";
+import { LEGACY_PERKS, hasLegacy, recordEnding } from "./legacy";
 import { ACHIEVEMENTS, steamUnlock, storeUnlocked, unlockedSet } from "./achievements";
 import { SEASONS, SEASON_DAYS, seasonOf, type Season, type SeasonId } from "./seasons";
 import { FACTIONS, FACTION_KEYS, HOSTILE, REP_RANKS, RANK_PERKS, factionOf, repRank, type FactionId } from "./factions";
@@ -154,7 +155,7 @@ export class Game {
 
   maxHp(): number {
     const h = this.s.hero;
-    return Math.round((40 + this.stat("day") * 12 + h.lv * 4 + (this.eq("zirh")?.hp ?? 0)) * (1 + 0.03 * this.tal("demirten") + (this.gearMods().hp ?? 0)));
+    return Math.round((40 + this.stat("day") * 12 + h.lv * 4 + (this.eq("zirh")?.hp ?? 0)) * (1 + 0.03 * this.tal("demirten") + (this.gearMods().hp ?? 0) + (hasLegacy("hurriyet") ? 0.1 : 0)));
   }
 
   setCount(id: SetId): number {
@@ -592,14 +593,14 @@ export class Game {
   }
 
   heroBonus(): number {
-    return 0.025 * this.stat("lid") + 0.02 * (this.s.hero.lv - 1) + this.cls().mods.army + this.compMods().army + 0.03 * this.tal("nara") + (this.buff("davul") ? 0.15 : 0) + (this.gearMods().army ?? 0) + this.heroRankBonus() + this.allyBonus();
+    return 0.025 * this.stat("lid") + 0.02 * (this.s.hero.lv - 1) + this.cls().mods.army + this.compMods().army + 0.03 * this.tal("nara") + (this.buff("davul") ? 0.15 : 0) + (this.gearMods().army ?? 0) + this.heroRankBonus() + this.allyBonus() + (hasLegacy("tengri") ? 0.06 : 0);
   }
 
   allyBonus(): number {
     const s = this.s;
     const base = s.rivals.filter((r) => r.status === "ally").length * 0.07 + s.rivals.filter((r) => r.status === "vassal").length * 0.04;
     const ordu = this.decree("sefer");
-    return Math.min(ordu ? 0.35 : 0.2, base * (ordu ? 2 : 1)) + (s.kagan ? 0.05 : 0);
+    return Math.min(ordu ? 0.35 : 0.2, base * (ordu ? 2 : 1)) + (s.kagan ? 0.05 : 0) + (base > 0 && hasLegacy("kagan") ? 0.05 : 0);
   }
 
   decree(id: string): boolean {
@@ -2647,7 +2648,7 @@ export class Game {
 
   addXp(xp: number): boolean {
     const h = this.s.hero;
-    xp = Math.round(xp * (1 + this.compMods().xp + 0.2 * this.tal("efsane") + 0.1 * this.tal("tengri") + (this.gearMods().xp ?? 0)));
+    xp = Math.round(xp * (1 + this.compMods().xp + 0.2 * this.tal("efsane") + 0.1 * this.tal("tengri") + (this.gearMods().xp ?? 0) + (hasLegacy("ozan") ? 0.15 : 0)));
     h.xp += xp;
     let up = false;
     while (h.xp >= xpNeed(h.lv)) {
@@ -4189,7 +4190,10 @@ export class Game {
     const it = uniqueItem(s.nextId++, this.cls(), UNIQUES[Math.floor(Math.random() * UNIQUES.length)], 5);
     this.chron(`${s.hero.name} Tengri Dağı'nda Kut'un kaderini seçti: ${e.name}.`);
     audio.play("level");
-    this.hud.story(`Son · ${e.name}`, e.img, `${e.text(this)}<br><br>${this.epilogue()}<br><br><b>+25000 altın · +500 şöhret · Destan ganimeti: ${it.name}</b>`, "Efsane sürüyor");
+    const fresh = recordEnding({ name: s.hero.name, ending: id, day: this.dayOf().day, lv: s.hero.lv, at: Date.now() });
+    const perk = LEGACY_PERKS[id];
+    const legacyNote = fresh ? `<br><br>Miras açıldı: <b>${perk.name}</b> (${perk.desc}). Bundan sonraki bütün destanlarında geçerli.` : "";
+    this.hud.story(`Son · ${e.name}`, e.img, `${e.text(this)}<br><br>${this.epilogue()}<br><br><b>+25000 altın · +500 şöhret · Destan ganimeti: ${it.name}</b>${legacyNote}`, "Efsane sürüyor");
     this.gainLegend(it);
     saveGame(s);
   }

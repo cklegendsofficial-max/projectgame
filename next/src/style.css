@@ -11,6 +11,7 @@ body.nomini .mini { display: none; }
 .ach .ic { grid-row: span 2; width: 28px; height: 28px; }
 .ach b { font-size: 12px; color: #ffe7a8; }
 .ach small { font-size: 10px; opacity: .75; }
+.runs { margin: 6px 0 0; padding-left: 18px; font-size: 12px; opacity: .85; }
 .grow.cev.bad { border-color: #ff5a3c; background: #ff5a3c18; }
 .grow.cev.good { border-color: #7fd36a; background: #7fd36a14; }
 .grow.req { margin: -4px 0 8px 22px; border-style: dashed; border-color: #e0b04a; background: #e0b04a12; }

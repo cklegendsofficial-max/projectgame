@@ -74,5 +74,10 @@ console.log("ending", await ev(`return [g.s.act3, g.chapter(), g.s.villages.slic
 await ev(`g.hud.openHero();`);
 await shot("7");
 console.log("ach ending", await ev(`return localStorage.getItem("kk_ach");`));
+console.log("legacy", await ev(`return localStorage.getItem("kk_legacy");`));
+await ev(`g.hud.tab = "ayar"; g.hud.render();`);
+await page.waitForTimeout(300);
+await page.locator(".panel h3", { hasText: "Miras" }).scrollIntoViewIfNeeded();
+await shot("8");
 console.log("errors:", errs);
 await browser.close();
