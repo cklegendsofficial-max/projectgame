@@ -39,7 +39,7 @@ await page.keyboard.press("h");
 await page.waitForTimeout(300);
 console.log("hero panel:", await page.locator(".panel:not(.hidden)").count());
 await page.locator(".tabs button", { hasText: "⚙" }).click();
-await page.locator(".achs").scrollIntoViewIfNeeded();
+await page.locator(".achs").first().scrollIntoViewIfNeeded();
 await page.waitForTimeout(300);
 await page.screenshot({ path: `playtest/ach-${mode}.png` });
 await page.keyboard.press("Escape");
