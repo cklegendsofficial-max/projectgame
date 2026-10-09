@@ -71,6 +71,7 @@ export function siegeDay(r: SiegeRun, act: SiegeAct, c: SiegeCtx): SiegeOut {
   const log = (t: string, cls = "") => r.log.unshift({ t: `${r.day}. gün: ${t}`, cls });
   let loss = 0;
   const rnd = c.rnd;
+  const fort = r.city.startsWith("kale:");
   if (act === "bombard") {
     const b = r.engines ? 14 * r.engines + rnd() * 10 : 4 + rnd() * 5;
     r.breach = Math.min(100, r.breach + b);
@@ -91,12 +92,12 @@ export function siegeDay(r: SiegeRun, act: SiegeAct, c: SiegeCtx): SiegeOut {
   } else if (act === "starve") {
     r.morale = Math.max(0, r.morale - (8 + Math.min(8, r.day * 0.6)));
     const d = cut(r.gar, 0.04);
-    log(`Yollar kesildi; şehirde ekmek karneye bağlandı. ${d} savunmacı açlıktan düştü.`);
+    log(`Yollar kesildi; ${fort ? "kalede" : "şehirde"} ekmek karneye bağlandı. ${d} savunmacı açlıktan düştü.`);
   } else if (act === "parley") {
     const p = parleyChance(r, c);
     r.parleys++;
     if (rnd() < p) {
-      log("Şehrin ileri gelenleri anahtarları elçine teslim etti!", "good");
+      log(fort ? "Kale ağası kapıyı açtı, anahtarları elçine teslim etti!" : "Şehrin ileri gelenleri anahtarları elçine teslim etti!", "good");
       return { loss: 0, surrender: true };
     }
     r.morale = Math.min(100, r.morale + 4);
@@ -107,7 +108,7 @@ export function siegeDay(r: SiegeRun, act: SiegeAct, c: SiegeCtx): SiegeOut {
     r.morale = Math.max(0, r.morale - 5);
     log(`Gece baskını: ${d} savunmacı kılıçtan geçti, ${loss} askerini kaybettin.`, d > loss ? "good" : "bad");
   }
-  r.relief--;
+  if (r.relief < 30) r.relief--;
   if (r.relief === 0) {
     const add = Math.round(r.gar0 * 0.35);
     r.gar.spear += Math.round(add * 0.4);

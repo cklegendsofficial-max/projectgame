@@ -91,5 +91,5 @@ export const CITY_EVENTS: Record<string, CityEvent> = {
 
 export const ENGINE_GOLD = 1200;
 export const FEAST_GOLD = 600;
-export const SIEGE_LV = 15;
-export const SIEGE_RENOWN = 200;
+export const SIEGE_LV = 10;
+export const SIEGE_RENOWN = 120;

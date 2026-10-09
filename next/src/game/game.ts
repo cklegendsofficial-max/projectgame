@@ -1,4 +1,4 @@
-import { astar, CITIES, GH, GW, H, NAV, NH, NW, W, type World } from "../world/gen";
+import { astar, CITIES, GH, GW, H, NAV, NH, NW, W, WS, type World } from "../world/gen";
 import type { Camera } from "../render/camera";
 import type { WorldView } from "../render/worldView";
 import type { Hud } from "../ui/hud";
@@ -41,6 +41,7 @@ import { MYCV_CAP, MYCV_COST, MYCV_FEE, MYCV_GUARD, MYCV_GUARD_MAX, MYCV_NAMES, 
 import { BALBAL_GOLD, BALBAL_MAX, BALBAL_STONE, YUG_LATE, balbalBonus, yugCost, type Fallen, type Foe } from "./yug";
 import type { WrestleFoe } from "../ui/wrestle";
 import { SIEGE_MAX_DAY, newSiege, siegeDay, siegeGar, siegeWall, type SiegeAct, type SiegeCtx, type SiegeRun } from "./siege";
+import { FORT_COFFER_DAYS, FORT_LV_SLACK, FORT_MIN_ARMY, FORT_NEAR, FORT_TIERS, FORT_WALL_COST, FORT_WALL_MAX, fortDefense, fortGarrison, fortIndex, fortKey, fortWall, type FortOwner } from "./forts";
 import { BOND_FX, BOND_LEAVE, BOND_QUEST, BOND_START, COMP_QUESTS, SWORN_MULT, type BondEvent, type CompQuest, type CqChoice } from "./bonds";
 import { lang, t as tr } from "../i18n";
 import { WEEK_TIERS, weekBoard, weekFrac, weekId, weekNeed, weekRank, weekReward, weekScore, weekTheme, type BoardRow, type WeekState } from "./weekly";
@@ -54,7 +55,7 @@ import { ACT2, ACT3, CHAPTERS, COMP_BY_ID, COMP_MAX, ENDINGS, ERLIK, ERLIK_SHADE
 import { CAPITAL, SLAVE_RADIUS, banditArmy, campGarrison, importSave, kurganBoss, kurganGuard, loadGame, saveGame as rawSave, useSlot, wipeGame, type Bandit, type Bounty, type Caravan, type Contract, type GameState, type Storm } from "./state";
 
 export type Target =
-  | { kind: "village" | "camp" | "node" | "ruin" | "city" | "bandit" | "kurgan" | "caravan" | "rival"; i: number }
+  | { kind: "village" | "camp" | "node" | "ruin" | "city" | "bandit" | "kurgan" | "caravan" | "rival" | "kale"; i: number }
   | { kind: "capital" }
   | { kind: "fort" }
   | { kind: "gate" }
@@ -1339,7 +1340,8 @@ export class Game {
       }
     }
     for (const c of s.camps) {
-      if (!c.alive && now >= c.respawnAt) {
+      if (!c.alive && now >= c.respawnAt && this.fortGuard(c.x, c.y)) c.respawnAt = now + 60000;
+      else if (!c.alive && now >= c.respawnAt) {
         c.alive = true;
         c.garrison = campGarrison(c.tier);
       }
@@ -1551,8 +1553,20 @@ export class Game {
     }
     if (s.free && h.lv >= 2 && armySize(h.army) === 0) out.push({ kind: "acil", icon: "u_spear", title: tr("Ordun yok"), text: tr("Tek başına bozkır affetmez. Bir köyden gönüllü topla."), at: nearest(s.villages) });
     if (s.wanted >= 2) out.push({ kind: "acil", icon: "wanted", title: tr("Aranıyorsun"), text: tr("Muhafızlar peşinde. Şehirlerden uzak dur ya da zamanla unutulmayı bekle.") });
+    s.forts.forEach((f, i) => {
+      if (f.owner === "me" && f.threat) out.push({ kind: "acil", icon: "icons/fortress", title: tr("{k} tehlikede", { k: this.fortTitle(i) }), text: tr("{w} ~{n} askerle geliyor. Yetişirsen surlarda sen de savaşırsın.", { w: this.fortOwnerName(f.threat.from), n: f.threat.n }), at: f });
+    });
     const pts = h.points + h.spts + h.tpts;
     if (pts) out.push({ kind: "firsat", icon: "crown", title: tr("{n} dağıtılmamış puan", { n: pts }), text: tr("Kahraman ekranında güç, beceri ve yeteneklerine dağıt."), open: "hero" });
+    if (s.free) {
+      const rich = s.forts.map((f, i) => ({ f, i })).filter((x) => x.f.owner === "me" && x.f.coffer >= FORT_TIERS[x.f.tier].income * 2).sort((a, b) => b.f.coffer - a.f.coffer)[0];
+      if (rich) out.push({ kind: "firsat", icon: "icons/fortress", title: tr("{k} kasası doldu", { k: this.fortTitle(rich.i) }), text: tr("Kasada {n} altın birikti. Uğrayıp al.", { n: Math.floor(rich.f.coffer) }), at: rich.f });
+      const prey = s.forts
+        .map((f, i) => ({ f, i, d: Math.hypot(f.x - h.x, f.y - h.y) }))
+        .filter((x) => x.f.owner !== "me" && this.isExplored(x.f.x, x.f.y) && !this.fortReason(x.i, true))
+        .sort((a, b) => a.d - b.d)[0];
+      if (prey) out.push({ kind: "firsat", icon: FORT_TIERS[prey.f.tier].art, title: tr("Kuşatılabilir: {k}", { k: this.fortTitle(prey.i) }), text: tr("{w} elinde, ~{n} muhafız. Alırsan çevredeki haramiler dağılır ve kale her gün vergi toplar.", { w: this.fortOwnerName(prey.f.owner), n: armySize(prey.f.gar) }), at: prey.f });
+    }
     if (s.free) {
       const today = this.dayOf().day;
       const evs = s.events.filter((e) => CITY_NAME[e.city] && !this.hostile(e.city));
@@ -2418,7 +2432,7 @@ export class Game {
         const used = new Set(keep.map((b) => b.camp));
         const near = this.s.camps
           .map((cp, i) => ({ cp, i, d: Math.hypot(cp.x - c.x, cp.y - c.y) }))
-          .filter((x) => x.cp.alive && !used.has(x.i) && x.d < 1500)
+          .filter((x) => x.cp.alive && !used.has(x.i) && x.d < 1500 * WS)
           .sort((a, b) => a.d - b.d)
           .slice(0, 2);
         for (const n of near) keep.push({ city: c.id, camp: n.i, gold: 90 * n.cp.tier + 60, renown: 6 * n.cp.tier, taken: false });
@@ -2527,6 +2541,8 @@ export class Game {
         return s.ruins[t.i];
       case "kurgan":
         return s.kurgans[t.i];
+      case "kale":
+        return s.forts[t.i] ?? null;
       case "fort":
         return s.story.fort;
       case "gate":
@@ -2749,6 +2765,7 @@ export class Game {
     s.nodes.forEach((n, i) => test({ kind: "node", i }, n.x, n.y));
     s.ruins.forEach((n, i) => !n.looted && test({ kind: "ruin", i }, n.x, n.y));
     s.kurgans.forEach((k, i) => test({ kind: "kurgan", i }, k.x, k.y, 1.3));
+    s.forts.forEach((f, i) => test({ kind: "kale", i }, f.x, f.y, 1.4 + f.tier * 0.15));
     if (s.story.fort && !s.story.done) test({ kind: "fort" }, s.story.fort.x, s.story.fort.y, 2);
     if (s.act2.gate && !s.act2.done) test({ kind: "gate" }, s.act2.gate.x, s.act2.gate.y, 2.2);
     if (s.act3.peak) test({ kind: "peak" }, s.act3.peak.x, s.act3.peak.y, 2.2);
@@ -3656,6 +3673,7 @@ export class Game {
 
   siegeArmy(city?: string): Army {
     const h = this.s.hero.army;
+    if (city && fortIndex(city) >= 0) return { ...h };
     const g = this.s.garrison;
     const a = (city && this.seferHelp(city)?.a) || army();
     return { spear: h.spear + g.spear + a.spear, archer: h.archer + g.archer + a.archer, horse: h.horse + g.horse + a.horse };
@@ -3734,7 +3752,9 @@ export class Game {
     if (out.surrender) {
       this.siegeRun = null;
       this.hud.closeSiege();
-      this.conquerCity(r.city, true);
+      const fi = fortIndex(r.city);
+      if (fi >= 0) this.captureFort(fi, true);
+      else this.conquerCity(r.city, true);
       return;
     }
     if (r.day > SIEGE_MAX_DAY) r.log.unshift({ t: tr("Askerler kuşatmadan bıktı: ya hücum et ya çekil."), cls: "bad" });
@@ -3756,7 +3776,9 @@ export class Game {
   siegeRetreat(): void {
     const r = this.siegeRun;
     if (!r) return;
+    const f = this.s.forts[fortIndex(r.city)];
     if (r.day === 1) this.s.engines = r.engines;
+    else if (f) f.gar = { ...r.gar };
     else this.s.sieged[r.city] = (this.s.sieged[r.city] ?? 0) + (r.gar0 - armySize(r.gar) > r.gar0 * 0.15 ? 1 : 0);
     this.siegeRun = null;
     this.hud.closeSiege();
@@ -3768,7 +3790,9 @@ export class Game {
     if (!r) return;
     this.siegeRun = null;
     this.hud.closeSiege();
-    this.assault(r.city, siegeGar(r), siegeWall(r), r.engines);
+    const fi = fortIndex(r.city);
+    if (fi >= 0) this.fortAssault(fi, siegeGar(r), siegeWall(r), r.engines);
+    else this.assault(r.city, siegeGar(r), siegeWall(r), r.engines);
   }
 
   siegeAssaultOdds(): number {
@@ -3872,6 +3896,298 @@ export class Game {
     const o = this.s.owned[city];
     if (!o) return 0;
     return wallBonus(o.from, 0) + 0.1 + 0.12 * this.cbl(city, "sur") + (this.cityGov(city)?.def ?? 0);
+  }
+
+  // ---------- kaleler ----------
+
+  fortTitle(i: number): string {
+    const f = this.s.forts[i];
+    return f ? `${f.name} ${tr(FORT_TIERS[f.tier].name)}` : "?";
+  }
+
+  siegeName(id: string): string {
+    const i = fortIndex(id);
+    return i >= 0 ? this.fortTitle(i) : CITY_NAME[id] ?? id;
+  }
+
+  fortOwnerName(o: FortOwner): string {
+    return o === "me" ? tr("Senin tuğun") : o === "harami" ? tr("Haramiler") : FACTIONS[o].name;
+  }
+
+  fortNear(i: number): boolean {
+    const f = this.s.forts[i];
+    return !!f && Math.hypot(f.x - this.s.hero.x, f.y - this.s.hero.y) < FORT_NEAR;
+  }
+
+  fortReason(i: number, ignoreNear = false): string {
+    const s = this.s;
+    const f = s.forts[i];
+    if (!f) return "?";
+    if (f.owner === "me") return tr("Bu kale zaten senin.");
+    if (!s.free) return tr("Önce özgürlüğünü kazan.");
+    const need = FORT_TIERS[f.tier].lv - FORT_LV_SLACK;
+    if (s.hero.lv < need) return tr("Bu surlara en az {n}. seviyede yürünür.", { n: need });
+    if (this.siegeRun) return tr("Zaten bir kuşatmadasın.");
+    if (armySize(s.hero.army) < FORT_MIN_ARMY) return tr("Kuşatma için birliğinde en az {n} asker olmalı.", { n: FORT_MIN_ARMY });
+    if (!ignoreNear && !this.fortNear(i)) return tr("Önce kalenin önüne git.");
+    return "";
+  }
+
+  kaleOdds(i: number): number {
+    const f = this.s.forts[i];
+    return f ? odds(this.s.hero.army, this.heroBonus(), f.gar, fortWall(f, this.s.engines), this.champion(), null) : 0;
+  }
+
+  besiegeFort(i: number): void {
+    if (this.fortReason(i)) return;
+    const s = this.s;
+    const f = s.forts[i];
+    if (f.owner !== "harami" && f.owner !== "me") {
+      const fac = f.owner;
+      s.rep[fac] = Math.max(-500, this.rep(fac) - 60);
+      if (this.pact(fac, "peace")) {
+        this.dip(fac).peace = 0;
+        this.addKut(-3, "ant bozuldu");
+      }
+    }
+    this.siegeRun = newSiege(fortKey(i), fortWall(f, s.engines), f.gar, s.engines, Math.random);
+    this.siegeRun.relief = f.owner === "harami" ? 99 : 5 + Math.floor(Math.random() * 3);
+    s.engines = 0;
+    this.siegeRun.log.unshift({ t: f.owner === "harami" ? tr("Haramiler kapıları sürgüledi; burçlardan ok yağıyor. Bunlara yardım gelmez.") : tr("Ordun kalenin önüne çadır kurdu. Burçlarda {f} sancağı dalgalanıyor.", { f: this.fortOwnerName(f.owner) }), cls: "" });
+    audio.play("quest");
+    this.hud.openSiege();
+  }
+
+  private fortAssault(i: number, gar: Army, wall: number, used: number): void {
+    const f = this.s.forts[i];
+    const name = this.fortTitle(i);
+    this.battle(tr("{n} kuşatması", { n: name }), gar, wall, (win) => {
+      if (!win) {
+        f.lost++;
+        f.gar = fortGarrison(f.tier, f.owner, f.lost);
+        return `<p class="warn">${tr("{n} surları dayandı.", { n: name })} ${used ? tr("Mancınıkların yakıldı.") : ""} ${tr("Garnizon kayıp verdi; bir dahaki kuşatmada daha zayıf olacak.")}</p>`;
+      }
+      return this.captureFort(i, false);
+    }, null, f.owner === "harami" ? tr("Kale haramileri") : tr("{f} garnizonu", { f: FACTIONS[f.owner as FactionId].short }));
+  }
+
+  private fortClear(i: number): number {
+    const s = this.s;
+    const f = s.forts[i];
+    const r = FORT_TIERS[f.tier].guard;
+    let n = 0;
+    s.camps.forEach((c, ci) => {
+      if (!c.alive || Math.hypot(c.x - f.x, c.y - f.y) > r) return;
+      c.alive = false;
+      c.respawnAt = this.now + DAY_SEC * 1000;
+      s.bandits = s.bandits.filter((b) => b.camp !== ci);
+      n++;
+    });
+    return n;
+  }
+
+  fortGuard(x: number, y: number): boolean {
+    return this.s.forts.some((f) => f.owner === "me" && Math.hypot(f.x - x, f.y - y) < FORT_TIERS[f.tier].guard);
+  }
+
+  private captureFort(i: number, peaceful: boolean): string {
+    const s = this.s;
+    const f = s.forts[i];
+    const name = this.fortTitle(i);
+    const prev = f.owner;
+    if (prev !== "harami" && prev !== "me") s.rep[prev] = Math.max(-500, this.rep(prev) - (peaceful ? 40 : 80));
+    f.owner = "me";
+    f.lost = 0;
+    f.since = this.dayOf().day;
+    f.coffer = 0;
+    f.threat = null;
+    f.gar = { spear: 3 * f.tier, archer: 2 * f.tier, horse: f.tier };
+    const gold = Math.round((160 * f.tier * f.tier + 120) * this.stealMult() * (prev === "harami" ? 1.25 : 1));
+    this.gain({ gold, stone: 80 * f.tier });
+    const ren = 12 * f.tier + (peaceful ? 4 : 0);
+    s.renown += ren;
+    s.mats.ruh += f.tier;
+    s.c.forts = (s.c.forts ?? 0) + 1;
+    const xp = 90 * f.tier * f.tier;
+    this.addXp(xp);
+    const cleared = this.fortClear(i);
+    this.addKut(1 + f.tier, `${name} alındı`);
+    this.repNear(f.x, f.y, 4 * f.tier, "yolları güvene aldın");
+    this.chron(peaceful ? `${name} kan dökülmeden ${gen(s.hero.name)} tuğuna boyun eğdi.` : `${name} burçlarına ${gen(s.hero.name)} tuğu dikildi.`);
+    audio.play("quest");
+    let txt = tr("{n} senin! +{g} altın, +{r} şöhret, +{x} TP", { n: name, g: gold, r: ren, x: xp });
+    if (cleared) txt += `<br>${tr("Çevredeki {n} harami kampı dağıldı; bu yollar artık senin korumanda.", { n: cleared })}`;
+    const it = this.drop(Math.min(5, f.tier + 1), f.tier >= 3 ? 1 : 0.6);
+    if (it) txt += `<br>${tr("Ganimet")}: <b class="r${it.rar}">${it.name}</b>`;
+    txt += `<br>${tr("Kale her gün {n} altın vergi toplar. Garnizonu güçlendir; komşular onu geri almak isteyecek.", { n: FORT_TIERS[f.tier].income })}`;
+    if (peaceful) this.hud.story(tr("{n} teslim oldu!", { n: name }), "icons/fortress", tr("Kapılar açıldı, muhafızlar silahlarını bıraktı.") + "<br><br>" + txt, tr("Kaleye gir"));
+    saveGame(s);
+    return `<p class="good">${txt}</p>`;
+  }
+
+  fortCollect(i: number): void {
+    const f = this.s.forts[i];
+    if (!f || f.owner !== "me" || f.coffer < 1 || !this.fortNear(i)) return;
+    const n = Math.floor(f.coffer);
+    f.coffer = 0;
+    this.gain({ gold: n });
+    audio.play("coin");
+    this.hud.toast(tr("{k} kasasından {n} altın aldın.", { k: this.fortTitle(i), n }), "good");
+  }
+
+  fortMove(i: number, put: boolean): void {
+    const s = this.s;
+    const f = s.forts[i];
+    if (!f || f.owner !== "me" || !this.fortNear(i)) return;
+    const [from, to] = put ? [s.hero.army, f.gar] : [f.gar, s.hero.army];
+    let moved = 0;
+    for (const u of UNIT_KEYS) {
+      const n = Math.min(from[u], put ? 5 : from[u]);
+      from[u] -= n;
+      to[u] += n;
+      moved += n;
+    }
+    if (moved) this.hud.toast(put ? tr("Garnizona {n} asker bıraktın.", { n: moved }) : tr("Garnizondan {n} asker birliğine katıldı.", { n: moved }), "good");
+  }
+
+  fortWallCost(i: number): { gold: number; stone: number } | null {
+    const f = this.s.forts[i];
+    return f && f.wall < FORT_WALL_MAX ? FORT_WALL_COST[f.wall] : null;
+  }
+
+  fortBuild(i: number): void {
+    const f = this.s.forts[i];
+    const cost = this.fortWallCost(i);
+    if (!f || f.owner !== "me" || !cost || !this.fortNear(i)) return;
+    if (!this.pay(cost)) {
+      this.hud.toast(tr("Bunun için yeterli kaynağın yok."), "bad");
+      return;
+    }
+    f.wall++;
+    audio.play("quest");
+    this.hud.toast(tr("{k} surları yükseldi (savunma +%10).", { k: this.fortTitle(i) }), "good");
+    saveGame(this.s);
+  }
+
+  fortDefenseOdds(i: number): number {
+    const f = this.s.forts[i];
+    if (!f?.threat) return 0;
+    const foe = this.fortFoe(f.tier, f.threat.n, f.threat.from);
+    const near = this.fortNear(i) || Math.hypot(f.x - this.s.hero.x, f.y - this.s.hero.y) < FORT_NEAR * 3;
+    const mine = near ? this.addArmy(this.s.hero.army, f.gar) : f.gar;
+    return odds(mine, near ? this.heroBonus() : 0, foe, -fortDefense(f), near ? this.champion() : null, null);
+  }
+
+  private addArmy(a: Army, b: Army): Army {
+    return { spear: a.spear + b.spear, archer: a.archer + b.archer, horse: a.horse + b.horse };
+  }
+
+  private fortFoe(tier: number, n: number, from: FortOwner): Army {
+    void tier;
+    return from === "harami" ? { spear: Math.round(n * 0.3), archer: Math.round(n * 0.25), horse: Math.round(n * 0.45) } : { spear: Math.round(n * 0.5), archer: Math.round(n * 0.3), horse: Math.round(n * 0.2) };
+  }
+
+  private fortDaily(day: number): void {
+    const s = this.s;
+    s.forts.forEach((f, i) => {
+      if (f.owner !== "me") {
+        if (f.lost > 0 && Math.random() < 0.12) f.lost--;
+        const full = fortGarrison(f.tier, f.owner, f.lost);
+        for (const u of UNIT_KEYS) f.gar[u] = Math.min(full[u], f.gar[u] + Math.ceil(full[u] * 0.1));
+        return;
+      }
+      const T = FORT_TIERS[f.tier];
+      f.coffer = Math.min(T.income * FORT_COFFER_DAYS, f.coffer + T.income);
+      if (f.threat && day >= f.threat.day) {
+        if (Math.hypot(f.x - s.hero.x, f.y - s.hero.y) < FORT_NEAR * 3 && !this.battleLock && !this.siegeRun) this.fortAlarm(i);
+        else this.fortAuto(i);
+        return;
+      }
+      if (f.threat || day - f.since < 3 || Math.random() > 0.05 + 0.025 * f.tier) return;
+      const near = CITIES.reduce((a, c) => (Math.hypot(c.x - f.x, c.y - f.y) < Math.hypot(a.x - f.x, a.y - f.y) ? c : a));
+      const from: FortOwner = Math.random() < 0.5 ? "harami" : factionOf(near.id);
+      const n = Math.round(T.gar * (0.55 + Math.min(0.65, (day - f.since) * 0.02)));
+      f.threat = { day: day + 2, n, from };
+      const who = this.fortOwnerName(from);
+      this.chron(`${who}, ${this.fortTitle(i)} üzerine yürüyor.`);
+      audio.play("lose");
+      this.hud.toast(tr("{w} {k} üzerine yürüyor! 2 gün içinde surlara varacaklar (~{n} asker).", { w: who, k: this.fortTitle(i), n }), "bad");
+    });
+  }
+
+  private fortAuto(i: number): void {
+    const s = this.s;
+    const f = s.forts[i];
+    const th = f.threat!;
+    f.threat = null;
+    const res = fight(f.gar, fortDefense(f), this.fortFoe(f.tier, th.n, th.from), 0);
+    const name = this.fortTitle(i);
+    if (res.win) {
+      f.gar = { ...res.rounds[res.rounds.length - 1].a };
+      s.renown += 2 * f.tier;
+      audio.play("quest");
+      this.hud.toast(tr("{k} garnizonu saldırıyı püskürttü!", { k: name }), "good");
+    } else this.loseFort(i, th.from);
+  }
+
+  private fortAlarm(i: number): void {
+    const f = this.s.forts[i];
+    const th = f.threat!;
+    const p = Math.round(this.fortDefenseOdds(i) * 100);
+    this.hud.choice(tr("{k} kuşatıldı!", { k: this.fortTitle(i) }), "icons/fortress", tr("{w} ordusu (~{n} asker) surların önünde. Yakındasın: burçlara çıkıp garnizonla birlikte savaşabilirsin.", { w: this.fortOwnerName(th.from), n: th.n }), [
+      { label: tr("Surlara çık · şans %{p}", { p }), cls: "", fn: () => this.defendFort(i) },
+      { label: tr("Garnizona güven"), cls: "", fn: () => this.fortAuto(i) },
+    ]);
+  }
+
+  private defendFort(i: number): void {
+    const s = this.s;
+    const f = s.forts[i];
+    const th = f.threat;
+    if (!th) return;
+    const g0 = { ...f.gar };
+    const tot = this.addArmy(s.hero.army, g0);
+    s.hero.army = { ...tot };
+    f.gar = army();
+    this.retreatHook = () => {
+      for (const u of UNIT_KEYS) s.hero.army[u] -= g0[u];
+      f.gar = g0;
+      this.fortAuto(i);
+    };
+    this.battle(tr("{k} savunması", { k: this.fortTitle(i) }), this.fortFoe(f.tier, th.n, th.from), -fortDefense(f), (win) => {
+      this.retreatHook = null;
+      for (const u of UNIT_KEYS) {
+        const left = s.hero.army[u];
+        const back = tot[u] ? Math.min(left, Math.round((g0[u] * left) / tot[u])) : 0;
+        s.hero.army[u] -= back;
+        f.gar[u] += back;
+      }
+      f.threat = null;
+      if (!win) {
+        this.loseFort(i, th.from, true);
+        return `<p class="warn">${tr("Surlar düştü.")}</p>`;
+      }
+      s.renown += 5 * f.tier;
+      this.addKut(2, "kale savunması");
+      this.chron(`${this.fortTitle(i)} surlarında ${s.hero.name} düşmanı geri püskürttü.`);
+      return `<p class="good">${tr("Saldırı püskürtüldü! +{r} şöhret", { r: 5 * f.tier })}</p>`;
+    }, null, this.fortOwnerName(th.from));
+  }
+
+  private loseFort(i: number, to: FortOwner, quiet = false): void {
+    const f = this.s.forts[i];
+    const name = this.fortTitle(i);
+    f.owner = to === "me" ? "harami" : to;
+    f.lost = 1;
+    f.wall = Math.max(0, f.wall - 1);
+    f.coffer = 0;
+    f.threat = null;
+    f.gar = fortGarrison(f.tier, f.owner, 1);
+    this.addKut(-3, `${name} düştü`);
+    audio.play("lose");
+    this.chron(`${name}, ${this.fortOwnerName(f.owner)} eline geçti.`);
+    if (!quiet) this.hud.story(tr("{k} kaybedildi", { k: name }), "icons/fortress", tr("{w} surları aştı; garnizonun kılıçtan geçirildi. Kaleyi yeniden almak için kuşatman gerekecek.", { w: this.fortOwnerName(f.owner) }), tr("Acı haber"));
+    saveGame(this.s);
   }
 
   // ---------- otag ----------
@@ -4122,6 +4438,7 @@ export class Game {
     const day = this.dayOf().day;
     const se = this.season();
     this.otagDaily();
+    this.fortDaily(day);
     this.toreTick(day);
     this.directorDaily();
     for (const o of Object.values(s.owned)) this.addKut(o.tax === 2 ? -1 : o.tax === 0 ? 0.5 : 0);
@@ -5706,7 +6023,7 @@ export class Game {
       const tr = RIVAL_TRAITS[r.trait];
       if (r.status === "peace") {
         r.rel += r.rel > 0 ? -1 : r.rel < 0 ? 1 : 0;
-        const owns = Object.keys(s.owned).some((c) => Math.hypot(this.cityPos(c).x - this.cityPos(r.home).x, this.cityPos(c).y - this.cityPos(r.home).y) < 1400);
+        const owns = Object.keys(s.owned).some((c) => Math.hypot(this.cityPos(c).x - this.cityPos(r.home).x, this.cityPos(c).y - this.cityPos(r.home).y) < 1400 * WS);
         if ((r.rel <= -40 || (owns && r.trait === "hirsli" && r.rel < 10)) && Math.random() < 0.2 * tr.war) this.rivalWar(r, false);
       } else if (r.status === "war") {
         if (r.defeats > 0 && Math.random() < 0.15 / tr.war) {
@@ -5952,7 +6269,7 @@ export class Game {
     const home = this.cityPos(r.home);
     const day = this.dayOf().day;
     const opts: BeyReq[] = [];
-    const camps = s.camps.map((c, i) => ({ c, i, d: Math.hypot(c.x - home.x, c.y - home.y) })).filter((x) => x.c.alive && x.d < 1600).sort((a, b) => a.d - b.d);
+    const camps = s.camps.map((c, i) => ({ c, i, d: Math.hypot(c.x - home.x, c.y - home.y) })).filter((x) => x.c.alive && x.d < 1600 * WS).sort((a, b) => a.d - b.d);
     if (camps.length) opts.push({ kind: "camp", camp: camps[0].i, until: day + REQ_INFO.camp.days, gold: reqGold("camp", r.lv) });
     const good = oneOf(REQ_GOODS);
     const n = 5 + Math.floor(r.lv / 3);
@@ -6416,7 +6733,7 @@ export class Game {
         v.rep = Math.max(0, v.rep - 15);
         v.rec = 0;
         this.hud.toast(`${v.name} yağmalandı! Köylüler sana küstü.`, "bad");
-        const sc = CITIES.find((c) => s.serais[c.id] && Math.hypot(c.x - v.x, c.y - v.y) < 700);
+        const sc = CITIES.find((c) => s.serais[c.id] && Math.hypot(c.x - v.x, c.y - v.y) < 700 * WS);
         if (sc && s.serais[sc.id].coffer > 0) {
           s.serais[sc.id].coffer = 0;
           this.hud.toast(`Haramiler ${CITY_NAME[sc.id]} kervansarayının kasasını da boşalttı!`, "bad");
@@ -6427,7 +6744,7 @@ export class Game {
     } else if (s.free && now > s.raidAt && !this.battleLock) {
       s.raidAt = now + 200000 + Math.random() * 160000;
       const h = s.hero;
-      const cand = s.villages.map((v, i) => ({ v, i, d: Math.hypot(v.x - h.x, v.y - h.y) })).filter((x) => x.d > 200 && x.d < 1300 && this.isExplored(x.v.x, x.v.y) && Math.hypot(x.v.x - CAPITAL.x, x.v.y - CAPITAL.y) > 260);
+      const cand = s.villages.map((v, i) => ({ v, i, d: Math.hypot(v.x - h.x, v.y - h.y) })).filter((x) => x.d > 200 && x.d < 1300 * WS && this.isExplored(x.v.x, x.v.y) && Math.hypot(x.v.x - CAPITAL.x, x.v.y - CAPITAL.y) > 260);
       if (cand.length) {
         const c = cand[Math.floor(Math.random() * cand.length)];
         const tier = Math.min(5, Math.max(1, Math.round(h.lv / 3)));

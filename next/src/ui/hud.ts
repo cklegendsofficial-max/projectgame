@@ -50,6 +50,7 @@ import { MYCV_COST, MYCV_GUARD, MYCV_GUARD_MAX, MYCV_UPGRADE } from "../game/myc
 import type { Good } from "../game/rpg";
 import { BALBAL_GOLD, BALBAL_MAX, BALBAL_STONE, FOE_KIND, balbalBonus, yugCost } from "../game/yug";
 import { SIEGE_ACTS, SIEGE_MAX_DAY, parleyChance, siegeGar } from "../game/siege";
+import { FORT_COFFER_DAYS, FORT_TIERS, FORT_WALL_MAX, fortDefense, fortWall } from "../game/forts";
 import { ORIGINS, ORIGIN_BY_ID, type Origin, type OriginId } from "../game/origins";
 import { BOND_LIKES, BOND_LIKES_EN, BOND_QUEST, COMP_QUESTS, SWORN_MULT, bondTier } from "../game/bonds";
 import { SETS, SET_FORGE, SET_KEYS, SET_SLOTS, UNIQUES, modsText, type SetId } from "../game/legend";
@@ -863,7 +864,7 @@ export class Hud {
     const wallPct = Math.round(100 - r.breach);
     const towers = Array.from({ length: 7 }, (_, i) => `<i class="${(i + 0.5) / 7 * 100 < r.breach ? "down" : ""}${i === 3 && r.sap ? " sap" : ""}"></i>`).join("");
     el.innerHTML = `<div class="bbox sgbox">
-      <h2>${ic("siege")} ${CITY_NAME[r.city]} ${t("kuşatması")} · ${t("Gün")} ${Math.min(r.day, SIEGE_MAX_DAY)}/${SIEGE_MAX_DAY}</h2>
+      <h2>${ic("siege")} ${g.siegeName(r.city)} ${t("kuşatması")} · ${t("Gün")} ${Math.min(r.day, SIEGE_MAX_DAY)}/${SIEGE_MAX_DAY}</h2>
       <div class="sgwall">${towers}</div>
       ${bar(wallPct, 100, "sgw", `${t("Sur sağlamlığı")} ${wallPct}%`)}
       ${bar(r.morale, 100, "sgm", `${t("Savunmacı morali")} ${Math.round(r.morale)}`)}
@@ -871,7 +872,7 @@ export class Hud {
         <span>${ic("shield")} ${t("Garnizon")}: <b>${armySize(siegeGar(r))}</b></span>
         <span>${ic("swords")} ${t("Ordun")}: <b>${armySize(g.siegeArmy(r.city))}</b></span>
         <span>${ic("food")} ${t("Erzak")}: <b class="${s.res.food < food ? "dear" : ""}">${Math.floor(s.res.food)}</b> <small>(-${food}/${t("gün")})</small></span>
-        <span>${ic("tug")} ${r.relief > 0 ? `${t("Yardım ordusu")}: <b class="dear">${r.relief} ${t("gün")}</b>` : `<b>${t("Yardım ordusu geldi")}</b>`}</span>
+        <span>${ic("tug")} ${r.relief > 30 ? `<b>${t("Yardım gelmez")}</b>` : r.relief > 0 ? `${t("Yardım ordusu")}: <b class="dear">${r.relief} ${t("gün")}</b>` : `<b>${t("Yardım ordusu geldi")}</b>`}</span>
         <span>${ic("b_tasocagi")} ${t("Lağım")}: <b>${r.sap}/3</b></span>
         <span>${ic("siege")} ${t("Mancınık")}: <b>${r.engines}</b></span>
       </div>
@@ -1483,6 +1484,10 @@ export class Hud {
           ${near ? `<button class="btn red big" data-a="${this.act(() => { this.close(); g.attackKurgan(t.i); })}">${ic("swords")} Taşa saldır!</button>` : this.walkBtn(t, "Taşa yürü")}` : this.deepHtml(t.i, near) + (near ? this.spiritBtn() : ""));
         break;
       }
+      case "kale": {
+        html = this.fortPanel(t.i);
+        break;
+      }
       case "ruin": {
         const r = s.ruins[t.i];
         const near = Math.hypot(r.x - s.hero.x, r.y - s.hero.y) < 80;
@@ -1505,6 +1510,44 @@ export class Hud {
         if (el) el.scrollTop = y;
       }
     }
+  }
+
+  private fortPanel(i: number): string {
+    const g = this.g;
+    const s = g.s;
+    const f = s.forts[i];
+    const T = FORT_TIERS[f.tier];
+    const tg: Target = { kind: "kale", i };
+    const near = g.fortNear(i);
+    const sub = `${t(T.name)} · ${t("Önerilen seviye")} ${T.lv} · ${g.fortOwnerName(f.owner)}`;
+    if (f.owner === "me") {
+      const cost = g.fortWallCost(i);
+      const th = f.threat;
+      const dp = th ? Math.round(g.fortDefenseOdds(i) * 100) : 0;
+      return this.frame(g.fortTitle(i), sub, assetUrl(T.art), `
+        <p>${t("Burçlarda senin tuğun dalgalanıyor. Kale çevresindeki yolları korur: {r} adım içinde harami kampı kurulamaz.", { r: T.guard })}</p>
+        ${th ? `<div class="odds bad">${t("{w} ~{n} askerle geliyor", { w: g.fortOwnerName(th.from), n: th.n })} · ${t("Gün")} ${th.day} · ${t("Savunma şansı")}: <b>%${dp}</b></div>` : ""}
+        <h3>${t("Garnizon")}</h3>${armyHtml(f.gar)}
+        <div class="odds mid">${ic("coins")} ${t("Kasa")}: <b>${Math.floor(f.coffer)}</b> / ${T.income * FORT_COFFER_DAYS} · ${t("günde")} +${T.income}</div>
+        <p class="dim">${t("Sur seviyesi")}: ${f.wall}/${FORT_WALL_MAX} · ${t("savunma")} +%${Math.round(fortDefense(f) * 100)}</p>
+        ${near ? `<div class="row">
+          <button class="btn go ${f.coffer < 1 ? "off" : ""}" data-a="${this.act(() => g.fortCollect(i))}">${ic("coins")} ${t("Kasayı al")}</button>
+          <button class="btn ${armySize(s.hero.army) === 0 ? "off" : ""}" data-a="${this.act(() => g.fortMove(i, true))}">${ic("shield")} ${t("Garnizona bırak")} (5/${t("tür")})</button>
+          <button class="btn ${armySize(f.gar) === 0 ? "off" : ""}" data-a="${this.act(() => g.fortMove(i, false))}">${ic("swords")} ${t("Garnizonu al")}</button>
+        </div>
+        ${cost ? `<button class="btn ${s.res.gold < cost.gold || s.res.stone < cost.stone ? "off" : ""}" data-a="${this.act(() => g.fortBuild(i))}">${ic("fortress")} ${t("Surları yükselt")} · ${cost.gold} ${t("altın")}, ${cost.stone} ${t("taş")}</button>` : ""}` : this.walkBtn(tg, t("Kaleye yürü"))}`);
+    }
+    const why = g.fortReason(i, true);
+    const p = why ? 0 : Math.round(g.kaleOdds(i) * 100);
+    const lore = f.owner === "harami" ? t("Haramiler bu eski kaleyi yuva yapmış. Kervan yolunu gözetliyor, geçenden haraç alıyorlar.") : t("{f} bu kaleyle yolu tutuyor. Saldırırsan onlarla aran bozulur.", { f: g.fortOwnerName(f.owner) });
+    return this.frame(g.fortTitle(i), sub, assetUrl(T.art), `
+      <p>${lore}</p>
+      <h3>${t("Muhafızlar")}</h3>${armyHtml(f.gar, "enemy")}
+      <h3>${t("Sen ve birliğin")}</h3>${armyHtml(s.hero.army)}
+      <div class="odds ${why ? "bad" : p >= 65 ? "good" : p >= 35 ? "mid" : "bad"}">${why ? why : `${t("Doğrudan hücum şansı")}: <b>%${p}</b> · ${t("sur")} +%${Math.round(fortWall(f, s.engines) * 100)}`}</div>
+      <p class="dim">${t("Kuşatmada surları döv, lağım kaz, aç bırak ya da elçi gönder; hazır olunca hücum et. Ödül: altın, taş, şöhret, TP, eşya; kale her gün {n} altın vergi toplar.", { n: T.income })}</p>
+      ${s.engines < 3 ? `<button class="btn ${s.res.gold < ENGINE_GOLD_UI ? "off" : ""}" data-a="${this.act(() => g.buyEngine())}">${ic("siege")} ${t("Mancınık kur")} (${ENGINE_GOLD_UI}) · ${s.engines}/3</button>` : ""}
+      ${near ? `<button class="btn red big ${g.fortReason(i) ? "off" : ""}" data-a="${this.act(() => g.besiegeFort(i))}">${ic("siege")} ${t("Kuşat!")}</button>` : this.walkBtn(tg, t("Kaleye yürü"))}`);
   }
 
   private nodeHtml(i: number): string {
@@ -2760,6 +2803,15 @@ export class Hud {
       const own = ci.id === CAPITAL.id || !!g.s.owned[ci.id];
       c.fillStyle = own ? "#ffd56a" : "#f2e6c8";
       c.fillRect(ci.x * sx - (own ? 3 : 2), ci.y * sy - (own ? 3 : 2), own ? 6 : 4, own ? 6 : 4);
+    }
+    for (const f of g.s.forts) {
+      if (f.owner !== "me" && !g.isExplored(f.x, f.y)) continue;
+      c.fillStyle = f.owner === "me" ? "#ffd56a" : f.owner === "harami" ? "#ff8a70" : FACTIONS[f.owner].color;
+      c.beginPath();
+      c.moveTo(f.x * sx, f.y * sy - 4);
+      c.lineTo(f.x * sx + 3.5, f.y * sy + 2.5);
+      c.lineTo(f.x * sx - 3.5, f.y * sy + 2.5);
+      c.fill();
     }
     const wanted = new Set(g.s.bounties.filter((b) => b.taken).map((b) => b.camp));
     g.s.camps.forEach((cp, i) => {

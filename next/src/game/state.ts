@@ -1,4 +1,4 @@
-import { CITIES, H, NAV, NW, NH, W, type World } from "../world/gen";
+import { CITIES, GH, GW, H, NAV, NW, NH, W, W0, WS, type World } from "../world/gen";
 import { rng } from "../world/noise";
 import { cloudPush } from "../platform";
 import { BANDIT_NAMES, BUILDINGS, VILLAGE_NAMES, army, type Army, type BuildingId, type NodeKind, type Res, type Unit } from "./data";
@@ -22,6 +22,8 @@ import type { BoyState } from "./korkut";
 import type { CompId } from "./story";
 import type { OriginId } from "./origins";
 import type { Fallen, Foe } from "./yug";
+import { FORT_NAMES, fortGarrison, type Fort } from "./forts";
+import { factionOf } from "./factions";
 import type { MyCaravan } from "./mycaravan";
 import type { DipMap } from "./spy";
 
@@ -197,11 +199,13 @@ export interface Counters {
   turan: number;
   /** Savaş başında düşman taktiğini doğru okuma sayısı. */
   reads: number;
+  forts: number;
   tore: number;
 }
 
 export interface GameState {
   v: number;
+  mapW?: number;
   res: Res;
   resAt: number;
   buildings: Record<BuildingId, { lv: number; until: number }>;
@@ -214,6 +218,7 @@ export interface GameState {
   camps: Camp[];
   nodes: ResNode[];
   ruins: Ruin[];
+  forts: Fort[];
   kurgans: Kurgan[];
   bandits: Bandit[];
   quest: number;
@@ -355,17 +360,40 @@ function navOk(w: World, x: number, y: number): boolean {
 }
 
 function terrainAt(w: World, x: number, y: number): { h: number; m: number } {
-  const gx = Math.min(1199, Math.floor((x / W) * 1200));
-  const gy = Math.min(699, Math.floor((y / H) * 700));
-  const i = gy * 1200 + gx;
+  const gx = Math.min(GW - 1, Math.floor((x / W) * GW));
+  const gy = Math.min(GH - 1, Math.floor((y / H) * GH));
+  const i = gy * GW + gx;
   return { h: w.height[i], m: w.moist[i] };
 }
 
-export function placeWorld(w: World): Pick<GameState, "villages" | "camps" | "nodes" | "ruins" | "kurgans"> {
+export function placeWorld(w: World): Pick<GameState, "villages" | "camps" | "nodes" | "ruins" | "kurgans" | "forts"> {
   const R = rng(4242);
   const taken: { x: number; y: number; r: number }[] = CITIES.map((c) => ({ x: c.x, y: c.y, r: 150 }));
   const free = (x: number, y: number, r: number) => taken.every((t) => Math.hypot(t.x - x, t.y - y) > t.r + r);
-  const pick = (n: number, r: number, test: (x: number, y: number) => boolean, tries = 4000) => {
+  const forts: Fort[] = [];
+  for (let k = 0; k < 8000 && forts.length < FORT_NAMES.length; k++) {
+    const road = w.roads[Math.floor(R() * w.roads.length)];
+    if (!road || road.length < 8) continue;
+    const j = 2 * Math.floor(R() * (road.length / 2 - 2)) + 2;
+    const dx = road[j + 2] - road[j - 2];
+    const dy = road[j + 3] - road[j - 1];
+    const len = Math.hypot(dx, dy) || 1;
+    const side = R() < 0.5 ? -1 : 1;
+    const off = 90 + R() * 110;
+    const x = road[j] + (-dy / len) * off * side;
+    const y = road[j + 1] + (dx / len) * off * side;
+    if (!navOk(w, x, y) || !free(x, y, 220) || CITIES.some((c) => Math.hypot(c.x - x, c.y - y) < 380)) continue;
+    taken.push({ x, y, r: 220 });
+    forts.push({ name: FORT_NAMES[forts.length], x, y, tier: 1, owner: "harami", gar: { spear: 0, archer: 0, horse: 0 }, lost: 0, coffer: 0, wall: 0, since: 0, threat: null });
+  }
+  const byDist = [...forts].sort((a, b) => Math.hypot(a.x - CAPITAL.x, a.y - CAPITAL.y) - Math.hypot(b.x - CAPITAL.x, b.y - CAPITAL.y));
+  byDist.forEach((f, r) => {
+    f.tier = Math.min(4, 1 + Math.floor((r * 4) / byDist.length)) as Fort["tier"];
+    const near = CITIES.reduce((a, c) => (Math.hypot(c.x - f.x, c.y - f.y) < Math.hypot(a.x - f.x, a.y - f.y) ? c : a));
+    f.owner = f.tier >= 3 && R() < 0.6 ? factionOf(near.id) : "harami";
+    f.gar = fortGarrison(f.tier, f.owner, 0);
+  });
+  const pick = (n: number, r: number, test: (x: number, y: number) => boolean, tries = 9000) => {
     const out: { x: number; y: number }[] = [];
     for (let k = 0; k < tries && out.length < n; k++) {
       const x = 80 + R() * (W - 160);
@@ -389,13 +417,13 @@ export function placeWorld(w: World): Pick<GameState, "villages" | "camps" | "no
       break;
     }
   }
-  const villages: Village[] = pick(46, 70, (x, y) => terrainAt(w, x, y).h < 0.34).map((p, i) => {
+  const villages: Village[] = pick(80, 70, (x, y) => terrainAt(w, x, y).h < 0.34).map((p, i) => {
     const t = terrainAt(w, p.x, p.y);
     return { name: VILLAGE_NAMES[i % VILLAGE_NAMES.length], x: p.x, y: p.y, yurt: t.m < 0.42, rec: 4, recAt: 0, rep: 0 };
   });
-  const camps: Camp[] = pick(24, 90, (x, y) => Math.hypot(x - CAPITAL.x, y - CAPITAL.y) > 650 && CITIES.every((c) => Math.hypot(c.x - x, c.y - y) > 280)).map((p, i) => {
+  const camps: Camp[] = pick(40, 90, (x, y) => Math.hypot(x - CAPITAL.x, y - CAPITAL.y) > 650 * WS && CITIES.every((c) => Math.hypot(c.x - x, c.y - y) > 280)).map((p, i) => {
     const d = Math.hypot(p.x - CAPITAL.x, p.y - CAPITAL.y);
-    const tier = Math.min(5, 1 + Math.floor(d / 650));
+    const tier = Math.min(5, 1 + Math.floor(d / (650 * WS)));
     return { name: BANDIT_NAMES[i % BANDIT_NAMES.length], x: p.x, y: p.y, tier, alive: true, respawnAt: 0, garrison: campGarrison(tier, R) };
   });
   const addNodes = (kind: NodeKind, n: number, test: (h: number, m: number) => boolean) => {
@@ -404,21 +432,21 @@ export function placeWorld(w: World): Pick<GameState, "villages" | "camps" | "no
       return test(t.h, t.m);
     })) {
       const d = Math.hypot(p.x - CAPITAL.x, p.y - CAPITAL.y);
-      const lv = Math.min(3, 1 + Math.floor(d / 1100) + (R() < 0.2 ? 1 : 0));
+      const lv = Math.min(3, 1 + Math.floor(d / (1100 * WS)) + (R() < 0.2 ? 1 : 0));
       const max = 1500 * lv;
       nodes.push({ kind, x: p.x, y: p.y, lv, left: max, max, regenAt: 0 });
     }
   };
-  addNodes("food", 22, (h, m) => h < 0.3 && m > 0.42);
-  addNodes("wood", 20, (h, m) => h < 0.4 && m > 0.55);
-  addNodes("stone", 18, (h) => h > 0.26 && h < 0.5);
-  addNodes("gold", 10, (h) => h > 0.3 && h < 0.55);
-  const ruins: Ruin[] = pick(10, 80, () => true).map((p) => ({ x: p.x, y: p.y, looted: false }));
-  const kurgans: Kurgan[] = pick(10, 90, (x, y) => Math.hypot(x - CAPITAL.x, y - CAPITAL.y) > 520).map((p) => {
-    const tier = Math.min(5, 1 + Math.floor(Math.hypot(p.x - CAPITAL.x, p.y - CAPITAL.y) / 700));
+  addNodes("food", 38, (h, m) => h < 0.3 && m > 0.42);
+  addNodes("wood", 34, (h, m) => h < 0.4 && m > 0.55);
+  addNodes("stone", 30, (h) => h > 0.26 && h < 0.5);
+  addNodes("gold", 17, (h) => h > 0.3 && h < 0.55);
+  const ruins: Ruin[] = pick(18, 80, () => true).map((p) => ({ x: p.x, y: p.y, looted: false }));
+  const kurgans: Kurgan[] = pick(16, 90, (x, y) => Math.hypot(x - CAPITAL.x, y - CAPITAL.y) > 520 * WS).map((p) => {
+    const tier = Math.min(5, 1 + Math.floor(Math.hypot(p.x - CAPITAL.x, p.y - CAPITAL.y) / (700 * WS)));
     return { x: p.x, y: p.y, tier, alive: true, respawnAt: 0, guard: kurganGuard(tier) };
   });
-  return { villages, camps, nodes, ruins, kurgans };
+  return { villages, camps, nodes, ruins, kurgans, forts };
 }
 
 export function kurganGuard(tier: number): Army {
@@ -452,7 +480,7 @@ export function banditArmy(tier: number): Army {
 }
 
 export function newCounters(): Counters {
-  return { shifts: 0, trains: 0, profit: 0, wins: 0, recruits: 0, bought: 0, moved: 0, camps: 0, built: 0, trained: 0, marched: 0, spent: 0, plus: 0, kurgans: 0, contracts: 0, crafted: 0, raids: 0, sides: 0, robbed: 0, rescued: 0, floors: 0, slain: 0, foals: 0, conquests: 0, beyq: 0, voyages: 0, turan: 0, tore: 0, reads: 0 };
+  return { shifts: 0, trains: 0, profit: 0, wins: 0, recruits: 0, bought: 0, moved: 0, camps: 0, built: 0, trained: 0, marched: 0, spent: 0, plus: 0, kurgans: 0, contracts: 0, crafted: 0, raids: 0, sides: 0, robbed: 0, rescued: 0, floors: 0, slain: 0, foals: 0, conquests: 0, beyq: 0, voyages: 0, turan: 0, tore: 0, reads: 0, forts: 0 };
 }
 
 export function newGame(w: World): GameState {
@@ -490,6 +518,7 @@ export function newGame(w: World): GameState {
       paid: {},
     },
     marches: [],
+    mapW: W,
     explored: new Uint8Array(NW * NH),
     ...places,
     bandits: [],
@@ -656,6 +685,53 @@ export function saveGame(s: GameState): void {
   }
 }
 
+const COORD_KEYS = new Set(["x", "y", "tx", "ty"]);
+
+function scaleCoords(o: unknown, k: number, depth = 0): void {
+  if (!o || typeof o !== "object" || depth > 8) return;
+  if (Array.isArray(o)) {
+    for (const v of o) scaleCoords(v, k, depth + 1);
+    return;
+  }
+  const rec = o as Record<string, unknown>;
+  for (const key of Object.keys(rec)) {
+    const v = rec[key];
+    if (typeof v === "number" && COORD_KEYS.has(key)) rec[key] = v * k;
+    else if (key === "path" && Array.isArray(v) && v.every((n) => typeof n === "number")) rec[key] = v.map((n) => n * k);
+    else if (v && typeof v === "object") scaleCoords(v, k, depth + 1);
+  }
+}
+
+/** Eski (küçük) haritadaki kaydı yeni ölçeğe taşır: koordinatlar büyür, sis örneklenir, boşluklara yeni yerler eklenir. */
+function migrateMap(r: Partial<GameState> & { explored?: string }, fresh: GameState, oldW: number): Uint8Array {
+  const k = W / oldW;
+  const { explored: rawFog, ...rest } = r;
+  scaleCoords(rest, k);
+  Object.assign(r, rest);
+  const ow = Math.round(oldW / NAV);
+  const oh = Math.round((H / k) / NAV);
+  const old = typeof rawFog === "string" ? decodeBits(rawFog, ow * oh) : new Uint8Array(ow * oh);
+  const fog = new Uint8Array(NW * NH);
+  for (let y = 0; y < NH; y++)
+    for (let x = 0; x < NW; x++) {
+      const ox = Math.min(ow - 1, Math.floor(x / k));
+      const oy = Math.min(oh - 1, Math.floor(y / k));
+      if (old[oy * ow + ox]) fog[y * NW + x] = 1;
+    }
+  const far = (p: { x: number; y: number }, list: { x: number; y: number }[], d: number) => list.every((q) => Math.hypot(q.x - p.x, q.y - p.y) > d);
+  const add = <T extends { x: number; y: number }>(cur: T[] | undefined, extra: T[], d: number): T[] | undefined => {
+    if (!Array.isArray(cur)) return cur;
+    return [...cur, ...extra.filter((p) => far(p, cur, d))];
+  };
+  r.villages = add(r.villages, fresh.villages, 260);
+  r.camps = add(r.camps, fresh.camps, 320);
+  r.nodes = add(r.nodes, fresh.nodes, 220);
+  r.ruins = add(r.ruins, fresh.ruins, 400);
+  r.kurgans = add(r.kurgans, fresh.kurgans, 420);
+  if (!Array.isArray(r.forts)) r.forts = fresh.forts.filter((f) => far(f, r.villages ?? [], 90) && far(f, r.camps ?? [], 140));
+  return fog;
+}
+
 export function loadGame(w: World): GameState {
   const fresh = newGame(w);
   try {
@@ -663,6 +739,9 @@ export function loadGame(w: World): GameState {
     if (!raw) return fresh;
     const r = JSON.parse(raw) as Partial<GameState> & { explored?: string };
     if (r.v !== 3) return fresh;
+    const oldW = r.mapW ?? W0;
+    let explored = typeof r.explored === "string" ? decodeBits(r.explored, NW * NH) : fresh.explored;
+    if (oldW !== W) explored = migrateMap(r, fresh, oldW);
     return {
       ...fresh,
       ...r,
@@ -671,7 +750,8 @@ export function loadGame(w: World): GameState {
       c: { ...fresh.c, ...(r.c ?? {}) },
       mats: { ...fresh.mats, ...(r.mats ?? {}) },
       story: { ...fresh.story, ...(r.story ?? {}) },
-      explored: typeof r.explored === "string" ? decodeBits(r.explored, NW * NH) : fresh.explored,
+      mapW: W,
+      explored,
       bandits: [],
       caravans: [],
       storms: [],

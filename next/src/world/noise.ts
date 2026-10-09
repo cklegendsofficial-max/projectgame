@@ -66,5 +66,7 @@ export function segDist(px: number, py: number, ax: number, ay: number, bx: numb
   const dy = by - ay;
   const l = dx * dx + dy * dy;
   const t = l === 0 ? 0 : Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / l));
-  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+  const ex = px - (ax + t * dx);
+  const ey = py - (ay + t * dy);
+  return Math.sqrt(ex * ex + ey * ey);
 }

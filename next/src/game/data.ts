@@ -104,6 +104,10 @@ export const VILLAGE_NAMES = [
   "Kurtbeli", "Ortaköy", "Elmalı", "Tepecik", "Kuyucak", "Davutlu", "Buğdaylı", "Ardıçlı", "Karaman", "Yarbaşı",
   "Kayseriye", "Develi", "Acısu", "Saray", "Eğrisu", "Kalealtı", "Kurşunlu", "Otluk", "Pınarbaşı", "Yazır",
   "Çoban", "Akpınar", "Karabağ", "Hanlı", "Burunsuz", "Çatak", "Narlı", "Kepez",
+  "Ilgaz", "Sarıçay", "Kızılırmak", "Ağaçlı", "Bulgurlu", "Çiçekli", "Kayabaşı", "Dereli", "Ocaklı", "Kınık",
+  "Bayat", "Avşar", "Eymür", "Çepni", "Döğer", "Yüreğir", "Alayunt", "Peçenek", "Kıpçaklı", "Salur",
+  "Kazanlı", "Tekeli", "Üçoklu", "Bozoklu", "Yağmurlu", "Karlık", "Söğütçük", "Arpalık", "Kumluca", "Yalınca",
+  "Tuzluca", "Kamışlı", "Bademli", "Alaca",
 ];
 
 export const BANDIT_NAMES = ["Kara Çete", "Kızıl Kurtlar", "Çöl Akrepleri", "Dağ Kartalları", "Gece Atlıları", "Kum Fırtınası", "Yılan Çetesi", "Demir Pençe"];

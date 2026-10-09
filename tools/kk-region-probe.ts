@@ -16,15 +16,20 @@ const ev = <T = unknown>(fn: string) => page.evaluate(`(() => { const g = window
 const storyCount = () => page.locator(".battle .bbox.story").count();
 const dismiss = async () => {
   for (let k = 0; k < 16; k++) {
-    if (await page.locator(".battle .tact").count()) { await page.locator(".battle .tact").first().click(); await page.waitForTimeout(300); continue; }
+    if (!(await page.locator(".battle .rlog").count()) && (await page.locator(".battle .tact").count())) { await page.locator(".battle .tact").first().click({ timeout: 2000 }).catch(() => {}); await page.waitForTimeout(300); continue; }
+    if (await page.locator(".battle .bbox.choice .btn:not(.off)").count()) {
+      await page.locator(".battle .bbox.choice .btn:not(.off)").last().click({ timeout: 3000 }).catch(() => {});
+      await page.waitForTimeout(200);
+      continue;
+    }
     if (await page.locator(".battle .rlog").count()) {
       await page.waitForTimeout(400);
       const close = page.locator(".battle .bbox:not(.story) .btn.go, .battle .bbox:not(.story) .btn.big");
-      if (await close.count()) await close.first().click().catch(() => {});
+      if (await close.count()) await close.first().click({ timeout: 3000 }).catch(() => {});
       continue;
     }
     if (!(await page.locator(".battle .bbox.story .btn, .battle .bbox.choice .btn").count())) break;
-    await page.locator(".battle .bbox.story .btn, .battle .bbox.choice .btn").first().click();
+    await page.locator(".battle .bbox.story .btn, .battle .bbox.choice .btn").first().click({ timeout: 5000 }).catch(() => {});
     await page.waitForTimeout(200);
   }
 };

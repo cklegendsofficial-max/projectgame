@@ -1,11 +1,14 @@
 import { fbm, ridged, rng, segDist, value2 } from "./noise";
 
-export const W = 4800;
-export const H = 2800;
-export const GW = 1200;
-export const GH = 700;
-export const TW = 2400;
-export const TH = 1400;
+/** Dünya ölçeği: ilk sürüm 4800×2800 idi; eski kayıtlar bu orana göre büyütülür. */
+export const W0 = 4800;
+export const WS = 1.5;
+export const W = W0 * WS;
+export const H = 2800 * WS;
+export const GW = W / 4;
+export const GH = H / 4;
+export const TW = 3000;
+export const TH = 1750;
 export const NAV = 20;
 export const NW = W / NAV;
 export const NH = H / NAV;
@@ -99,10 +102,6 @@ function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
 }
 
-function mix(c1: number[], c2: number[], t: number): number[] {
-  return [lerp(c1[0], c2[0], t), lerp(c1[1], c2[1], t), lerp(c1[2], c2[2], t)];
-}
-
 const C = {
   deep: [24, 64, 96],
   shallow: [58, 126, 152],
@@ -145,6 +144,10 @@ export function generate(): World {
   const height = new Float32Array(GW * GH);
   const moist = new Float32Array(GW * GH);
   const river = new Uint8Array(GW * GH);
+  const ridges = RIDGES.map(([ax, ay, bx, by, wd, pk]) => {
+    const cut = wd * 3 * WS;
+    return { ax: ax * W, ay: ay * H, bx: bx * W, by: by * H, wd, pk, x0: Math.min(ax * W, bx * W) - cut, x1: Math.max(ax * W, bx * W) + cut, y0: Math.min(ay * H, by * H) - cut, y1: Math.max(ay * H, by * H) + cut };
+  });
   for (let gy = 0; gy < GH; gy++) {
     const ny = gy / GH;
     for (let gx = 0; gx < GW; gx++) {
@@ -152,21 +155,26 @@ export function generate(): World {
       const wx = nx * W;
       const wy = ny * H;
       let h = 0.16 + (fbm(nx * 7, ny * 4, SEED) - 0.5) * 0.32;
-      for (const [ax, ay, bx, by, wd, pk] of RIDGES) {
-        const d = segDist(wx, wy, ax * W, ay * H, bx * W, by * H);
+      let rg = -1;
+      for (let ri = 0; ri < ridges.length; ri++) {
+        const r = ridges[ri];
+        if (wx < r.x0 || wx > r.x1 || wy < r.y0 || wy > r.y1) continue;
+        const wd = r.wd;
+        const pk = r.pk;
+        const d = segDist(wx, wy, r.ax, r.ay, r.bx, r.by) / WS;
         if (d > wd * 3) continue;
         const f = Math.exp(-(d * d) / (wd * wd));
-        h += pk * f * (0.45 + 0.85 * ridged(nx * 16, ny * 9.5, SEED + 3));
+        if (rg < 0) rg = ridged(nx * 16, ny * 9.5, SEED + 3);
+        h += pk * f * (0.45 + 0.85 * rg);
       }
       let water = -1;
-      for (const [cx, cy, rx, ry] of SEAS) {
-        let d = ((nx - cx) / rx) ** 2 + ((ny - cy) / ry) ** 2;
-        d += (fbm(nx * 9, ny * 9, SEED + 9) - 0.5) * 0.9;
-        water = Math.max(water, 1 - d);
-      }
+      let sea = 1e9;
+      for (const [cx, cy, rx, ry] of SEAS) sea = Math.min(sea, ((nx - cx) / rx) ** 2 + ((ny - cy) / ry) ** 2);
+      if (sea < 2.2) water = 1 - (sea + (fbm(nx * 9, ny * 9, SEED + 9) - 0.5) * 0.9);
       for (const c of CITIES) {
-        const d = Math.hypot(wx - c.x, wy - c.y);
-        if (d < 140) {
+        const d2 = (wx - c.x) ** 2 + (wy - c.y) ** 2;
+        if (d2 < 19600) {
+          const d = Math.sqrt(d2);
           const t = Math.max(0, (d - 60) / 80);
           h = Math.min(h, lerp(0.2, h, t));
           water = Math.min(water, lerp(-0.3, water, t));
@@ -306,50 +314,81 @@ function paint(height: Float32Array, moist: Float32Array, river: Uint8Array, riv
   const trees: number[] = [];
   const peaks: number[] = [];
   const R = rng(SEED);
+  let cr = 0;
+  let cg = 0;
+  let cb = 0;
+  const set = (c: number[]) => {
+    cr = c[0];
+    cg = c[1];
+    cb = c[2];
+  };
+  const blend = (c: number[], t: number) => {
+    cr += (c[0] - cr) * t;
+    cg += (c[1] - cg) * t;
+    cb += (c[2] - cb) * t;
+  };
+  const FOAM = [120, 180, 196];
+  const SURF = [190, 220, 220];
+  const DUNE_HI = [238, 210, 150];
+  const DUNE_LO = [176, 140, 88];
   for (let y = 0; y < TH; y++) {
+    const gy = y * sy;
+    const vy = ((y / TH - 0.5) * 1.3) ** 2;
     for (let x = 0; x < TW; x++) {
       const gx = x * sx;
-      const gy = y * sy;
       const h = sampleH(height, gx, gy);
       const gi = Math.min(GH - 1, Math.floor(gy)) * GW + Math.min(GW - 1, Math.floor(gx));
       const m = moist[gi];
       const fine = value2(x * 0.09, y * 0.09, SEED + 21) - 0.5;
       const grain = value2(x * 0.6, y * 0.6, SEED + 22) - 0.5;
-      let c: number[];
       if (h < 0) {
         const t = Math.min(1, -h / 0.35);
-        c = mix(C.shallow, C.deep, t);
+        set(C.shallow);
+        blend(C.deep, t);
         const wave = Math.sin(x * 0.05 + y * 0.02 + fine * 6) * 0.5 + 0.5;
-        c = mix(c, [120, 180, 196], wave * 0.06 * (1 - t));
-        if (h > -0.025) c = mix(c, [190, 220, 220], 0.35);
+        blend(FOAM, wave * 0.06 * (1 - t));
+        if (h > -0.025) blend(SURF, 0.35);
       } else {
-        if (h > 0.72) c = mix(C.rock, C.snow, Math.min(1, (h - 0.72) / 0.08 + fine * 0.8));
-        else if (h > 0.5) c = mix(C.hills, C.rock, Math.min(1, (h - 0.5) / 0.15));
-        else {
+        if (h > 0.72) {
+          set(C.rock);
+          blend(C.snow, Math.min(1, (h - 0.72) / 0.08 + fine * 0.8));
+        } else if (h > 0.5) {
+          set(C.hills);
+          blend(C.rock, Math.min(1, (h - 0.5) / 0.15));
+        } else {
           const mm = m + fine * 0.12;
           if (mm < 0.2) {
-            c = C.desert;
+            set(C.desert);
             const dune = Math.sin(x * 0.11 + Math.sin(y * 0.03) * 3 + fine * 4);
-            c = mix(c, [238, 210, 150], Math.max(0, dune) * 0.25);
-            c = mix(c, [176, 140, 88], Math.max(0, -dune) * 0.12);
-          } else if (mm < 0.3) c = mix(C.desert, C.steppe, (mm - 0.2) / 0.1);
-          else if (mm < 0.46) c = mix(C.steppe, C.grass, Math.max(0, (mm - 0.38) / 0.08));
-          else if (mm < 0.64) c = mix(C.grass, C.forest, Math.max(0, (mm - 0.58) / 0.06));
-          else c = C.forest;
-          if (h > 0.32) c = mix(c, C.hills, Math.min(1, (h - 0.32) / 0.18));
-          if (h < 0.025) c = mix(c, C.beach, 0.7);
+            blend(DUNE_HI, Math.max(0, dune) * 0.25);
+            blend(DUNE_LO, Math.max(0, -dune) * 0.12);
+          } else if (mm < 0.3) {
+            set(C.desert);
+            blend(C.steppe, (mm - 0.2) / 0.1);
+          } else if (mm < 0.46) {
+            set(C.steppe);
+            blend(C.grass, Math.max(0, (mm - 0.38) / 0.08));
+          } else if (mm < 0.64) {
+            set(C.grass);
+            blend(C.forest, Math.max(0, (mm - 0.58) / 0.06));
+          } else set(C.forest);
+          if (h > 0.32) blend(C.hills, Math.min(1, (h - 0.32) / 0.18));
+          if (h < 0.025) blend(C.beach, 0.7);
         }
-        if (river[gi] === 2) c = mix(c, C.river, 0.85);
+        if (river[gi] === 2) blend(C.river, 0.85);
       }
-      const hx = sampleH(height, gx + 0.7, gy) - sampleH(height, gx - 0.7, gy);
-      const hy = sampleH(height, gx, gy + 0.7) - sampleH(height, gx, gy - 0.7);
-      const shade = h < 0 ? 1 : Math.max(0.55, Math.min(1.35, 1 - (hx + hy) * 5.5));
-      const vig = 1 - 0.35 * Math.max(0, Math.hypot((x / TW - 0.5) * 1.1, (y / TH - 0.5) * 1.3) - 0.45);
+      let shade = 1;
+      if (h >= 0) {
+        const hx = sampleH(height, gx + 0.7, gy) - sampleH(height, gx - 0.7, gy);
+        const hy = sampleH(height, gx, gy + 0.7) - sampleH(height, gx, gy - 0.7);
+        shade = Math.max(0.55, Math.min(1.35, 1 - (hx + hy) * 5.5));
+      }
+      const vig = 1 - 0.35 * Math.max(0, Math.sqrt(((x / TW - 0.5) * 1.1) ** 2 + vy) - 0.45);
       const k = shade * vig * (1 + grain * 0.06 + fine * 0.05);
       const o = (y * TW + x) * 4;
-      d[o] = Math.min(255, c[0] * k);
-      d[o + 1] = Math.min(255, c[1] * k);
-      d[o + 2] = Math.min(255, c[2] * k);
+      d[o] = cr * k;
+      d[o + 1] = cg * k;
+      d[o + 2] = cb * k;
       d[o + 3] = 255;
       if ((x & 3) === 0 && (y & 3) === 0 && h >= 0.03) {
         if (h < 0.4 && m > 0.6 && R() < 0.5) trees.push(x * (W / TW) + R() * 6, y * (H / TH) + R() * 6, m > 0.7 ? 1 : 0);
@@ -445,7 +484,7 @@ export function astar(cost: Float32Array, sx: number, sy: number, tx: number, ty
   push(start, 0);
   const dirs = [[1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1], [1, 1, 1.414], [1, -1, 1.414], [-1, 1, 1.414], [-1, -1, 1.414]];
   let iter = 0;
-  while (heap.length && iter++ < 60000) {
+  while (heap.length && iter++ < 200000) {
     const i = pop();
     if (i === goal) break;
     if (closed[i]) continue;

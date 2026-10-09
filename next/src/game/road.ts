@@ -190,4 +190,62 @@ export const ROAD_EVENTS: RoadEvent[] = [
       { label: "Sırrını sakla", ok: { text: "\"Bozkırda dil kılıçtan keskindir.\" Ulak omuz silkip gitti.", kut: 1 } },
     ],
   },
+  {
+    id: "sel",
+    title: "Taşkın Dere",
+    icon: "map/oasis",
+    text: "Dağlardan inen kar suyu dereyi kabartmış. Bulanık su köpürerek akıyor; karşı kıyı uzak görünüyor.",
+    when: (c) => c.season === "bahar",
+    opts: () => [
+      { label: "Atları suya sür", check: { stat: "cev", dc: 10 }, ok: { text: "Akıntıya çapraz girdin, atlar yüzerek karşıya çıktı. Bir gün kazandın.", xp: 20 }, fail: { text: "Akıntı bir yük atını sürükledi. Erzakın bir kısmı suya gitti.", food: -40, hp: -0.1 } },
+      { label: "Suyun çekilmesini bekle", cost: { food: 25 }, ok: { text: "İki gün kıyıda bekledin. Su çekilince sığ yerden rahatça geçtiniz." } },
+    ],
+  },
+  {
+    id: "ceylan",
+    title: "Ceylan Sürüsü",
+    icon: "food",
+    text: "Bozkırın ortasında yüzlerce ceylan otluyor. Rüzgâr senden yana; seni henüz fark etmediler.",
+    when: (c) => !c.night,
+    opts: () => [
+      { label: "Yayını gerip ava çık", check: { stat: "cev", dc: 9 }, ok: { text: "Üç ceylanı tek tek düşürdün. Akşam ateşinde et kızarıyor, askerlerin keyfi yerinde.", food: 60, xp: 15 }, fail: { text: "Okun ıskaladı, sürü toz bulutu içinde kayboldu.", xp: 5 } },
+      { label: "Bırak otlasınlar", ok: { text: "Yaşlı bir avcı \"Doymuş sürüyü ürkütme, bozkırın bereketi kaçar\" derdi. Yoluna devam ettin.", kut: 1 } },
+    ],
+  },
+  {
+    id: "kam",
+    title: "Kamın Ayini",
+    icon: "sk_golge",
+    text: "Bir tepede davul sesi. Yaşlı bir kam ateşin çevresinde dönüyor, gök ruhlarına sesleniyor. Seni görünce durdu: \"Yolcu, ruhlar senin adını söylüyor.\"",
+    opts: () => [
+      { label: "Kamın ayinine katıl", cost: { gold: 30 }, ok: { text: "Kam davulunu üç kez vurdu, alnına kül sürdü. İçinde bir şeyin hafiflediğini hissettin.", kut: 4, hp: 0.4 } },
+      { label: "Fal baktır", check: { stat: "kar", dc: 9 }, ok: { text: "\"Doğuda bir kale seni bekliyor; surlarına tuğun dikilecek.\" Askerlerin bu kehaneti dilden dile anlatıyor.", renown: 3, xp: 15 }, fail: { text: "Kam yüzüne uzun uzun baktı ve hiçbir şey söylemedi. Bu sessizlik içine kurt düşürdü.", kut: -1 } },
+      { label: "Uzaktan selamla", ok: { text: "Elini göğsüne koyup geçtin. Davul sesi uzun süre ardından geldi." } },
+    ],
+  },
+  {
+    id: "artik",
+    title: "Dağılmış Ordu",
+    icon: "u_spear",
+    text: "Yenilmiş bir beyin askerleri, aç ve yorgun, bir dere kenarında kamp kurmuş. Kılıçları körelmiş ama gözleri hâlâ kavgacı.",
+    when: (c) => c.lv >= 6,
+    opts: (c) => {
+      const n = 3 + Math.round(c.lv * 0.4);
+      return [
+        { label: "Onları besle, saflarına al", cost: { food: 30, gold: 40 + c.lv * 5 }, ok: { text: "Askerler karınlarını doyurunca sana yemin etti. Birliğin büyüdü.", units: { spear: Math.ceil(n * 0.6), archer: Math.floor(n * 0.4) }, renown: 2 } },
+        { label: "Silahlarını bırakmalarını iste", check: { stat: "kar", dc: 11 }, ok: { text: "Sesindeki buyruk onları ikna etti; silahlarını teslim edip dağıldılar. Kılıçları iyi para eder.", gold: 60 + c.lv * 6, renown: 2 }, fail: { text: "\"Biz de bir zamanlar senin gibiydik!\" diye bağırıp üstüne yürüdüler. Ucuz atlattın.", hp: -0.18 } },
+        { label: "Uzak dur", ok: { text: "Onları kendi kaderleriyle baş başa bıraktın." } },
+      ];
+    },
+  },
+  {
+    id: "seyyar",
+    title: "Seyyar Tüccar",
+    icon: "merchant",
+    text: "Tek devesiyle yol alan bir tüccar seni selamladı. \"Şehre varmadan mal almak isteyen var mı? Fiyatım yoldan ucuz!\"",
+    opts: () => [
+      { label: "Mallarına bak · 70 altın", cost: { gold: 70 }, ok: { text: "Birkaç balya mal aldın. Doğru şehirde iki katına gider.", good: 2 } },
+      { label: "Yol haberlerini sor", ok: { text: "Tüccar hangi geçitte harami olduğunu, hangi kalenin el değiştirdiğini anlattı.", xp: 10 } },
+    ],
+  },
 ];

@@ -7,6 +7,7 @@ import { CAPITAL, SLAVE_RADIUS } from "../game/state";
 import { FACTIONS, type FactionId } from "../game/factions";
 import { nemName } from "../game/nemesis";
 import { TOMBS, tombOf } from "../game/deep";
+import { FORT_TIERS, type FortOwner } from "../game/forts";
 import { SEASONS } from "../game/seasons";
 import { alongPath, seaPath } from "../game/hazar";
 import { tamgaCanvas, type Tamga } from "../game/ozan";
@@ -29,6 +30,8 @@ export function assetUrl(key: string): string {
 const FOG_UP = 4;
 const RIVAL_COL: Record<string, number> = { peace: 0xe8d39a, ally: 0x6fe07a, war: 0xff4a3a, vassal: 0xffc94a, dead: 0x888888 };
 const LABEL_STYLE = { fontFamily: "Georgia, serif", fontSize: 26, fill: "#fff3d6", stroke: { color: "#2a1606", width: 6 }, fontWeight: "bold" as const };
+
+const fortColor = (o: FortOwner): string => (o === "me" ? "#ffd36a" : o === "harami" ? "#ff8a70" : FACTIONS[o].color);
 
 function makeAtlas(): { tex: Texture; trees: Texture[]; peaks: Texture[] } {
   const c = document.createElement("canvas");
@@ -164,6 +167,8 @@ export class WorldView {
   private nodeM: Marker[] = [];
   private ruinM: Marker[] = [];
   private kurganM: Marker[] = [];
+  private kaleM: Marker[] = [];
+  private kaleF: Sprite[] = [];
   private fortM: Marker | null = null;
   private gateM: Marker | null = null;
   private peakM: Marker | null = null;
@@ -587,6 +592,15 @@ export class WorldView {
     this.nodeM = s.nodes.map((n) => this.place("map/" + NODE_SPRITE[n.kind], n.x, n.y, 70));
     this.ruinM = s.ruins.map((r) => this.place("map/ruins", r.x, r.y, 72));
     this.kurganM = s.kurgans.map((k) => this.place("map/kurgan", k.x, k.y, 62, `Kurgan Taşı Sv ${k.tier}`, 0.62));
+    this.kaleM = s.forts.map((f) => this.place(FORT_TIERS[f.tier].art, f.x, f.y, 84 + f.tier * 16, f.name, 0.72));
+    this.kaleF = s.forts.map((f) => {
+      const fl = new Sprite(this.t("tug"));
+      fl.anchor.set(0.5, 1);
+      fl.scale.set(56 / fl.texture.height);
+      fl.position.set(f.x + 34 + f.tier * 8, f.y - 6);
+      this.places.addChild(fl);
+      return fl;
+    });
     for (const m of [...this.campM]) if (m.label) m.label.style.fill = "#ffb0a0";
     for (const m of this.kurganM) if (m.label) m.label.style.fill = "#e0b8ff";
     this.places.children.sort((a, b) => a.y - b.y);
@@ -1113,6 +1127,20 @@ export class WorldView {
         m.sp.alpha = k.alive ? 1 : k.delved ? 0.35 : 0.6;
         if (m.label) m.label.text = k.alive ? `Kurgan Taşı Sv ${k.tier}` : k.delved ? "Boş Mezar" : TOMBS[tombOf(i)].name;
       });
+      this.kaleM.forEach((m, i) => {
+        const f = s.forts[i];
+        if (!f) return;
+        vis(m);
+        const col = fortColor(f.owner);
+        if (m.label) {
+          m.label.text = `${f.name} · ${tr(FORT_TIERS[f.tier].name)}`;
+          m.label.style.fill = col;
+        }
+        const fl = this.kaleF[i];
+        fl.visible = m.sp.visible;
+        fl.tint = col;
+        fl.alpha = f.threat ? 0.55 + 0.45 * Math.abs(Math.sin(this.time * 4)) : 1;
+      });
       this.cityM.forEach((m) => {
         m.sp.visible = true;
         if (m.label) m.label.visible = true;
@@ -1142,7 +1170,7 @@ export class WorldView {
         if (f) f.visible = own;
       }
       const ls = Math.min(2.4, Math.max(0.9, 0.7 / cam.zoom));
-      for (const m of [...this.villageM, ...this.campM, ...this.kurganM, ...this.cityM]) if (m.label) m.label.scale.set(ls);
+      for (const m of [...this.villageM, ...this.campM, ...this.kurganM, ...this.kaleM, ...this.cityM]) if (m.label) m.label.scale.set(ls);
     }
 
     this.fxG.clear();
@@ -1188,6 +1216,14 @@ export class WorldView {
       const pr = (this.time * 0.6 + k.x * 0.001) % 1;
       if (k.alive) this.fxG.circle(k.x, k.y - 8, 26 + pr * 34).stroke({ color: 0xb46aff, width: 3, alpha: 0.55 * (1 - pr) });
       else this.fxG.ellipse(k.x, k.y + 4, 22 + Math.sin(this.time * 3) * 3, 8).fill({ color: 0xffc860, alpha: 0.35 });
+    }
+    for (const f of s.forts) {
+      if (f.owner !== "me") continue;
+      this.fxG.circle(f.x, f.y, FORT_TIERS[f.tier].guard).stroke({ color: 0xffd36a, width: 5, alpha: 0.3 });
+      if (f.threat) {
+        const pr = (this.time * 0.8) % 1;
+        this.fxG.circle(f.x, f.y - 20, 60 + pr * 60).stroke({ color: 0xff3a3a, width: 4, alpha: 0.7 * (1 - pr) });
+      }
     }
     for (const b of s.bounties) {
       if (!b.taken) continue;
