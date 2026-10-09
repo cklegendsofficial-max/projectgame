@@ -293,6 +293,8 @@ export class Hud {
       if ((e.target as HTMLElement).closest?.("input, textarea")) return;
       const k = e.key.toLowerCase();
       if (k === "escape") {
+        if (this.cs) return this.cs.close();
+        if (this.jv) return g.tripEnd();
         if (this.menuOpen) return this.closeMenu();
         if (!this.panel.classList.contains("hidden")) return this.close();
         if (!this.archery && !this.minigame && !this.modal() && !g.battleLock) this.openMenu();

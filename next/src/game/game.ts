@@ -2413,12 +2413,12 @@ export class Game {
     const b = this.biomeAt(h.x, h.y);
     if (b !== tp.biome) {
       tp.biome = b;
-      log(oneOf(TRIP_BIOME[b]));
+      log(tr(oneOf(TRIP_BIOME[b])));
     }
     const night = this.isNight();
     if (night !== tp.night) {
       tp.night = night;
-      log(oneOf(night ? TRIP_NIGHT : TRIP_DAWN));
+      log(tr(oneOf(night ? TRIP_NIGHT : TRIP_DAWN)));
     }
     if (!tp.half && this.tripProg() > 0.5) {
       tp.half = true;
@@ -2436,7 +2436,7 @@ export class Game {
     tp.flavor -= dt;
     if (tp.flavor <= 0) {
       tp.flavor = 9 + Math.random() * 6;
-      log(oneOf(TRIP_SEASON[se] ?? TRIP_SEASON.yaz));
+      log(tr(oneOf(TRIP_SEASON[se] ?? TRIP_SEASON.yaz)));
     }
   }
 

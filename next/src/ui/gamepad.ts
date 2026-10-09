@@ -121,7 +121,8 @@ export class Gamepad {
     const list = this.items(scope);
     if (!list.length) return this.blur();
     if (!this.focus || !this.focus.isConnected || !list.includes(this.focus)) {
-      const first = this.focusIdx || list.findIndex((el) => !el.classList.contains("x"));
+      const go = list.findIndex((el) => el.classList.contains("go"));
+      const first = this.focusIdx || (go >= 0 && scope.matches(".battle") ? go : list.findIndex((el) => !el.classList.contains("x") && !el.classList.contains("listen")));
       this.setFocus(list[Math.min(Math.max(0, first), list.length - 1)], list);
     }
     if (!dir) {

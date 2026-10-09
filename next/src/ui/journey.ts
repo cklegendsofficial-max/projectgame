@@ -1,3 +1,5 @@
+import { t } from "../i18n";
+
 export type Biome = "kum" | "bozkir" | "cayir" | "dag";
 
 export interface Env {
@@ -444,7 +446,7 @@ export class JourneyView {
       <div class="jtop"><b>${from}</b><span class="jarrow">⟶</span><b>${to}</b><small class="jclock"></small></div>
       <div class="jlog"></div>
       <div class="jbot"><div class="jbar"><div class="jfill"></div><i class="jcv"></i></div>
-        <div class="jbtns"><button class="btn sm" data-j="skip">Haritaya dön</button><button class="btn sm" data-j="stop">Mola ver</button></div></div>`;
+        <div class="jbtns"><button class="btn sm" data-j="skip">${t("Haritaya dön")}</button><button class="btn sm" data-j="stop">${t("Mola ver")}</button></div></div>`;
     root.appendChild(this.el);
     const cv = this.el.querySelector("canvas")!;
     this.vista = new Vista(cv, hooks.env());
@@ -562,9 +564,9 @@ export class CityScene {
     this.el = document.createElement("div");
     this.el.className = "cityscene" + (d.sacked ? " sacked" : "");
     this.el.innerHTML = `<canvas></canvas>
-      <div class="cstitle"><small>${d.first ? "İlk kez" : "Yeniden"} · ${d.tag}</small><h1>${d.name}</h1><em>${d.sacked ? "Moğol atlarının çiğnediği şehir" : CITY_EPITHET[d.id] ?? ""}</em></div>
+      <div class="cstitle"><small>${d.first ? t("İlk kez") : t("Yeniden")} · ${d.tag}</small><h1>${d.name}</h1><em>${t(d.sacked ? "Moğol atlarının çiğnediği şehir" : CITY_EPITHET[d.id] ?? "")}</em></div>
       <div class="csinfo">${d.lines.map((l) => `<span>${l}</span>`).join("")}</div>
-      <div class="cshint">Devam etmek için dokun</div>`;
+      <div class="cshint">${t("Devam etmek için dokun")}</div>`;
     root.appendChild(this.el);
     this.vista = new Vista(this.el.querySelector("canvas")!, d.env);
     for (let i = 0; i < 7; i++) this.birds.push([Math.random(), 0.15 + Math.random() * 0.2, Math.random() * 6]);
