@@ -11,6 +11,7 @@ import type { Owned } from "./conquest";
 import type { Rival } from "./rivals";
 import type { Vet } from "./vets";
 import type { Otag } from "./otag";
+import { TAMGA_DEFAULT, type Song, type Tamga } from "./ozan";
 
 export interface Village {
   name: string;
@@ -261,6 +262,9 @@ export interface GameState {
   otag: Otag | null;
   kut: number;
   tore: { next: number; seen: string[] };
+  songs: Song[];
+  tamga: Tamga;
+  ozanDay: number;
   act3: { ch: number; ending: string; peak: { x: number; y: number } | null };
 }
 
@@ -501,6 +505,9 @@ export function newGame(w: World): GameState {
     otag: null,
     kut: 50,
     tore: { next: 0, seen: [] },
+    songs: [],
+    tamga: { ...TAMGA_DEFAULT },
+    ozanDay: -1,
     act3: { ch: 0, ending: "", peak: null },
   };
 }

@@ -16,6 +16,7 @@ import { LEGACY_PERKS, legacy } from "../game/legacy";
 import { HERD_BUY, HERD_GOLD, HERD_MAX, MOVE_FOOD, OTAG_GOLD, OTAG_WOOD, REST_FOOD, ZONE_DESC, ZONE_NAME, bestZone, zoneOf } from "../game/otag";
 import { VET_LV_MAX, VET_MAX, VET_RANKS, vetBonus, vetTitle } from "../game/vets";
 import { KUT_TIERS, kutArmy, kutTier, kutVote } from "../game/kut";
+import { SING_GOLD, TAMGA_COLORS, TAMGA_DEFAULT, TAMGA_MARKS, TAMGA_SHAPES, singRenown, tamgaSvg, type Tamga } from "../game/ozan";
 import { CITIES, H, NH, NW, W } from "../world/gen";
 import { assetUrl } from "../render/worldView";
 import { audio } from "../audio";
@@ -97,6 +98,7 @@ export class Hud {
   private sagaOpen = false;
   private craftTier = 1;
   private forgePick: SetId = "gokkurt";
+  private allSongs = false;
 
   private sideEl!: HTMLElement;
 
@@ -1329,6 +1331,27 @@ export class Hud {
       <small class="dim">Kut; zaferle, adil hükümle, şölen ve fetihle artar. Yenilgi, soygun, ağır vergi ve kaybedilen şehirle söner. ${left ? `Sıradaki töre davası ~${left} gün sonra.` : "Yakında bir töre davası gelecek."} Kademeler: ${KUT_TIERS.map((x) => x.name).join(" · ")}</small>`;
   }
 
+  private ozanHtml(): string {
+    const g = this.g;
+    const s = g.s;
+    const t: Tamga = { ...TAMGA_DEFAULT, ...s.tamga };
+    const chips = (part: keyof Tamga, opts: [string, string][]): string =>
+      `<div class="tchips">${opts.map(([id, label]) => `<button class="tchip ${t[part] === id ? "on" : ""}" data-a="${this.act(() => g.setTamga(part, id))}">${label}</button>`).join("")}</div>`;
+    const songs = s.songs ?? [];
+    const why = g.singReason();
+    const list = songs.slice(0, this.allSongs ? songs.length : 2).map((sg) => `<div class="song"><b>${sg.title}</b> <small class="dim">${sg.d}. gün</small><i class="poem">${sg.lines.join("<br>")}</i></div>`).join("");
+    return `<h3>${ic("scroll")} Tamga ve Destan Defteri</h3>
+      <div class="tamgaed">${tamgaSvg(t, 84)}<div>
+        ${chips("shape", Object.keys(TAMGA_SHAPES).map((id) => [id, tamgaSvg({ ...t, shape: id }, 26)]))}
+        ${chips("mark", Object.entries(TAMGA_MARKS).map(([id, x]) => [id, x.name]))}
+        ${chips("color", Object.keys(TAMGA_COLORS).map((id) => [id, `<span class="tdot" style="background:${TAMGA_COLORS[id]}"></span>`]))}
+      </div></div>
+      <p class="dim">Boyunun tamgası sancağında dalgalanır. Büyük işlerin ozanların dilinde destana dönüşür; şehir hanlarında okutursan şöhretin yayılır.</p>
+      ${list || `<p class="dim">Henüz hakkında türkü yakılmadı. Bir bey yen, bir şehir fethet, bir kan davası kapat...</p>`}
+      ${songs.length > 2 ? `<button class="btn sm" data-a="${this.act(() => { this.allSongs = !this.allSongs; this.render(); })}">${this.allSongs ? "Daha az" : `Bütün destanlar (${songs.length})`}</button>` : ""}
+      <button class="btn ${why ? "off" : "go"}" title="${why}" data-a="${this.act(() => g.singSongs())}">Handa destanını okut (${SING_GOLD} altın · +${singRenown(songs.length)} şöhret)</button>${why ? `<small class="why">${why}</small>` : ""}`;
+  }
+
   private vetsHtml(): string {
     const vets = this.g.s.vets ?? [];
     if (!vets.length) return `<h3>${ic("tug")} Gaziler</h3><p class="dim">Kazandığın savaşlarda saflardan yiğitler öne çıkar. Gaziler savaştıkça rütbe alır ve bütün birliğe güç verir (en fazla ${VET_MAX}).</p>`;
@@ -1447,7 +1470,7 @@ export class Hud {
     } else if (this.tab === "ayar") {
       body = this.settingsHtml();
     } else if (this.tab === "unvan") {
-      body = this.dailyHtml() + (s.beylik ? this.kutHtml() : "") + this.kurultayHtml() + this.rivalsHtml() + this.nemesisHtml() + this.titlesHtml();
+      body = this.dailyHtml() + (s.beylik ? this.kutHtml() : "") + (s.free ? this.ozanHtml() : "") + this.kurultayHtml() + this.rivalsHtml() + this.nemesisHtml() + this.titlesHtml();
     } else if (this.tab === "techizat") {
       const inCity = g.nearCity() >= 0;
       body = `<div class="slots">` + SLOTS.map((sl) => {

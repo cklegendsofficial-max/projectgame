@@ -9,6 +9,7 @@ import { nemName } from "../game/nemesis";
 import { TOMBS, tombOf } from "../game/deep";
 import { SEASONS } from "../game/seasons";
 import { alongPath, seaPath } from "../game/hazar";
+import { tamgaCanvas, type Tamga } from "../game/ozan";
 
 const urls: Record<string, string> = {};
 for (const [p, u] of Object.entries(import.meta.glob<string>("../assets/**/*.webp", { eager: true, query: "?url", import: "default" }))) {
@@ -167,6 +168,8 @@ export class WorldView {
   private hero!: Container;
   private heroCount!: Text;
   private heroFlag!: Sprite;
+  private heroTamga!: Sprite;
+  private tamgaKey = "";
   private heroBars!: Graphics;
   private bandits = new Map<number, Container>();
   private marchesM = new Map<number, Container>();
@@ -472,6 +475,17 @@ export class WorldView {
     this.heroFlag.visible = key !== "heroes/slave";
   }
 
+  private syncTamga(t: Tamga | undefined): void {
+    const key = t ? `${t.shape}|${t.mark}|${t.color}` : "";
+    this.heroTamga.visible = this.heroFlag.visible && !!t;
+    if (!t || key === this.tamgaKey) return;
+    this.tamgaKey = key;
+    const old = this.heroTamga.texture;
+    this.heroTamga.texture = Texture.from(tamgaCanvas(t, 64));
+    if (old && old !== Texture.EMPTY) old.destroy(true);
+    this.heroTamga.width = this.heroTamga.height = 30;
+  }
+
   private buildHero(): void {
     const c = new Container();
     const sh = new Graphics().ellipse(0, 26, 22, 7).fill({ color: 0x000000, alpha: 0.35 });
@@ -485,7 +499,10 @@ export class WorldView {
     this.heroCount.position.set(0, 26);
     this.heroCount.resolution = 2;
     this.heroBars = new Graphics();
-    c.addChild(sh, flag, p, this.heroCount, this.heroBars);
+    this.heroTamga = new Sprite();
+    this.heroTamga.anchor.set(0.5);
+    this.heroTamga.position.set(22, -50);
+    c.addChild(sh, flag, this.heroTamga, p, this.heroCount, this.heroBars);
     this.heroFlag = flag;
     this.hero = c;
     this.units.addChild(this.troops);
@@ -618,6 +635,7 @@ export class WorldView {
     this.hero.position.set(h.x, h.y - (moving ? Math.abs(Math.sin(this.time * 9)) * 3 : 0));
     const n = armySize(h.army);
     this.heroCount.text = n > 0 ? String(n) : "";
+    this.syncTamga(s.free ? s.tamga : undefined);
     const inv = Math.min(2.2, Math.max(0.7, 0.75 / cam.zoom));
     this.hero.scale.set(inv);
     this.trail.push(h.x, h.y);

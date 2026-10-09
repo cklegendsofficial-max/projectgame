@@ -23,6 +23,7 @@ import { BRIBE_GOLD, DECREES, KAGAN_RENOWN, KURULTAY_EVERY, KURULTAY_MAX, decree
 import { ESCORT_GOLD, PIRATE_RISK, SHIP_CAP, SHIP_GOLD, SHIP_MAX, pirateArmy, portOf, routeDays } from "./hazar";
 import { LEGACY_PERKS, hasLegacy, recordEnding } from "./legacy";
 import { HERD_GOLD, HERD_BUY, HERD_MAX, MOVE_FOOD, OTAG_GOLD, OTAG_WOOD, REST_FOOD, ZONE_NAME, bestZone, pasture, zoneOf } from "./otag";
+import { SING_GOLD, SONG_MAX, TAMGA_DEFAULT, compose, singRenown, type SongCtx, type SongKind, type Tamga } from "./ozan";
 import { TORE_CASES, kutArmy, kutLoy, kutTier, kutVote, type ToreCase } from "./kut";
 import { SCARS, VET_LV_MAX, VET_MAX, VET_RANKS, VET_XP, makeVet, vetBonus, vetTitle } from "./vets";
 import { ACHIEVEMENTS, steamUnlock, storeUnlocked, unlockedSet } from "./achievements";
@@ -264,7 +265,10 @@ export class Game {
     s.hero.bag.push(st.a, st.b, foal);
     s.c.foals++;
     audio.play("level");
-    if (tul) this.chron(`${CITY_NAME[st.city]} ahırında gök gürledi: ${sire} ile ${dam} bir Tulpar doğurdu. Ozanlar yüz yıldır böyle bir at görmemişti.`);
+    if (tul) {
+      this.chron(`${CITY_NAME[st.city]} ahırında gök gürledi: ${sire} ile ${dam} bir Tulpar doğurdu. Ozanlar yüz yıldır böyle bir at görmemişti.`);
+      this.sing("tulpar", { place: CITY_NAME[st.city] });
+    }
     this.hud.story(
       tul ? "Bir Tulpar doğdu!" : "Tay doğdu!",
       "icons/foal",
@@ -615,6 +619,46 @@ export class Game {
     } else if (why && Math.abs(n) >= 3) this.hud.toast(`Kut ${n > 0 ? "+" : ""}${n} · ${why}`, n > 0 ? "good" : "bad");
   }
 
+  sing(k: SongKind, c: Partial<SongCtx> = {}): void {
+    const s = this.s;
+    s.songs ??= [];
+    const song = compose(k, { name: s.hero.name, ...c }, this.dayOf().day);
+    s.songs.unshift(song);
+    if (s.songs.length > SONG_MAX) s.songs.length = SONG_MAX;
+    this.hud.toast(`Ozanlar yeni bir destan yaktı: "${song.title}"`, "good");
+  }
+
+  singReason(): string {
+    const s = this.s;
+    if (!s.songs?.length) return "Henüz hakkında yakılmış bir destan yok";
+    if (this.nearCity() < 0) return "Ozanlar şehir hanlarında çalar";
+    if (s.ozanDay === this.dayOf().day) return "Bugün destanın zaten okundu";
+    if (s.res.gold < SING_GOLD) return `${SING_GOLD} altın gerek`;
+    return "";
+  }
+
+  singSongs(): void {
+    if (this.singReason()) return;
+    const s = this.s;
+    const city = CITIES[this.nearCity()].id;
+    s.res.gold -= SING_GOLD;
+    s.ozanDay = this.dayOf().day;
+    const r = singRenown(s.songs.length);
+    s.renown += r;
+    this.addRep(factionOf(city), 5, "ozan destanını okudu");
+    this.addKut(1);
+    const song = s.songs[Math.floor(Math.random() * Math.min(5, s.songs.length))];
+    audio.play("quest");
+    this.hud.story(`${CITY_NAME[city]} hanında ozan`, "icons/scroll", `Ozan kopuzunu akortladı, han sustu:<br><br><i class="poem">${song.lines.join("<br>")}</i><br><br><b class="cheap">+${r} şöhret</b> · ${FACTIONS[factionOf(city)].short} itibarı +5`, "Kopuzun dilli olsun");
+    saveGame(s);
+  }
+
+  setTamga(part: keyof Tamga, v: string): void {
+    const s = this.s;
+    s.tamga = { ...TAMGA_DEFAULT, ...s.tamga, [part]: v };
+    saveGame(s);
+  }
+
   private toreTick(day: number): void {
     const s = this.s;
     s.tore ??= { next: 0, seen: [] };
@@ -661,6 +705,7 @@ export class Game {
     this.addKut(f.kut ?? 0);
     const k = f.kut ?? 0;
     this.chron(`Töre davası (${c.title}): ${o.out}`);
+    if (k >= 8) this.sing("tore", { foe: c.title });
     this.hud.story(c.title, c.icon, `${o.out}<br><br><b class="${k >= 0 ? "cheap" : "dear"}">Kut ${k >= 0 ? "+" : ""}${k}</b> → ${Math.round(s.kut)} · ${kutTier(s.kut).name}${f.loy ? `<br>Şehir bağlılığı ${f.loy > 0 ? "+" : ""}${f.loy}` : ""}${f.renown ? `<br>Şöhret +${f.renown}` : ""}`, "Hüküm verildi");
     saveGame(s);
   }
@@ -753,6 +798,8 @@ export class Game {
         s.kagan = true;
         s.renown += 200;
         this.chron(`Kurultay ${gen(s.hero.name)} adını göğe haykırdı: Bozkırın Kağanı!`);
+        this.sing("kagan");
+        this.addKut(15, "kağanlık");
         this.hud.story("Kağan seçildin!", "icons/crown", `Beyler keçeye oturtup seni üç kez göğe kaldırdı. Artık <b>${s.hero.name} Kağan</b>sın.<br><br>${list}<br><br>Tabi beylerin haracı %50 artar, ordunun gücü +%5. Adın destanlara yazıldı. +200 şöhret`, "Tengri yar olsun");
       } else {
         s.kurultay.decrees.push(id);
@@ -2273,6 +2320,7 @@ export class Game {
         s.c.slain++;
         const wasHan = n.han;
         this.chron(`${n.wins ? `${n.wins} kez galip gelen ` : ""}${nemName(n)}, ${s.hero.name} karşısında son nefesini verdi. Kan davası kapandı.`);
+        this.sing("kan", { foe: nemName(n) });
         const renown = 10 + 8 * n.lv + (wasHan ? 60 : 0);
         s.renown += renown;
         this.repNear(b.x, b.y, 15 + 5 * n.lv, `${nemName(n)} öldürüldü`);
@@ -2713,8 +2761,10 @@ export class Game {
     const xp = Math.round((armyPower(enemy) + (boss ? boss.atk * Math.sqrt(boss.hp) * 0.8 : 0)) * (res.win ? 0.7 : 0.15)) + 3;
     const lvUp = this.addXp(xp);
     this.s.kills += armySize(res.lostB);
+    const songs0 = this.s.songs?.length ?? 0;
     const extra = after(res.win);
     this.addKut(res.win ? (boss ? 3 : 1) : -2);
+    if (res.win && boss && (this.s.songs?.length ?? 0) === songs0) this.sing("zafer", { foe: boss.name });
     let fled = "";
     if (!res.win) {
       const near = CITIES.map((c, i) => ({ i, d: Math.hypot(c.x - h.x, c.y - h.y) })).sort((a, b) => a.d - b.d)[0];
@@ -2743,6 +2793,7 @@ export class Game {
         s.vets = s.vets.filter((x) => x.id !== v.id);
         this.chron(`${VET_RANKS[v.lv - 1]} ${vetTitle(v)}, ${title.replace(/<[^>]+>/g, "")} savaşında düştü. ${v.kills} düşman götürdü yanında.`);
         out.push(`<b class="dear">${vetTitle(v)} şehit düştü.</b>`);
+        if (v.lv >= 2) this.sing("gazi", { foe: vetTitle(v) });
         continue;
       }
       if (lost / had > 0.3 && !v.scar && Math.random() < 0.3) {
@@ -2950,6 +3001,7 @@ export class Game {
       s.c.conquests = (s.c.conquests ?? 0) + 1;
       s.renown += 60;
       this.addKut(5, `${name} fethi`);
+      this.sing("fetih", { place: name });
       if (!s.counterAt) s.counterAt = this.now + 8 * DAY_SEC * 1000;
       this.chron(`${name} surlarına ${gen(s.hero.name)} tuğu dikildi. ${fac.ruler} bu hakareti unutmayacak.`);
       this.hud.story(
@@ -3626,6 +3678,7 @@ export class Game {
           r.status = "vassal";
           r.rel = 10;
           this.chron(`${rivalName(r)} savaş meydanında ${gen(s.hero.name)} tuğuna biat etti.`);
+          this.sing("biat", { foe: rivalName(r) });
           this.hud.toast(`${rivalName(r)} artık tabin.`, "good");
         } },
         { label: "Kılıçtan geçir", cls: "bad", fn: () => {
@@ -3634,6 +3687,7 @@ export class Game {
           s.mats.ruh += 3;
           for (const o of s.rivals) if (o !== r && o.status !== "dead") o.rel -= o.trait === "onurlu" ? 25 : 12;
           this.chron(`${rivalName(r)} ${gen(s.hero.name)} kılıcıyla can verdi. Bozkırda bir tuğ daha devrildi.`);
+          this.sing("biat", { foe: rivalName(r) });
           this.hud.toast(`${rivalName(r)} öldü. +80 şöhret, +3 Ruh Taşı. Diğer beyler tedirgin.`, "bad");
         } },
         { label: "Serbest bırak (dostluk +30)", cls: "", fn: () => {
@@ -4402,6 +4456,7 @@ export class Game {
     }
     const it = uniqueItem(s.nextId++, this.cls(), UNIQUES[Math.floor(Math.random() * UNIQUES.length)], 5);
     this.chron(`${s.hero.name} Tengri Dağı'nda Kut'un kaderini seçti: ${e.name}.`);
+    this.sing("son", { foe: e.name });
     audio.play("level");
     const fresh = recordEnding({ name: s.hero.name, ending: id, day: this.dayOf().day, lv: s.hero.lv, at: Date.now() });
     const perk = LEGACY_PERKS[id];
@@ -4482,6 +4537,7 @@ export class Game {
       this.gainLegend(it);
       for (const k of s.kurgans) k.respawnAt = Math.min(k.respawnAt, this.now + 1000);
       this.chron(`Yerin dokuz kat altında ${s.hero.name}, Erlik Han'ı kendi tahtında yendi. Zincir yeniden kenetlendi; bozkırın üstünde gök bir kez daha mavi.`);
+      this.sing("destan", { foe: "Erlik Han" });
       this.hud.story(
         "Erlik Destanı tamamlandı",
         this.face(),
@@ -4571,6 +4627,7 @@ export class Game {
       const it = uniqueItem(s.nextId++, this.cls(), UNIQUES[0], 5);
       this.gainLegend(it);
       this.chron(`Kara Tamga Kalesi düştü. Kara Han'ın kılıcı kırıldı, esirlerin ruhları göğe ağdı. Ozanlar o gün ${gen(s.hero.name)} adını ilk kez türküye kattı.`);
+      this.sing("destan", { foe: "Kara Han" });
       this.hud.story(
         "Destan tamamlandı: Kara Tamga yıkıldı",
         this.face(),

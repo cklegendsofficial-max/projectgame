@@ -1,0 +1,51 @@
+import { chromium } from "playwright-core";
+
+const mode = process.argv[2] ?? "desk";
+const out = `playtest/ozan-${mode}`;
+const browser = await chromium.launch({ channel: "msedge", headless: true, args: ["--enable-gpu", "--ignore-gpu-blocklist", "--use-angle=d3d11"] });
+const vp = mode === "mob" ? { width: 390, height: 844 } : { width: 1280, height: 720 };
+const page = await browser.newPage({ viewport: vp, deviceScaleFactor: mode === "mob" ? 2 : 1 });
+const errs: string[] = [];
+page.on("pageerror", (e) => errs.push(e.message));
+page.on("console", (m) => m.type() === "error" && errs.push(m.text()));
+await page.goto("http://localhost:5174/");
+await page.evaluate(() => localStorage.clear());
+await page.reload();
+await page.waitForFunction(() => !document.getElementById("loading"), null, { timeout: 60000 });
+const ev = <T = unknown>(fn: string) => page.evaluate(`(() => { const g = window.game; ${fn} })()`) as Promise<T>;
+const dismiss = async () => {
+  for (let k = 0; k < 10; k++) {
+    if (!(await page.locator(".battle .bbox.story .btn").count())) break;
+    await page.locator(".battle .bbox.story .btn").first().click();
+    await page.waitForTimeout(200);
+  }
+};
+await page.locator(`.ccard[data-c="alp"]`).click();
+await page.locator(".cname .btn").click();
+await dismiss();
+await ev(`g.s.res.gold = 300; const c = g.targetPos({kind:"capital"}); g.s.hero.x = c.x; g.s.hero.y = c.y; g.buyFreedom();`);
+await dismiss();
+await page.waitForTimeout(1200);
+await dismiss();
+await ev(`g.s.res.gold = 2000; g.sing("fetih", { place: "Buhara" }); g.sing("kan", { foe: "Kör Tolga" }); g.sing("kagan");`);
+console.log("songs", await ev(`return g.s.songs.map(s => s.title);`));
+await ev(`g.hud.openHero(); g.hud.tab = "unvan"; g.hud.render();`);
+await page.waitForTimeout(300);
+await page.locator(".tchip").nth(2).click();
+await page.locator(".tchips").nth(1).locator(".tchip").nth(3).click();
+await page.locator(".tchips").nth(2).locator(".tchip").nth(2).click();
+console.log("tamga", await ev(`return g.s.tamga;`));
+await page.locator(".panel h3", { hasText: "Tamga" }).scrollIntoViewIfNeeded();
+await page.screenshot({ path: `${out}-1.png` });
+console.log("sing reason", await ev(`return g.singReason();`));
+const r0 = await ev<number>(`return g.s.renown;`);
+await ev(`g.singSongs();`);
+await page.waitForTimeout(400);
+await page.screenshot({ path: `${out}-2.png` });
+await dismiss();
+console.log("renown", r0, "->", await ev(`return g.s.renown;`), "again", await ev(`return g.singReason();`));
+await ev(`g.hud.close(); g.cam.flyTo(g.s.hero.x, g.s.hero.y, 1.6);`);
+await page.waitForTimeout(900);
+await page.screenshot({ path: `${out}-3.png` });
+console.log("errors:", errs);
+await browser.close();

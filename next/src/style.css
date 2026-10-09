@@ -369,6 +369,15 @@ body.nomini .mini { display: none; }
 .bar.boss { height: 16px; }
 .bar.boss i { background: linear-gradient(#c58cff, #6a2a9a); }
 .bar.kut i { background: linear-gradient(#bfe6ff, #3a7ac8); }
+.tamgaed { display: flex; gap: 10px; align-items: flex-start; margin: 6px 0; }
+.tamgaed > svg { flex: none; background: radial-gradient(#5a2a14, #2a1206); border: 2px solid #c8962a; border-radius: 10px; padding: 4px; }
+.tchips { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 5px; }
+.tchip { min-width: 34px; height: 32px; padding: 2px 6px; display: inline-flex; align-items: center; justify-content: center; background: #2a1608; color: #f0dcae; border: 1px solid #6a4a22; border-radius: 6px; font: 12px inherit; cursor: pointer; }
+.tchip.on { border-color: #ffd56a; box-shadow: 0 0 0 1px #ffd56a inset; background: #4a2a10; }
+.tdot { width: 18px; height: 18px; border-radius: 50%; border: 2px solid #1a0d04; }
+.song { margin: 6px 0; padding: 6px 8px; background: rgba(0, 0, 0, 0.25); border-left: 3px solid #c8962a; border-radius: 4px; }
+.song .poem { display: block; margin-top: 3px; }
+.poem { font-family: Georgia, serif; color: #f4e2b4; line-height: 1.45; }
 .bp.boss { border-color: #c58cff !important; box-shadow: 0 0 18px #c58cff88; }
 .gimg.round, .bimg.round { border-radius: 50%; object-fit: cover; }
 
