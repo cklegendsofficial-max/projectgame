@@ -23,6 +23,7 @@ import { TITLE_CATS, titleKey, titleOf } from "../game/titles";
 import { DAILY_POOL } from "../game/daily";
 import { REQ_INFO, RIVAL_TRAITS, STATUS_NAME } from "../game/rivals";
 import { DECREES } from "../game/kurultay";
+import { ESCORT_GOLD, SHIP_CAP, SHIP_GOLD, SHIP_MAX, portOf, routesFrom } from "../game/hazar";
 import { DEEP_PERKS, TOMBS, tombOf } from "../game/deep";
 import { CITY_BLDS, CITY_BLD_KEYS, ENGINE_GOLD as ENGINE_GOLD_UI, FEAST_GOLD as FEAST_GOLD_UI, GOVERNORS, GOV_GOLD, TAX as TAX_UI, cityBldCost } from "../game/conquest";
 
@@ -897,6 +898,42 @@ export class Hud {
     return this.frame(NODE_NAME[n.kind], s.free ? `Seviye ${n.lv} kaynak noktası` : "Efendinin arazisi", assetUrl("map/" + ({ food: "farm", wood: "forest", stone: "quarry", gold: "mine" } as const)[n.kind]), body);
   }
 
+  private portHtml(city: string, near: boolean): string {
+    const g = this.g;
+    const s = g.s;
+    const p = portOf(city)!;
+    const f = s.fleet;
+    const v = f.voyage;
+    const calm = (f.calm ?? 0) > s.time;
+    let h = `<div class="stats"><div>${ic("merchant")}Gemi: <b>${f.ships}/${SHIP_MAX}</b></div><div>${ic("j_caravan")}Ambar: <b>${g.fleetCap()}</b></div><div>${ic("trophy")}Sefer: <b>${s.c.voyages}</b></div></div>
+      <p class="dim">${p.name} · ${p.sea}. Gemiler heybenin sınırına takılmaz: tek seferde gemi başına ${SHIP_CAP} denk taşır ve mal varış iskelesinde kendiliğinden satılır. ${p.sea} korsanlarına dikkat.</p>`;
+    if (v) {
+      const k = Math.min(1, (s.time - v.at) / v.dur);
+      h += `<h3>${ic("j_caravan")} Denizdeki gemiler</h3>${bar(k * 100, 100, "", `${CITY_NAME[v.from]} → ${CITY_NAME[v.to]} · ${v.qty} ${GOODS[v.good].name}${v.escort ? " · muhafızlı" : ""}`)}`;
+    }
+    h += `<div class="odds ${calm ? "good" : "mid"}">Korsan tehlikesi: <b>%${Math.round(g.pirateRisk(false) * 100)}</b> · muhafızla <b>%${Math.round(g.pirateRisk(true) * 100)}</b>${calm ? " · yuvaları dağıtıldı" : ""}</div>`;
+    h += `<div class="row"><button class="btn ${!near || f.ships >= SHIP_MAX || s.res.gold < SHIP_GOLD ? "off" : ""}" data-a="${this.act(() => g.buyShip())}">${ic("coins")} Gemi al (${SHIP_GOLD})</button>
+      <button class="btn ${!near ? "off" : ""}" data-a="${this.act(() => g.huntPirates())}">${ic("j_bandit")} Korsan yuvasına baskın</button></div>`;
+    const cargo = GOOD_KEYS.filter((k) => (s.hero.cargo[k] ?? 0) > 0);
+    for (const r of routesFrom(city)) {
+      h += `<h3>⚓ ${CITY_NAME[r.to]} · ${r.days} gün</h3>`;
+      if (!cargo.length) {
+        h += `<p class="dim">Heybende mal yok. Pazardan mal alıp buradan yükle.</p>`;
+        continue;
+      }
+      h += cargo.map((k) => {
+        const have = s.hero.cargo[k] ?? 0;
+        const qty = Math.min(have, g.fleetCap());
+        const avg = Math.round((s.hero.paid[k] ?? 0) / have);
+        const sp = g.seaPrice(r.to, k);
+        const offB = !near || !!v || f.ships <= 0 ? "off" : "";
+        return `<div class="grow">${ic(GOODS[k].icon, "gimg")}<div class="bi2"><b>${GOODS[k].name} × ${qty}</b><small>Maliyet ${avg} · orada ~${sp} <em class="${sp > avg ? "cheap" : "dear"}">${sp > avg ? "+" : ""}${(sp - avg) * qty}</em></small></div>
+          <div class="col2"><button class="btn sm ${offB}" data-a="${this.act(() => g.sendVoyage(r.to, k, false))}">Yükle</button><button class="btn sm ${offB || s.res.gold < ESCORT_GOLD ? "off" : ""}" data-a="${this.act(() => g.sendVoyage(r.to, k, true))}">Muhafızlı · ${ESCORT_GOLD}</button></div></div>`;
+      }).join("");
+    }
+    return h;
+  }
+
   private cityHtml(ci: number): string {
     const g = this.g;
     const s = g.s;
@@ -910,6 +947,7 @@ export class Hud {
     list.push(["pazar", "Pazar"], ["demirci", "Demirci"], ["atolye", "Atölye"], ["ors", "Örs"], ["talim", "Talim"], ["han", "Han"]);
     if (isCap && s.free && !s.beylik) list.push(["beylik", "Beylik"]);
     if (!isCap && s.free) list.push(["kale", s.owned[c.id] ? "Kale ★" : "Kale"]);
+    if (s.free && portOf(c.id)) list.push(["liman", "Liman ⚓"]);
     const tabs = this.tabs(list);
     let body = "";
     const off = !near ? "off" : "";
@@ -938,6 +976,8 @@ export class Hud {
             <div class="col2"><button class="btn sm ${off}" data-a="${this.act(() => g.buyGood(c.id, k, 1))}">Al</button><button class="btn sm ${off}" data-a="${this.act(() => g.buyGood(c.id, k, 5))}">Al 5</button><button class="btn sm ${!near || !have ? "off" : ""}" data-a="${this.act(() => g.sellGood(c.id, k, have))}">Sat</button></div></div>`;
         }).join("") +
         `<h3>Ham madde sat</h3><div class="row">${(["wood", "stone", "food"] as const).map((k) => `<button class="btn ${!near || s.res[k] < 1 ? "off" : ""}" data-a="${this.act(() => g.sellRes(k, s.res[k]))}">${ic(RES_ICON[k])} ${fmt(s.res[k])} sat · ${g.resPrice(k)}/adet</button>`).join("")}</div>`;
+    } else if (this.tab === "liman") {
+      body = nearNote + this.portHtml(c.id, near);
     } else if (this.tab === "demirci") {
       const items = g.smith(c.id);
       const row = (it: Item, right: string) => this.itemRow(it, right);

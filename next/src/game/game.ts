@@ -20,6 +20,7 @@ import { REQ_GOODS, REQ_INFO, RIVAL_DEFS, RIVAL_LINES, RIVAL_TRAITS, STATUS_NAME
 import { CITY_BLDS, CITY_EVENTS, ENGINE_GOLD, FEAST_GOLD, GOVERNORS, GOV_GOLD, SIEGE_LV, SIEGE_RENOWN, TAX, cityBldCost, cityGarrison, cityTax, wallBonus, type CityBld, type CityEvent, type Governor } from "./conquest";
 import { DEEP_LORE, DEEP_PERKS, DOORS, DOOR_KEYS, RIDDLES, TOMBS, deepBoss, deepGuard, deepTier, tombOf, type DeepPerk, type DeepRun, type DoorKind } from "./deep";
 import { BRIBE_GOLD, DECREES, KAGAN_RENOWN, KURULTAY_EVERY, KURULTAY_MAX, decreeOf } from "./kurultay";
+import { ESCORT_GOLD, PIRATE_RISK, SHIP_CAP, SHIP_GOLD, SHIP_MAX, pirateArmy, portOf, routeDays } from "./hazar";
 import { ACHIEVEMENTS, steamUnlock, storeUnlocked, unlockedSet } from "./achievements";
 import { SEASONS, SEASON_DAYS, seasonOf, type Season, type SeasonId } from "./seasons";
 import { FACTIONS, FACTION_KEYS, HOSTILE, REP_RANKS, RANK_PERKS, factionOf, repRank, type FactionId } from "./factions";
@@ -2872,6 +2873,121 @@ export class Game {
     return wallBonus(o.from, 0) + 0.1 + 0.12 * this.cbl(city, "sur") + (this.cityGov(city)?.def ?? 0);
   }
 
+  // ---------- hazar ----------
+
+  portHere(): string | null {
+    const ci = this.nearCity();
+    if (ci < 0) return null;
+    const id = CITIES[ci].id;
+    return portOf(id) ? id : null;
+  }
+
+  buyShip(): void {
+    const s = this.s;
+    if (!this.portHere()) return this.hud.toast("Gemi ancak bir iskelede alınır", "bad");
+    if (s.fleet.ships >= SHIP_MAX) return this.hud.toast(`En fazla ${SHIP_MAX} gemi`, "bad");
+    if (s.res.gold < SHIP_GOLD) return this.hud.toast("Altın yetersiz", "bad");
+    s.res.gold -= SHIP_GOLD;
+    s.fleet.ships++;
+    audio.play("coin");
+    this.hud.toast(`Yeni bir gemi denize indirildi (${s.fleet.ships}/${SHIP_MAX})`, "good");
+  }
+
+  pirateRisk(escort: boolean): number {
+    const calm = (this.s.fleet.calm ?? 0) > this.s.time;
+    return PIRATE_RISK * (escort ? 0.3 : 1) * (this.decree("yol") ? 0.6 : 1) * (calm ? 0.35 : 1) * (this.s.kagan ? 0.8 : 1);
+  }
+
+  seaPrice(city: string, g: Good): number {
+    return Math.round(this.sellPrice(city, g) * 1.08);
+  }
+
+  fleetCap(): number {
+    return this.s.fleet.ships * SHIP_CAP;
+  }
+
+  sendVoyage(to: string, g: Good, escort: boolean): void {
+    const s = this.s;
+    const h = s.hero;
+    const from = this.portHere();
+    if (!from) return this.hud.toast("Bir iskelede olmalısın", "bad");
+    if (s.fleet.voyage) return this.hud.toast("Gemilerin zaten denizde", "bad");
+    if (s.fleet.ships <= 0) return this.hud.toast("Önce bir gemi al", "bad");
+    const days = routeDays(from, to);
+    if (!days) return;
+    const have = h.cargo[g] ?? 0;
+    const qty = Math.min(have, this.fleetCap());
+    if (qty <= 0) return this.hud.toast(`Yükünde ${GOODS[g].name} yok`, "bad");
+    if (escort && s.res.gold < ESCORT_GOLD) return this.hud.toast("Muhafız için altın yetersiz", "bad");
+    if (escort) s.res.gold -= ESCORT_GOLD;
+    const paid = ((h.paid[g] ?? 0) * qty) / have;
+    h.paid[g] = (h.paid[g] ?? 0) - paid;
+    h.cargo[g] = have - qty;
+    s.fleet.voyage = { from, to, good: g, qty, paid, at: s.time, dur: days * DAY_SEC, escort: escort ? 1 : 0 };
+    audio.play("quest");
+    this.hud.toast(`${qty} ${GOODS[g].name} ${CITY_NAME[to]} yolunda (${days} gün)`, "info");
+  }
+
+  private voyageTick(): void {
+    const s = this.s;
+    const v = s.fleet.voyage;
+    if (!v || s.time < v.at + v.dur) return;
+    s.fleet.voyage = null;
+    const port = portOf(v.to)!;
+    let qty = v.qty;
+    let note = "";
+    if (Math.random() < this.pirateRisk(!!v.escort)) {
+      if (v.escort) {
+        const lost = Math.ceil(qty * 0.1);
+        qty -= lost;
+        note = `Korsan kadırgaları ufukta belirdi ama kiralık muhafızlar onları oklarla geri püskürttü. Yalnızca ${lost} denk suya düştü.<br><br>`;
+      } else {
+        const lost = Math.ceil(qty * (0.4 + Math.random() * 0.3));
+        qty -= lost;
+        const sunk = s.fleet.ships > 1 && Math.random() < 0.25;
+        if (sunk) s.fleet.ships--;
+        note = `<b>Korsan baskını!</b> ${port.sea} korsanları gemilere çengel attı; ${lost} denk ${GOODS[v.good].name} yağmalandı${sunk ? ", bir gemin de alevler içinde battı" : ""}.<br><br>`;
+        audio.play("bad");
+      }
+    }
+    let got = 0;
+    for (let k = 0; k < qty; k++) {
+      got += this.seaPrice(v.to, v.good);
+      const m = this.market(v.to);
+      m[v.good] = Math.max(-0.7, (m[v.good] ?? 0) - 0.03);
+    }
+    const paid = Math.round((v.paid * qty) / v.qty);
+    s.res.gold += got;
+    const profit = Math.round(got - v.paid);
+    if (profit > 0) s.c.profit += profit;
+    s.c.voyages++;
+    s.hero.skills.ticaret += Math.ceil(got / 20);
+    this.addXp(Math.max(0, Math.floor(profit / 15)));
+    if (profit >= 120) this.addRep(factionOf(v.to), Math.floor(profit / 120), "deniz ticareti");
+    this.hud.story(
+      `${port.name}`,
+      "icons/merchant",
+      `${note}Gemilerin ${CITY_NAME[v.to]} iskelesine yanaştı. Tellallar ${qty} denk ${GOODS[v.good].name} için yarıştı.<br><br>Satış: <b>+${got} altın</b> · maliyet ${paid} · <b>${profit >= 0 ? "kâr" : "zarar"} ${Math.abs(profit)}</b>`,
+      "Kasaya koy",
+    );
+  }
+
+  huntPirates(): void {
+    const s = this.s;
+    const from = this.portHere();
+    if (!from) return;
+    if (armySize(s.hero.army) < 10) return this.hud.toast("Korsan avı için en az 10 asker gerek", "bad");
+    this.battle(`${portOf(from)!.sea} korsanları`, pirateArmy(s.hero.lv), 0.05, (win) => {
+      if (!win) return "Korsanlar kayıklarına atlayıp kaçtı; askerlerin kıyıda yaralarını sarıyor.";
+      const gold = 260 + s.hero.lv * 25;
+      s.res.gold += gold;
+      s.renown += 8;
+      s.fleet.calm = s.time + 6 * DAY_SEC;
+      this.chron(`${s.hero.name} ${portOf(from)!.name} açıklarında korsan yuvasını dağıttı.`);
+      return `Korsan yuvası yakıldı! +${gold} altın, +8 şöhret. Altı gün boyunca deniz yolları daha güvenli.`;
+    }, null, "Korsanlar");
+  }
+
   buildCity(city: string, b: CityBld): void {
     const o = this.s.owned[city];
     if (!o) return;
@@ -3034,6 +3150,7 @@ export class Game {
       this.rivalDaily();
       this.cityDaily();
     }
+    this.voyageTick();
     this.reqT -= dt;
     if (this.reqT <= 0) {
       this.reqT = 1.5;

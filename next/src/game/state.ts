@@ -252,7 +252,7 @@ export interface GameState {
   act2: { ch: number; gate: { x: number; y: number } | null; done: boolean };
   kagan: boolean;
   kurultay: { next: number; decrees: string[]; held: number };
-  fleet: { ships: number; voyage: Voyage | null };
+  fleet: { ships: number; voyage: Voyage | null; calm?: number };
   act3: { ch: number; ending: string; peak: { x: number; y: number } | null };
 }
 
