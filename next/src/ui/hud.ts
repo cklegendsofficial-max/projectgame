@@ -15,6 +15,7 @@ import { COMPANIONS, COMP_BY_ID, COMP_MAX, ERLIK, FORT_GUARD, GATE_GUARD, KARA_H
 import { LEGACY_PERKS, legacy } from "../game/legacy";
 import { HERD_BUY, HERD_GOLD, HERD_MAX, MOVE_FOOD, OTAG_GOLD, OTAG_WOOD, REST_FOOD, ZONE_DESC, ZONE_NAME, bestZone, zoneOf } from "../game/otag";
 import { VET_LV_MAX, VET_MAX, VET_RANKS, vetBonus, vetTitle } from "../game/vets";
+import { PERSONAS, PERSONA_KEYS } from "../game/director";
 import { KUT_TIERS, kutArmy, kutTier, kutVote } from "../game/kut";
 import { SING_GOLD, TAMGA_COLORS, TAMGA_DEFAULT, TAMGA_MARKS, TAMGA_SHAPES, singRenown, tamgaSvg, type Tamga } from "../game/ozan";
 import { CITIES, H, NH, NW, W } from "../world/gen";
@@ -1261,6 +1262,22 @@ export class Hud {
       }).join("") || `<p>Şu an sefer yok.</p>`);
   }
 
+  private directorHtml(): string {
+    const g = this.g;
+    const d = g.dir();
+    const p = PERSONAS[d.p];
+    const cards = PERSONA_KEYS.map((k) => {
+      const x = PERSONAS[k];
+      return `<div class="persona ${k === d.p ? "on" : ""}" data-a="${this.act(() => g.setPersona(k))}">${ic(x.icon)}<b>${x.name}</b><small>${x.desc}</small></div>`;
+    }).join("");
+    const log = d.log.slice(0, 4).map((l) => `<li class="${l.bad ? "dear" : "cheap"}">${l.d}. gün · ${l.t}</li>`).join("");
+    return `<h3>${ic(p.icon)} Hikâye Anlatıcısı</h3>
+      <p class="dim">Anlatıcı destanının temposunu belirler: işler fazla yolunda giderse bela gönderir, zor anında yardım eli uzatabilir.</p>
+      <div class="personas">${cards}</div>
+      ${bar(d.t, p.limit, "en", `Gerilim ${d.t.toFixed(1)}/${p.limit}`)}
+      ${log ? `<ul class="runs">${log}</ul>` : ""}`;
+  }
+
   private settingsHtml(): string {
     const g = this.g;
     const cur = curSlot();
@@ -1281,7 +1298,7 @@ export class Hud {
         : `<button class="btn sm ${inf ? "go" : ""}" data-a="${this.act(() => g.switchSlot(i))}">${inf ? "Yükle" : "Yeni oyun"}</button>`;
       return `<div class="sslot ${i === cur ? "cur" : ""}">${ic("scroll")}<div><b>Yuva ${i + 1}${inf ? ` · ${inf.name}` : ""}</b><small>${inf ? `${cl?.name ?? "Köle"} · Sv ${inf.lv} · ${ic("crown")}${inf.renown} · ${ic("coins")}${fmt(inf.gold)}${inf.owned ? ` · ${inf.owned} şehir` : ""}${when ? ` · ${when}` : ""}` : "Boş yuva"}</small></div>${btn}</div>`;
     }).join("");
-    return `<h3>Ses</h3>
+    return `${this.directorHtml()}<h3>Ses</h3>
       <div class="setrow"><span>Müzik</span><input type="range" min="0" max="100" value="${pct(settings.music)}" data-set="music"><b data-so="music">${pct(settings.music)}</b></div>
       <div class="setrow"><span>Efektler</span><input type="range" min="0" max="100" value="${pct(settings.fx)}" data-set="fx"><b data-so="fx">${pct(settings.fx)}</b></div>
       <h3>Görüntü</h3>

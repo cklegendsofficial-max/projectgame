@@ -23,6 +23,7 @@ import { BRIBE_GOLD, DECREES, KAGAN_RENOWN, KURULTAY_EVERY, KURULTAY_MAX, decree
 import { ESCORT_GOLD, PIRATE_RISK, SHIP_CAP, SHIP_GOLD, SHIP_MAX, pirateArmy, portOf, routeDays } from "./hazar";
 import { LEGACY_PERKS, hasLegacy, recordEnding } from "./legacy";
 import { HERD_GOLD, HERD_BUY, HERD_MAX, MOVE_FOOD, OTAG_GOLD, OTAG_WOOD, REST_FOOD, ZONE_NAME, bestZone, pasture, zoneOf } from "./otag";
+import { DIR_DEFAULT, PERSONAS, pickRelief, pickThreat, struggling, tensionGain, type DirCtx, type DirState, type PersonaId, type Relief, type Threat } from "./director";
 import { ROAD_CHANCE, ROAD_EVENTS, ROAD_PER_DAY, ROAD_STEP, checkChance, type RoadCtx, type RoadEvent, type RoadFx, type RoadOpt } from "./road";
 import { SING_GOLD, SONG_MAX, TAMGA_DEFAULT, compose, singRenown, type SongCtx, type SongKind, type Tamga } from "./ozan";
 import { TORE_CASES, kutArmy, kutLoy, kutTier, kutVote, type ToreCase } from "./kut";
@@ -660,6 +661,139 @@ export class Game {
     const s = this.s;
     s.tamga = { ...TAMGA_DEFAULT, ...s.tamga, [part]: v };
     saveGame(s);
+  }
+
+  dir(): DirState {
+    const s = this.s;
+    s.dir = { ...DIR_DEFAULT, ...s.dir, log: s.dir?.log ?? [] };
+    return s.dir;
+  }
+
+  setPersona(p: PersonaId): void {
+    const d = this.dir();
+    d.p = p;
+    d.t = Math.min(d.t, PERSONAS[p].limit - 1);
+    this.hud.toast(`Hikâyeni artık ${PERSONAS[p].name} anlatıyor.`, "info");
+    saveGame(this.s);
+  }
+
+  dirCtx(): DirCtx {
+    const s = this.s;
+    return {
+      day: this.dayOf().day,
+      lv: s.hero.lv,
+      gold: s.res.gold,
+      hpFrac: s.hero.hp / this.maxHp(),
+      armyFill: armySize(s.hero.army) / Math.max(1, this.heroCap()),
+      beylik: s.beylik,
+      owned: Object.keys(s.owned).length,
+      warRivals: s.rivals.filter((r) => r.status === "war").length,
+    };
+  }
+
+  private directorDaily(): void {
+    const s = this.s;
+    if (!s.free || this.battleLock) return;
+    const d = this.dir();
+    const c = this.dirCtx();
+    const p = PERSONAS[d.p];
+    d.t += tensionGain(d, c);
+    if (d.t >= p.limit) {
+      d.t = Math.max(0, d.t - p.limit - 0.5);
+      this.dirThreat(pickThreat(c));
+    } else if (struggling(d, c) && Math.random() < p.mercy) {
+      d.losses = 0;
+      this.dirRelief(pickRelief(c));
+    }
+  }
+
+  private dirLog(t: string, bad: boolean): void {
+    const d = this.dir();
+    d.log.unshift({ d: this.dayOf().day, t, bad });
+    if (d.log.length > 8) d.log.length = 8;
+  }
+
+  dirThreat(k: Threat): void {
+    const s = this.s;
+    const h = s.hero;
+    const p = PERSONAS[this.dir().p];
+    const tier = Math.min(5, Math.max(1, Math.round(h.lv / 3)));
+    if (k === "pusu") {
+      const a = Math.random() * Math.PI * 2;
+      for (let i = 0; i < 8; i++) {
+        const x = h.x + Math.cos(a + i) * 380;
+        const y = h.y + Math.sin(a + i) * 380;
+        if (this.cellCost(x, y) >= 3) continue;
+        const army0 = banditArmy(tier);
+        for (const u of UNIT_KEYS) army0[u] = Math.max(1, Math.round(army0[u] * p.power));
+        const camp = s.camps.indexOf(this.nearest(s.camps) ?? s.camps[0]);
+        s.bandits.push({ id: s.nextId++, camp, tier, x, y, army: army0, tx: x, ty: y, wait: 4, chase: true, amb: true });
+        this.hud.toast(`${p.name}: Ufukta toz bulutu… bir harami çetesi izini sürüyor!`, "bad");
+        this.dirLog("Harami pususu gönderdi", true);
+        return;
+      }
+    }
+    if (k === "firtina") {
+      const a = Math.random() * Math.PI * 2;
+      const x = Math.max(200, Math.min(W - 200, h.x + Math.cos(a) * 500));
+      const y = Math.max(200, Math.min(H - 200, h.y + Math.sin(a) * 500));
+      const sp = 14;
+      s.storms.push({ id: s.nextId++, kind: this.season() === "kis" ? "yagmur" : "kum", x, y, r: 300 * p.power, vx: -Math.cos(a) * sp, vy: -Math.sin(a) * sp, age: 0, life: 150 });
+      this.hud.toast(`${p.name}: Gök karardı, üzerine bir fırtına yürüyor!`, "bad");
+      this.dirLog("Fırtına gönderdi", true);
+      return;
+    }
+    if (k === "baskin") {
+      s.raidAt = this.now;
+      this.dirLog("Köylere harami baskını saldı", true);
+      return;
+    }
+    if (k === "akin") {
+      const r = s.rivals.find((x) => x.status === "war");
+      if (r) {
+        this.rivalRaid(r);
+        this.dirLog(`${rivalName(r)} akına kaldırdı`, true);
+        return;
+      }
+    }
+    if (k === "isyan") {
+      const list = this.ownedList();
+      if (list.length) {
+        const city = list[Math.floor(Math.random() * list.length)];
+        s.owned[city].loy = Math.max(0, s.owned[city].loy - Math.round(15 * p.power));
+        this.hud.toast(`${p.name}: ${CITY_NAME[city]} çarşısında kışkırtıcılar halkı galeyana getiriyor! (bağlılık düştü)`, "bad");
+        this.dirLog(`${CITY_NAME[city]} halkını kışkırttı`, true);
+        return;
+      }
+    }
+    this.dirThreat("pusu");
+  }
+
+  dirRelief(k: Relief): void {
+    const s = this.s;
+    const h = s.hero;
+    const p = PERSONAS[this.dir().p];
+    if (k === "sifa") {
+      h.hp = this.maxHp();
+      this.hud.toast(`${p.name}: Yolda bir şifacı kadın yaralarını sardı. Canın tazelendi.`, "good");
+      this.dirLog("Şifacı gönderdi", false);
+    } else if (k === "gonullu") {
+      const room = Math.max(0, this.heroCap() - armySize(h.army));
+      const n = Math.min(room, 3 + Math.round(h.lv / 2));
+      h.army.spear += Math.ceil(n / 2);
+      h.army.archer += Math.floor(n / 2);
+      this.hud.toast(`${p.name}: Adını duyan ${n} yiğit sancağının altına koştu.`, "good");
+      this.dirLog(`${n} gönüllü gönderdi`, false);
+    } else if (k === "olay" && !this.hud.modal()) {
+      const ids = ["dervis", "kuyu", "senlik", "elci"];
+      this.roadEvent(ids[Math.floor(Math.random() * ids.length)]);
+      this.dirLog("Yoluna bir karşılaşma çıkardı", false);
+    } else {
+      const gold = 50 + h.lv * 15;
+      this.gain({ gold, food: 40 });
+      this.hud.toast(`${p.name}: Geçen bir kervanbaşı sana hediye bıraktı: +${gold} altın, +40 yiyecek.`, "good");
+      this.dirLog("Kervan hediyesi gönderdi", false);
+    }
   }
 
   private roadTick(): void {
@@ -2912,6 +3046,9 @@ export class Game {
     const songs0 = this.s.songs?.length ?? 0;
     const extra = after(res.win);
     this.addKut(res.win ? (boss ? 3 : 1) : -2);
+    const dir = this.dir();
+    dir.fight = this.dayOf().day;
+    dir.losses = res.win ? 0 : dir.losses + 1;
     if (res.win && boss && (this.s.songs?.length ?? 0) === songs0) this.sing("zafer", { foe: boss.name });
     let fled = "";
     if (!res.win) {
@@ -3447,6 +3584,7 @@ export class Game {
     const se = this.season();
     this.otagDaily();
     this.toreTick(day);
+    this.directorDaily();
     for (const o of Object.values(s.owned)) this.addKut(o.tax === 2 ? -1 : o.tax === 0 ? 0.5 : 0);
     if (this.kurAnn !== s.kurultay.held && /Semerkant|^$/.test(this.kurultayReason())) {
       this.kurAnn = s.kurultay.held;

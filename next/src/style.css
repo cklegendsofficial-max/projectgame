@@ -369,6 +369,11 @@ body.nomini .mini { display: none; }
 .bar.boss { height: 16px; }
 .bar.boss i { background: linear-gradient(#c58cff, #6a2a9a); }
 .bar.kut i { background: linear-gradient(#bfe6ff, #3a7ac8); }
+.personas { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 6px 0 8px; }
+.persona { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 3px; padding: 7px 5px; background: rgba(0, 0, 0, 0.25); border: 1px solid #6a4a22; border-radius: 8px; cursor: pointer; }
+.persona img { width: 40px; height: 40px; object-fit: contain; }
+.persona small { font-size: 11px; opacity: 0.8; line-height: 1.25; }
+.persona.on { border-color: #ffd56a; background: rgba(120, 80, 20, 0.35); box-shadow: 0 0 10px rgba(255, 213, 106, 0.3); }
 .tamgaed { display: flex; gap: 10px; align-items: flex-start; margin: 6px 0; }
 .tamgaed > svg { flex: none; background: radial-gradient(#5a2a14, #2a1206); border: 2px solid #c8962a; border-radius: 10px; padding: 4px; }
 .tchips { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 5px; }
