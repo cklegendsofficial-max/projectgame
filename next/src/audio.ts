@@ -1,8 +1,19 @@
 import { settings } from "./settings";
 
 const HICAZ = [0, 1, 4, 5, 7, 8, 10, 12, 13, 16, 17, 19];
+const USSAK = [0, 2, 3, 5, 7, 8, 10, 12, 14, 15, 17, 19];
+const HUSEYNI = [0, 2, 3, 5, 7, 9, 10, 12, 14, 15, 17, 19];
+const RAST = [0, 2, 4, 5, 7, 9, 11, 12, 14, 16, 17, 19];
 const ROOT = 146.83;
 const KEY = "kk_audio";
+
+type Mood = { scale: number[]; root: number; tempo: number; rest: number; wind: number; drum: boolean; bell: boolean };
+const MOODS: Record<string, Mood> = {
+  bahar: { scale: RAST, root: 146.83, tempo: 1, rest: 1, wind: 0.014, drum: false, bell: false },
+  yaz: { scale: HICAZ, root: 146.83, tempo: 0.82, rest: 0.8, wind: 0.02, drum: true, bell: false },
+  guz: { scale: USSAK, root: 130.81, tempo: 1.15, rest: 1.2, wind: 0.03, drum: false, bell: false },
+  kis: { scale: HUSEYNI, root: 110, tempo: 1.45, rest: 1.6, wind: 0.07, drum: false, bell: true },
+};
 
 class SoundSystem {
   private ctx: AudioContext | null = null;
@@ -15,7 +26,20 @@ class SoundSystem {
   private nextNote = 0;
   private step = 3;
   private phrase = 0;
+  private mood: Mood = MOODS.bahar;
+  private moodK = "";
+  private night = false;
+  private cricketT = 0;
   muted = localStorage.getItem(KEY) === "off";
+
+  setMood(season: string, night: boolean): void {
+    this.night = night;
+    if (season === this.moodK) return;
+    this.moodK = season;
+    this.mood = MOODS[season] ?? MOODS.bahar;
+    this.step = Math.min(this.step, this.mood.scale.length - 1);
+    if (this.ctx && this.windG && this.stormLv <= 0) this.windG.gain.setTargetAtTime(this.mood.wind, this.ctx.currentTime, 3);
+  }
 
   unlock(): void {
     if (this.ctx) {
@@ -58,7 +82,7 @@ class SoundSystem {
   storm(level: number): void {
     if (!this.ctx || !this.windG || level === this.stormLv) return;
     this.stormLv = level;
-    this.windG.gain.setTargetAtTime([0.018, 0.09, 0.06][level] ?? 0.018, this.ctx.currentTime, 1.2);
+    this.windG.gain.setTargetAtTime([this.mood.wind, 0.09, this.moodK === "kis" ? 0.11 : 0.06][level] ?? this.mood.wind, this.ctx.currentTime, 1.2);
   }
 
   private drone(): void {
@@ -106,19 +130,55 @@ class SoundSystem {
   private schedule(): void {
     const ctx = this.ctx!;
     if (ctx.state !== "running") return;
+    const m = this.mood;
+    if (this.night && this.moodK === "yaz" && ctx.currentTime > this.cricketT) {
+      this.cricketT = ctx.currentTime + 0.9 + Math.random() * 1.6;
+      for (let k = 0; k < 3; k++) this.tone(4200 + Math.random() * 300, ctx.currentTime + 0.05 + k * 0.07, 0.04, 0.012, "sine");
+    }
     while (this.nextNote < ctx.currentTime + 0.6) {
       const t = this.nextNote;
       if (this.phrase <= 0) {
         this.phrase = 4 + Math.floor(Math.random() * 6);
-        this.nextNote += 1.6 + Math.random() * 2.4;
+        this.nextNote += (1.6 + Math.random() * 2.4) * m.rest;
+        if (m.drum) [0, 0.36, 0.54, 0.9].forEach((d, i) => this.drum(t + d * m.tempo, i % 2 === 0));
         continue;
       }
       this.phrase--;
-      this.step = Math.max(0, Math.min(HICAZ.length - 1, this.step + [-2, -1, -1, 1, 1, 2, 0][Math.floor(Math.random() * 7)]));
-      const f = ROOT * 2 ** (HICAZ[this.step] / 12);
-      this.pluck(f, t, 0.11, this.music);
-      if (Math.random() < 0.25) this.pluck(f, t + 0.12, 0.06, this.music);
-      this.nextNote += [0.32, 0.48, 0.48, 0.64, 0.96][Math.floor(Math.random() * 5)];
+      this.step = Math.max(0, Math.min(m.scale.length - 1, this.step + [-2, -1, -1, 1, 1, 2, 0][Math.floor(Math.random() * 7)]));
+      const f = m.root * 2 ** (m.scale[this.step] / 12);
+      this.pluck(f, t, 0.11, this.music, m.bell ? 2.4 : 1.4);
+      if (m.bell && Math.random() < 0.3) this.bell(f * 4, t + 0.2);
+      else if (Math.random() < 0.25) this.pluck(f, t + 0.12 * m.tempo, 0.06, this.music);
+      if (m.drum && Math.random() < 0.3) this.drum(t, Math.random() < 0.4);
+      this.nextNote += [0.32, 0.48, 0.48, 0.64, 0.96][Math.floor(Math.random() * 5)] * m.tempo;
+    }
+  }
+
+  private drum(t: number, dum: boolean): void {
+    const ctx = this.ctx!;
+    const o = ctx.createOscillator();
+    o.type = "sine";
+    o.frequency.setValueAtTime(dum ? 110 : 320, t);
+    o.frequency.exponentialRampToValueAtTime(dum ? 55 : 180, t + 0.12);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(dum ? 0.09 : 0.04, t);
+    g.gain.exponentialRampToValueAtTime(0.0008, t + (dum ? 0.25 : 0.1));
+    o.connect(g).connect(this.music);
+    o.start(t);
+    o.stop(t + 0.3);
+  }
+
+  private bell(f: number, t: number): void {
+    const ctx = this.ctx!;
+    for (const [mul, v] of [[1, 0.03], [2.76, 0.012], [5.4, 0.006]] as const) {
+      const o = ctx.createOscillator();
+      o.frequency.value = f * mul;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(v, t);
+      g.gain.exponentialRampToValueAtTime(0.0004, t + 2.2);
+      o.connect(g).connect(this.music);
+      o.start(t);
+      o.stop(t + 2.3);
     }
   }
 

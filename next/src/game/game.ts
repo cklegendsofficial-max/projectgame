@@ -4139,6 +4139,7 @@ export class Game {
 
   private seasonTick(): void {
     const se = this.season();
+    audio.setMood(se, this.isNight());
     if (se === this.lastSeason) return;
     const first = this.lastSeason === null;
     this.lastSeason = se;
