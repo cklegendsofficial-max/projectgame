@@ -595,7 +595,9 @@ export class Hud {
           : hs
               .map((it) => {
                 const on = this.studPick.includes(it.id);
-                return `<div class="grow ${on ? "pick" : ""}">${ic(it.icon, "gimg")}<div class="bi2"><b class="r${it.rar}">${it.name}</b><small>${itemStats(it)}</small></div><button class="btn sm ${on ? "go" : ""}" data-a="${this.act(() => (this.studPick = on ? this.studPick.filter((x) => x !== it.id) : [...this.studPick.slice(-1), it.id]))}">${on ? "Seçili" : "Seç"}</button></div>`;
+                const hi = it.horse;
+                const ped = hi ? `<small class="ped">${BREEDS[hi.breed].name} · <b>${hi.gen}. kuşak</b>${hi.sire ? ` · ♂ ${hi.sire.split(" (")[0]} × ♀ ${hi.dam.split(" (")[0]}` : ""}</small>` : "";
+                return `<div class="grow ${on ? "pick" : ""}">${ic(it.icon, "gimg")}<div class="bi2"><b class="r${it.rar}">${it.name}</b><small>${itemStats(it)}</small>${ped}</div><button class="btn sm ${on ? "go" : ""}" data-a="${this.act(() => (this.studPick = on ? this.studPick.filter((x) => x !== it.id) : [...this.studPick.slice(-1), it.id]))}">${on ? "Seçili" : "Seç"}</button></div>`;
               })
               .join("") +
             `<button class="btn big ${this.studPick.length === 2 && near && s.res.gold >= BREED_GOLD ? "go" : "off"}" style="width:100%" data-a="${this.act(() => { g.breedHorses(this.studPick[0], this.studPick[1], city); this.studPick = []; })}">${ic("foal")} Çiftleştir · ${ic("coins")}${BREED_GOLD}</button>`);
