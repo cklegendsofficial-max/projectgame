@@ -6,7 +6,7 @@ import { ROW_NEED, TALENT_BY_ID, branchSpent, type Talent } from "./talents";
 import { CONS_BY_ID, REFINES, gearCost, type Cost, type Mat } from "./crafting";
 import { GIVERS, SIDE_TEXT, type SideKind, type SideQuest } from "./sidequests";
 import { audio } from "../audio";
-import { TACTICS, TACTIC_KEYS, fight, odds, stanceWeights, tacticDelta, type BattleResult, type Boss, type Champion, type Tactic } from "./battle";
+import { Sim, TACTICS, TACTIC_KEYS, fight, odds, stanceWeights, tacticDelta, type BattleResult, type Boss, type Champion, type Tactic } from "./battle";
 import { BUILDINGS, BUILDING_BY_ID, CITY_NAME, DAY_SEC, RES_KEYS, UNITS, UNIT_KEYS, army, armyPower, armySize, buildCost, buildTime, prodPerMin, storageCap, trainSpeed, unitUnlocked, xpNeed, type Army, type BuildingId, type Res, type Unit } from "./data";
 import { CITY_TRADE, GOODS, GOOD_KEYS, PLUS_CHANCE, SLOTS, STAT_INFO, canPlus, classItem, goodMult, itemPrice, itemStats, makeHorse, makeItem, plusCost, rollItem, setPiece, setPlus, skillLv, uniqueItem, type Good, type Item, type Skill, type Slot, type Stat } from "./rpg";
 import { SETS, SET_FORGE, SET_KEYS, SET_SLOTS, UNIQUES, addMods, type GearMods, type SetId } from "./legend";
@@ -2607,12 +2607,24 @@ export class Game {
     const h = this.s.hero;
     this.lastTactic = auto ? this.lastTactic : t;
     const champ = this.champion();
-    const res: BattleResult = fight(h.army, this.heroBonus() + this.tdelta(t, stance), enemy, enemyBonus, champ, boss);
+    const sim = new Sim(h.army, this.heroBonus() + this.tdelta(t, stance), enemy, enemyBonus, champ, boss);
     const edge = TACTICS[t].beats === stance ? " — <b class=\"cheap\">üstünlük senin!</b>" : TACTICS[stance].beats === t ? " — <b class=\"dear\">düşman seni okudu!</b>" : "";
     for (const k of Object.keys(this.s.buffs)) if (--this.s.buffs[k] <= 0) delete this.s.buffs[k];
     const tline = `Taktik: ${TACTICS[t].name}${auto ? " (otomatik)" : ""} · Düşman: ${TACTICS[stance].name}${edge}`;
     const before = { ...h.army };
     const hpBefore = h.hp;
+    this.hud.showBattle(title, before, enemy, sim, { hpBefore, maxHp: this.maxHp() }, boss, foe, auto, (res) => this.applyBattle(res, enemy, boss, after, tline), () => {
+      this.battleLock = false;
+      saveGame(this.s);
+      const f = this.afterBattle;
+      this.afterBattle = null;
+      f?.();
+    });
+  }
+
+  private applyBattle(res: BattleResult, enemy: Army, boss: Boss | null, after: (win: boolean) => string, tline: string): { xp: number; lvUp: boolean; note: string } {
+    const h = this.s.hero;
+    if (res.orders.includes("ricat")) this.s.c.turan = (this.s.c.turan ?? 0) + 1;
     h.army = { ...res.rounds[res.rounds.length - 1].a };
     h.hp = Math.max(1, res.heroHp);
     h.skills.silah += 6 * (res.rounds.length - 2);
@@ -2638,13 +2650,7 @@ export class Game {
       fled = `${res.heroDown ? "Ağır yaralandın. " : ""}Kalanlar seni ${CITY_NAME[c.id]} şehrine taşıdı.`;
     }
     const note = [tline, extra || fled, revived ? `Ruh Çağrısı: ${revived} asker hayata döndü` : ""].filter(Boolean).join("<br>");
-    this.hud.showBattle(title, before, enemy, res, { hpBefore, maxHp: this.maxHp() }, xp, lvUp, note, boss, foe, () => {
-      this.battleLock = false;
-      saveGame(this.s);
-      const f = this.afterBattle;
-      this.afterBattle = null;
-      f?.();
-    });
+    return { xp, lvUp, note };
   }
 
   addXp(xp: number): boolean {

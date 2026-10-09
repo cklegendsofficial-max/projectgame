@@ -28,6 +28,7 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: "ally", name: "Kan Kardeşliği", desc: "Bir beyle ittifak kur.", icon: "lord_bey", done: (s) => s.rivals.some((r) => r.status === "ally") },
   { id: "vassal3", name: "Beyler Beyi", desc: "Aynı anda 3 tabi beyin olsun.", icon: "lord_emir", done: (s) => s.rivals.filter((r) => r.status === "vassal").length >= 3 },
   { id: "beyq5", name: "Sözünün Eri", desc: "Beylerin 5 isteğini yerine getir.", icon: "lord_bey", done: (s) => (s.c.beyq ?? 0) >= 5 },
+  { id: "turan", name: "Bozkır Kurdu", desc: "Savaşta Turan taktiğini 5 kez uygula.", icon: "u_cavalry", done: (s) => (s.c.turan ?? 0) >= 5 },
   { id: "karahan", name: "Kara Tamga", desc: "Kara Han'ı yen ve ilk destanı bitir.", icon: "heroes/boss_karahan", done: (s) => s.story.done },
   { id: "erlik", name: "Erlik'in Kapısı", desc: "Erlik Han'ı yen.", icon: "boss_erlik", done: (s) => s.act2.done },
   { id: "kagan", name: "Kağan", desc: "Kurultayda Kağan seçil.", icon: "crown", done: (s) => !!s.kagan },

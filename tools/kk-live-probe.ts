@@ -1,0 +1,51 @@
+import { chromium } from "playwright-core";
+
+const mode = process.argv[2] ?? "desk";
+const out = `playtest/live-${mode}`;
+const browser = await chromium.launch({ channel: "msedge", headless: true, args: ["--enable-gpu", "--ignore-gpu-blocklist", "--use-angle=d3d11"] });
+const vp = mode === "mob" ? { width: 390, height: 844 } : { width: 1280, height: 720 };
+const page = await browser.newPage({ viewport: vp, deviceScaleFactor: mode === "mob" ? 2 : 1 });
+const errs: string[] = [];
+page.on("pageerror", (e) => errs.push(e.message));
+page.on("console", (m) => m.type() === "error" && errs.push(m.text()));
+await page.goto("http://localhost:5174/");
+await page.evaluate(() => localStorage.clear());
+await page.reload();
+await page.waitForFunction(() => !document.getElementById("loading"), null, { timeout: 60000 });
+const ev = <T = unknown>(fn: string) => page.evaluate(`(() => { const g = window.game; ${fn} })()`) as Promise<T>;
+const dismiss = async () => {
+  for (let k = 0; k < 10; k++) {
+    if (!(await page.locator(".battle .bbox.story .btn").count())) break;
+    await page.locator(".battle .bbox.story .btn").first().click();
+    await page.waitForTimeout(200);
+  }
+};
+await page.locator(`.ccard[data-c="alp"]`).click();
+await page.locator(".cname .btn").click();
+await dismiss();
+await ev(`g.s.res.gold = 300; const c = g.targetPos({kind:"capital"}); g.s.hero.x = c.x; g.s.hero.y = c.y; g.buyFreedom();`);
+await dismiss();
+await page.waitForTimeout(1200);
+await dismiss();
+await ev(`g.s.hero.lv = 8; g.s.hero.army = { spear: 30, archer: 25, horse: 25 }; g.battle("Canlı savaş testi", { spear: 70, archer: 45, horse: 25 }, 0.05, (w) => w ? "Zafer notu" : "Yenilgi notu");`);
+await page.waitForTimeout(400);
+await page.screenshot({ path: `${out}-0.png` });
+await dismiss();
+if (await page.locator(".battle .tact").count()) await page.locator(".battle .tact").first().click();
+await page.waitForTimeout(1000);
+await page.locator(".battle .ord[data-o=ricat]").click({ timeout: 3000 });
+await page.waitForTimeout(1500);
+await page.screenshot({ path: `${out}-1.png` });
+await page.locator(".battle .ord[data-o=nara]").click().catch(() => {});
+await page.waitForTimeout(2200);
+await page.screenshot({ path: `${out}-2.png` });
+await page.locator(".battle .ord[data-o=kanat]").click().catch(() => {});
+await page.locator(".battle .result .btn").waitFor({ timeout: 30000 });
+await page.screenshot({ path: `${out}-3.png` });
+console.log("log:", await page.locator(".battle .rlog").innerText(), "| note:", await page.locator(".battle .result .loot").innerText().catch(() => ""));
+await page.locator(".battle .result .btn").click();
+console.log("after", await ev(`return [g.s.hero.army, g.s.c.turan, g.battleLock];`));
+const sims = await page.evaluate(`import("/src/game/battle.ts").then((m) => { const A = { spear: 30, archer: 25, horse: 25 }; const B = { spear: 40, archer: 30, horse: 15 }; let base = 0, turan = 0, nara = 0; for (let k = 0; k < 300; k++) { base += m.fight(A, 0.2, B, 0.05).win ? 1 : 0; const s = new m.Sim(A, 0.2, B, 0.05); s.step("ricat"); turan += s.finish().win ? 1 : 0; const t = new m.Sim(A, 0.2, B, 0.05); t.step("nara"); t.step(); t.step("kanat"); nara += t.finish().win ? 1 : 0; } return { base: base / 300, turan: turan / 300, nara_kanat: nara / 300 }; })`);
+console.log("win rates", sims);
+console.log("errors:", errs);
+await browser.close();

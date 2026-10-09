@@ -1,6 +1,7 @@
 import { LORD_SERAIS, type Game, type Quest, type Target } from "../game/game";
 import { BUILDINGS, DAY_SEC, NODE_NAME, RES_ICON, RES_KEYS, RES_NAME, UNITS, UNIT_KEYS, armySize, buildCost, buildTime, prodPerMin, unitUnlocked, xpNeed, type Army, type Res, type Unit } from "../game/data";
-import { TACTICS, TACTIC_KEYS, type BattleResult, type Boss, type Tactic } from "../game/battle";
+import { ORDERS, ORDER_KEYS, TACTICS, TACTIC_KEYS, type BattleResult, type Boss, type Order, type Sim, type Tactic } from "../game/battle";
+import { BattleField } from "./battleField";
 import { GOODS, GOOD_KEYS, PLUS_CHANCE, SKILL_INFO, SKILL_KEYS, SLOTS, SLOT_NAME, STAT_INFO, STAT_KEYS, canPlus, itemStats, kindName, plusCost, skillLv, skillNext, type Item, type Slot } from "../game/rpg";
 import { ARMOR_NAME, CLASSES, SKILL_MAX, WEAPON_NAME, skillPow, skillRank, type ClassId } from "../game/classes";
 import { CAPITAL, SAVE_SLOTS, curSlot, exportSave, kurganBoss, slotInfo } from "../game/state";
@@ -1433,7 +1434,7 @@ export class Hud {
     return this.frame(h.name, s.free ? `Seviye ${h.lv} · ${s.act3.ending ? `<b class="ttl">${endingOf(s.act3.ending)!.name}</b>${tl ? ` · ${tl.name}` : ""}` : s.kagan ? `<b class="ttl">Kağan</b>${tl ? ` · ${tl.name}` : ""}` : tl ? `<b class="ttl">${tl.name}</b>` : s.beylik ? "Bey" : "Hür yiğit"}` : `Seviye ${h.lv} · Köle`, assetUrl(g.face()), tabs + body);
   }
 
-  showBattle(title: string, before: Army, enemy: Army, res: BattleResult, hero: { hpBefore: number; maxHp: number }, xp: number, lvUp: boolean, extra: string, boss: Boss | null, foe: string, onClose: () => void): void {
+  showBattle(title: string, before: Army, enemy: Army, sim: Sim, hero: { hpBefore: number; maxHp: number }, boss: Boss | null, foe: string, auto: boolean, apply: (res: BattleResult) => { xp: number; lvUp: boolean; note: string }, onClose: () => void): void {
     this.battleOpen = true;
     this.close();
     const el = document.createElement("div");
@@ -1448,10 +1449,38 @@ export class Hud {
         <div class="vs">VS</div>
         <div class="side foe">${ic(boss?.icon ?? "j_bandit", "bp" + (boss ? " boss" : ""))}<b>${boss?.name ?? foe}</b>${boss ? `<div class="bar boss"><i></i><span></span></div>` : ""}${n0b ? `<div class="bar hp foe"><i></i></div>` : ""}<div class="arm"></div></div>
       </div>
+      <canvas class="field"></canvas>
+      <div class="orders">${ORDER_KEYS.map((o) => `<button class="btn sm ord" data-o="${o}" title="${ORDERS[o].text}">${ic(ORDERS[o].icon)} ${ORDERS[o].name}</button>`).join("")}<button class="btn sm fast" title="Hızlandır">⏩</button></div>
       <div class="rlog">Savaş başladı…</div>
       <div class="result"></div>
     </div>`;
     this.root.appendChild(el);
+    const field = new BattleField(el.querySelector("canvas.field")!, before, enemy, assetUrl(face), boss ? assetUrl(boss.icon) : null);
+    let pending: Order | undefined;
+    let fast = auto;
+    const ordBtns = [...el.querySelectorAll<HTMLButtonElement>(".ord")];
+    const syncOrders = () => {
+      for (const b of ordBtns) {
+        const o = b.dataset.o as Order;
+        b.classList.toggle("off", !sim.canOrder(o) || (!!pending && pending !== o));
+        b.classList.toggle("go", pending === o);
+      }
+    };
+    syncOrders();
+    for (const b of ordBtns)
+      b.addEventListener("click", () => {
+        const o = b.dataset.o as Order;
+        if (!sim.canOrder(o) || pending) return;
+        pending = o;
+        audio.play("click");
+        syncOrders();
+      });
+    const fastBtn = el.querySelector(".fast")!;
+    fastBtn.classList.toggle("go", fast);
+    fastBtn.addEventListener("click", () => {
+      fast = !fast;
+      fastBtn.classList.toggle("go", fast);
+    });
     const setSide = (sel: string, a: Army, n0: number, hp?: number) => {
       const s = el.querySelector(sel)!;
       const hpBar = s.querySelector(".hp i") as HTMLElement | null;
@@ -1474,12 +1503,18 @@ export class Hud {
     const log = el.querySelector(".rlog")!;
     const box = el.querySelector(".bbox") as HTMLElement;
     const step = () => {
-      if (i < res.rounds.length - 1) {
-        const r = res.rounds[i];
-        const p = res.rounds[i - 1];
+      if (!sim.done() || i < sim.rounds.length) {
+        if (i >= sim.rounds.length) {
+          sim.step(pending);
+          pending = undefined;
+          syncOrders();
+        }
+        const r = sim.rounds[i];
+        const p = sim.rounds[i - 1];
         setSide(".me", r.a, n0a, r.hp);
         setSide(".foe", r.b, n0b);
         setBoss(r.bhp);
+        field.round(r.a, r.b, r.order, fast ? 380 : 760);
         box.classList.remove("shake");
         void box.offsetWidth;
         box.classList.add("shake");
@@ -1487,10 +1522,15 @@ export class Hud {
         haptic(18);
         log.textContent = `${r.ev.length ? r.ev.join(" · ") + " — " : ""}${i}. tur: ${p.hp >= r.hp ? `${Math.round(p.hp - r.hp)} hasar aldın` : `${Math.round(r.hp - p.hp)} can yeniledin`}${n0a ? `, ${armySize(p.a) - armySize(r.a)} asker kaybın` : ""} · düşman kaybı ${armySize(p.b) - armySize(r.b)}`;
         i++;
-        setTimeout(step, 480);
+        setTimeout(step, fast ? 420 : 900);
         return;
       }
+      el.querySelector(".orders")!.remove();
+      const res = sim.finish();
+      const { xp, lvUp, note: extra } = apply(res);
       const last = res.rounds[res.rounds.length - 1];
+      field.round(last.a, last.b, undefined, 500);
+      setTimeout(() => field.stop(), 1500);
       setSide(".me", last.a, n0a, last.hp);
       setSide(".foe", last.b, n0b);
       setBoss(last.bhp);
