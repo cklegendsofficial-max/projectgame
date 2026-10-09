@@ -94,6 +94,7 @@ export class Game {
   private deepBest0 = 0;
   private afterBattle: (() => void) | null = null;
   private retreatHook: (() => void) | null = null;
+  private kurAnn = -1;
 
   constructor(public world: World, public view: WorldView, public cam: Camera) {
     this.s = loadGame(world);
@@ -3041,6 +3042,10 @@ export class Game {
     const s = this.s;
     const day = this.dayOf().day;
     const se = this.season();
+    if (this.kurAnn !== s.kurultay.held && /Semerkant|^$/.test(this.kurultayReason())) {
+      this.kurAnn = s.kurultay.held;
+      this.hud.toast("Beyler Semerkant'ta kurultaya hazır. Hedefler sekmesinden topla.", "good");
+    }
     for (const [city, o] of Object.entries(s.owned)) {
       const k = this.cbl(city, "kisla");
       const gov = this.cityGov(city);
