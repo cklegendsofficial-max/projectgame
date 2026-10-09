@@ -22,6 +22,7 @@ import { BREEDS, BREED_GOLD, BREED_TIME } from "../game/horse";
 import { TITLE_CATS, titleKey, titleOf } from "../game/titles";
 import { DAILY_POOL } from "../game/daily";
 import { REQ_INFO, RIVAL_TRAITS, STATUS_NAME } from "../game/rivals";
+import { DECREES } from "../game/kurultay";
 import { DEEP_PERKS, TOMBS, tombOf } from "../game/deep";
 import { CITY_BLDS, CITY_BLD_KEYS, ENGINE_GOLD as ENGINE_GOLD_UI, FEAST_GOLD as FEAST_GOLD_UI, GOVERNORS, GOV_GOLD, TAX as TAX_UI, cityBldCost } from "../game/conquest";
 
@@ -473,6 +474,22 @@ export class Hud {
         })
         .join("")
     );
+  }
+
+  private kurultayHtml(): string {
+    const g = this.g;
+    const s = g.s;
+    if (!s.beylik || !s.rivals.length) return "";
+    const why = g.kurultayReason();
+    const kr = g.kaganReason();
+    const act = s.kurultay.decrees.map((id) => DECREES.find((d) => d.id === id)).filter(Boolean);
+    return `<h3>${ic("lord_bey")} Kurultay ${s.kagan ? `<em class="cheap">· ${s.hero.name} Kağan</em>` : ""}</h3>
+      <p class="dim">Müttefik ve tabi beylerinle Semerkant'ta toplan, fermanları oya sun. ${s.kagan ? "" : `Yeterince güçlüysen Kağanlığını ilan ettir.`}</p>
+      ${act.length ? act.map((d) => `<div class="grow">${ic(d!.icon, "gimg")}<div class="bi2"><b>${d!.name} <em class="cheap">yürürlükte</em></b><small>${d!.desc}</small></div></div>`).join("") : `<p class="dim">Yürürlükte ferman yok.</p>`}
+      <div class="stats"><div>Toplanan kurultay: <b>${s.kurultay.held}</b></div><div>${ic("crown")}Kağanlık: <b>${s.kagan ? "Evet" : kr ? "Henüz değil" : "Hazır!"}</b></div></div>
+      ${why ? `<p class="why">${why}</p>` : ""}
+      ${!s.kagan && kr && !why ? `<p class="dim">${kr}</p>` : ""}
+      <button class="btn go ${why ? "off" : ""}" data-a="${this.act(() => { this.close(); g.holdKurultay(); })}">${ic("lord_bey")} Kurultayı topla</button>`;
   }
 
   private rivalsHtml(): string {
@@ -1304,7 +1321,7 @@ export class Hud {
     } else if (this.tab === "ayar") {
       body = this.settingsHtml();
     } else if (this.tab === "unvan") {
-      body = this.dailyHtml() + this.rivalsHtml() + this.nemesisHtml() + this.titlesHtml();
+      body = this.dailyHtml() + this.kurultayHtml() + this.rivalsHtml() + this.nemesisHtml() + this.titlesHtml();
     } else if (this.tab === "techizat") {
       const inCity = g.nearCity() >= 0;
       body = `<div class="slots">` + SLOTS.map((sl) => {
@@ -1338,7 +1355,7 @@ export class Hud {
         <h3>Toplam</h3><div class="stats"><div>${ic("j_bandit")}Yenilen düşman: <b>${s.kills}</b></div><div>${ic("quest")}Görev: <b>${s.quest}/${g.QUESTS.length}</b></div><div>Ticaret kârı: <b>${s.c.profit}</b></div></div>`;
     }
     const tl = s.title ? titleOf(s.title) : null;
-    return this.frame(h.name, s.free ? `Seviye ${h.lv} · ${tl ? `<b class="ttl">${tl.name}</b>` : s.beylik ? "Bey" : "Hür yiğit"}` : `Seviye ${h.lv} · Köle`, assetUrl(g.face()), tabs + body);
+    return this.frame(h.name, s.free ? `Seviye ${h.lv} · ${s.kagan ? `<b class="ttl">Kağan</b>${tl ? ` · ${tl.name}` : ""}` : tl ? `<b class="ttl">${tl.name}</b>` : s.beylik ? "Bey" : "Hür yiğit"}` : `Seviye ${h.lv} · Köle`, assetUrl(g.face()), tabs + body);
   }
 
   showBattle(title: string, before: Army, enemy: Army, res: BattleResult, hero: { hpBefore: number; maxHp: number }, xp: number, lvUp: boolean, extra: string, boss: Boss | null, foe: string, onClose: () => void): void {

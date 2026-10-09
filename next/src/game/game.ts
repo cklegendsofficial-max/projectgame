@@ -19,6 +19,7 @@ import { BRO_BETRAY, BRO_MAX, BRO_MODS, LAST_WORDS, NEM_MAX, NEM_TRAITS, REVENGE
 import { REQ_GOODS, REQ_INFO, RIVAL_DEFS, RIVAL_LINES, RIVAL_TRAITS, STATUS_NAME, giftCost, oneOf, reqGold, rivalArmy, rivalBoss, rivalName, tribute, type BeyReq, type Rival } from "./rivals";
 import { CITY_BLDS, CITY_EVENTS, ENGINE_GOLD, FEAST_GOLD, GOVERNORS, GOV_GOLD, SIEGE_LV, SIEGE_RENOWN, TAX, cityBldCost, cityGarrison, cityTax, wallBonus, type CityBld, type CityEvent, type Governor } from "./conquest";
 import { DEEP_LORE, DEEP_PERKS, DOORS, DOOR_KEYS, RIDDLES, TOMBS, deepBoss, deepGuard, deepTier, tombOf, type DeepPerk, type DeepRun, type DoorKind } from "./deep";
+import { BRIBE_GOLD, DECREES, KAGAN_RENOWN, KURULTAY_EVERY, KURULTAY_MAX, decreeOf } from "./kurultay";
 import { ACHIEVEMENTS, steamUnlock, storeUnlocked, unlockedSet } from "./achievements";
 import { SEASONS, SEASON_DAYS, seasonOf, type Season, type SeasonId } from "./seasons";
 import { FACTIONS, FACTION_KEYS, HOSTILE, REP_RANKS, RANK_PERKS, factionOf, repRank, type FactionId } from "./factions";
@@ -593,7 +594,108 @@ export class Game {
   }
 
   allyBonus(): number {
-    return Math.min(0.2, this.s.rivals.filter((r) => r.status === "ally").length * 0.07 + this.s.rivals.filter((r) => r.status === "vassal").length * 0.04);
+    const s = this.s;
+    const base = s.rivals.filter((r) => r.status === "ally").length * 0.07 + s.rivals.filter((r) => r.status === "vassal").length * 0.04;
+    const ordu = this.decree("sefer");
+    return Math.min(ordu ? 0.35 : 0.2, base * (ordu ? 2 : 1)) + (s.kagan ? 0.05 : 0);
+  }
+
+  decree(id: string): boolean {
+    return this.s.kurultay.decrees.includes(id);
+  }
+
+  kurultayReason(): string {
+    const s = this.s;
+    if (!s.beylik) return "Kurultay için önce beyliğini kur.";
+    if (s.rivals.filter((r) => r.status === "ally" || r.status === "vassal").length < 2) return "Kurultay için en az 2 müttefik ya da tabi bey gerek.";
+    const day = this.dayOf().day;
+    if (day < s.kurultay.next) return `Beyler ${s.kurultay.next}. gün yeniden toplanır.`;
+    const c = this.cityPos(CAPITAL.id);
+    if (Math.hypot(s.hero.x - c.x, s.hero.y - c.y) > 200) return "Kurultay Semerkant'ta toplanır.";
+    return "";
+  }
+
+  kaganReason(): string {
+    const s = this.s;
+    if (s.kagan) return "Zaten Kağansın.";
+    if (s.kurultay.held < 2) return "Kağanlık için önce iki kurultay topla.";
+    if (s.renown < KAGAN_RENOWN) return `Kağanlık için ${KAGAN_RENOWN} şöhret gerek.`;
+    const live = s.rivals.filter((r) => r.status !== "dead");
+    const sup = live.filter((r) => r.status === "ally" || r.status === "vassal").length;
+    if (sup < Math.max(3, Math.ceil(live.length / 2))) return "Beylerin yarısından fazlası (en az 3) müttefikin ya da tabin olmalı.";
+    return "";
+  }
+
+  holdKurultay(): void {
+    if (this.kurultayReason()) return;
+    const s = this.s;
+    const pool = DECREES.filter((d) => !s.kurultay.decrees.includes(d.id)).sort(() => Math.random() - 0.5).slice(0, 3);
+    const opts: { label: string; cls: string; fn: () => void }[] = pool.map((d) => ({ label: `${d.name}: ${d.desc}`, cls: "", fn: () => this.kurultayBribe(d.id) }));
+    const kr = this.kaganReason();
+    opts.push({ label: kr ? `Kağanlık (${kr})` : "Kağanlığını oya sun!", cls: kr ? "off" : "go", fn: () => (kr ? this.hud.toast(kr, "bad") : this.kurultayBribe("kagan")) });
+    opts.push({ label: "Kurultayı dağıt", cls: "", fn: () => {} });
+    const att = s.rivals.filter((r) => r.status !== "dead" && r.status !== "war");
+    this.hud.choice(
+      "Kurultay toplandı",
+      "icons/lord_bey",
+      `Semerkant'ın otağında ${att.map((r) => rivalName(r)).join(", ")} kımız kâselerini kaldırdı. Tuğlar yan yana dikildi; söz senin.<br><br>Oya sunacağın fermanı seç. Geçen fermanlar sonraki iki kurultaya dek yürürlükte kalır (en fazla ${KURULTAY_MAX}).`,
+      opts,
+    );
+  }
+
+  private kurultayBribe(id: string): void {
+    const s = this.s;
+    const name = id === "kagan" ? "Kağanlık" : decreeOf(id)!.name;
+    this.hud.choice(name, "icons/lord_bey", "Beylerin gönlünü oylamadan önce armağanlarla yumuşatabilirsin. Her bey evet demeye daha yatkın olur.", [
+      { label: `Armağan dağıt ve oya sun · ${BRIBE_GOLD} altın`, cls: s.res.gold >= BRIBE_GOLD ? "go" : "off", fn: () => (this.pay({ gold: BRIBE_GOLD }) ? this.kurultayVote(id, true) : this.kurultayVote(id, false)) },
+      { label: "Doğrudan oya sun", cls: "", fn: () => this.kurultayVote(id, false) },
+    ]);
+  }
+
+  voteChance(r: Rival, id: string, bribe: boolean): number {
+    let p = r.status === "vassal" ? 0.75 : r.status === "ally" ? 0.55 + r.rel / 200 : 0.2 + r.rel / 250;
+    const d = decreeOf(id);
+    if (d?.likes.includes(r.trait)) p += 0.2;
+    if (d?.hates.includes(r.trait)) p -= 0.3;
+    if (id === "kagan") p -= r.trait === "hirsli" ? 0.3 : r.trait === "onurlu" ? 0.05 : 0.12;
+    if (bribe) p += r.trait === "kurnaz" ? 0.25 : 0.15;
+    return Math.max(0.05, Math.min(0.95, p));
+  }
+
+  private kurultayVote(id: string, bribe: boolean): void {
+    const s = this.s;
+    const att = s.rivals.filter((r) => r.status !== "dead" && r.status !== "war");
+    const votes = att.map((r) => ({ r, yes: Math.random() < this.voteChance(r, id, bribe) }));
+    const yes = votes.filter((v) => v.yes).length + 2;
+    const no = votes.length - (yes - 2);
+    const pass = yes > no;
+    for (const v of votes) v.r.rel = Math.max(-100, Math.min(100, v.r.rel + (v.yes ? 3 : id === "kagan" ? -8 : -4)));
+    s.kurultay.next = this.dayOf().day + KURULTAY_EVERY;
+    s.kurultay.held++;
+    const list = votes.map((v) => `${rivalName(v.r)}: <b class="${v.yes ? "cheap" : "neg"}">${v.yes ? "Evet" : "Hayır"}</b>`).join("<br>");
+    const name = id === "kagan" ? "Kağanlık" : decreeOf(id)!.name;
+    if (pass) {
+      audio.play("win");
+      if (id === "kagan") {
+        s.kagan = true;
+        s.renown += 200;
+        this.chron(`Kurultay ${gen(s.hero.name)} adını göğe haykırdı: Bozkırın Kağanı!`);
+        this.hud.story("Kağan seçildin!", "icons/crown", `Beyler keçeye oturtup seni üç kez göğe kaldırdı. Artık <b>${s.hero.name} Kağan</b>sın.<br><br>${list}<br><br>Tabi beylerin haracı %50 artar, ordunun gücü +%5. Adın destanlara yazıldı. +200 şöhret`, "Tengri yar olsun");
+      } else {
+        s.kurultay.decrees.push(id);
+        while (s.kurultay.decrees.length > KURULTAY_MAX) s.kurultay.decrees.shift();
+        if (id === "baris") for (const r of s.rivals) if (r.status === "war") {
+          r.status = "peace";
+          r.rel = Math.max(r.rel, -20);
+        }
+        this.chron(`Kurultay "${name}" fermanını kabul etti.`);
+        this.hud.story(`Ferman kabul edildi: ${name}`, "icons/scroll", `${decreeOf(id)!.desc}<br><br>${list}<br><b>Sen: Evet (2 oy)</b>`, "Ferman yürürlükte");
+      }
+    } else {
+      audio.play("lose");
+      this.hud.story(`${name} reddedildi`, "icons/lord_bey", `Beyler başlarını iki yana salladı.<br><br>${list}<br><b>Sen: Evet (2 oy)</b><br><br>Bir dahaki kurultaya kadar dostluklarını artır.`, "Bekleyelim");
+    }
+    saveGame(s);
   }
 
   heroCap(): number {
@@ -1009,11 +1111,11 @@ export class Game {
   }
 
   buyFactor(): number {
-    return Math.max(1.02, 1.12 - this.skill("ticaret") * 0.006 - this.stat("kar") * 0.004 - this.cls().mods.trade - this.compMods().trade) - 0.01 * this.tal("pazarlik");
+    return Math.max(1.02, 1.12 - this.skill("ticaret") * 0.006 - this.stat("kar") * 0.004 - this.cls().mods.trade - this.compMods().trade) - 0.01 * this.tal("pazarlik") - (this.decree("pazar") ? 0.03 : 0);
   }
 
   sellFactor(): number {
-    return Math.min(0.98, 0.88 + this.skill("ticaret") * 0.006 + this.stat("kar") * 0.004 + this.cls().mods.trade + this.compMods().trade) + 0.01 * this.tal("pazarlik") + 0.05 * this.tal("ipekhan");
+    return Math.min(0.98, 0.88 + this.skill("ticaret") * 0.006 + this.stat("kar") * 0.004 + this.cls().mods.trade + this.compMods().trade) + 0.01 * this.tal("pazarlik") + 0.05 * this.tal("ipekhan") + (this.decree("pazar") ? 0.03 : 0);
   }
 
   buyPrice(city: string, g: Good): number {
@@ -1895,7 +1997,7 @@ export class Game {
       const max = 1 + Math.floor(c.tier / 2);
       const at = this.spawnAt.get(i) ?? 0;
       if (mine < max && now >= at) {
-        this.spawnAt.set(i, now + (90000 + Math.random() * 60000) * (this.season() === "kis" ? 1.6 : 1));
+        this.spawnAt.set(i, now + (90000 + Math.random() * 60000) * (this.season() === "kis" ? 1.6 : 1) * (this.decree("yol") ? 1.4 : 1));
         const nb: Bandit = { id: s.nextId++, camp: i, tier: c.tier, x: c.x + (Math.random() - 0.5) * 40, y: c.y + (Math.random() - 0.5) * 40, army: banditArmy(c.tier), tx: c.x, ty: c.y, wait: 1, chase: false };
         const nm = s.nemeses.find((n) => n.alive && n.camp === i && !s.bandits.some((x) => x.nem === n.id));
         if (nm && Math.random() < 0.6) this.nemGang(nb, nm);
@@ -3034,7 +3136,7 @@ export class Game {
           this.hud.toast(`Müttefikin ${rivalName(r)} armağan yolladı: +${g} altın`, "good");
         }
       } else if (r.status === "vassal") {
-        const g = tribute(r);
+        const g = Math.round(tribute(r) * (this.decree("vergi") ? 1.2 : 1) * (s.kagan ? 1.5 : 1));
         s.res.gold += g;
         this.hud.toast(`${rivalName(r)} haracını gönderdi: +${g} altın`, "good");
         if (r.trait !== "onurlu" && r.lv > s.hero.lv + 4 && Math.random() < 0.1) {
@@ -3048,7 +3150,7 @@ export class Game {
     const asks = live.filter((r) => (r.status === "ally" || r.status === "vassal") && !r.req);
     if (asks.length && Math.random() < 0.55) this.reqNew(oneOf(asks));
     const fight2 = live.filter((r) => r.status === "peace" || r.status === "war");
-    if (fight2.length >= 2 && Math.random() < 0.3) {
+    if (fight2.length >= 2 && !this.decree("baris") && Math.random() < 0.3) {
       const a = fight2[Math.floor(Math.random() * fight2.length)];
       const b = fight2.filter((x) => x !== a)[Math.floor(Math.random() * (fight2.length - 1))];
       const win = this.rivalPower(a) * (0.7 + Math.random() * 0.6) > this.rivalPower(b) ? a : b;

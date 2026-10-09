@@ -1,0 +1,70 @@
+import { chromium } from "playwright-core";
+
+const mode = process.argv[2] ?? "desk";
+const out = `playtest/kurultay-${mode}`;
+const browser = await chromium.launch({ channel: "msedge", headless: true, args: ["--enable-gpu", "--ignore-gpu-blocklist", "--use-angle=d3d11"] });
+const vp = mode === "mob" ? { width: 390, height: 844 } : { width: 1280, height: 720 };
+const page = await browser.newPage({ viewport: vp, deviceScaleFactor: mode === "mob" ? 2 : 1 });
+const errs: string[] = [];
+page.on("pageerror", (e) => errs.push(e.message));
+page.on("console", (m) => m.type() === "error" && errs.push(m.text()));
+await page.goto("http://localhost:5174/");
+await page.evaluate(() => localStorage.clear());
+await page.reload();
+await page.waitForFunction(() => !document.getElementById("loading"), null, { timeout: 60000 });
+const ev = <T = unknown>(fn: string) => page.evaluate(`(() => { const g = window.game; ${fn} })()`) as Promise<T>;
+const dismiss = async () => {
+  for (let k = 0; k < 10; k++) {
+    if (!(await page.locator(".battle .bbox.story .btn, .battle .bbox.choice .btn").count())) break;
+    await page.locator(".battle .bbox.story .btn, .battle .bbox.choice .btn").first().click();
+    await page.waitForTimeout(200);
+  }
+};
+await page.locator(`.ccard[data-c="alp"]`).click();
+await page.locator(".cname .btn").click();
+await dismiss();
+await ev(`g.s.res.gold = 300; const c = g.targetPos({kind:"capital"}); g.s.hero.x = c.x; g.s.hero.y = c.y; g.buyFreedom();`);
+await dismiss();
+await page.waitForTimeout(1500);
+await dismiss();
+console.log("reason before:", await ev(`g.s.beylik = true; return g.kurultayReason();`));
+await ev(`g.s.res.gold = 20000; g.s.renown = 900; g.s.rivals.forEach((r, i) => { r.status = i < 3 ? "vassal" : "ally"; r.rel = 70; });`);
+console.log("reason now:", JSON.stringify(await ev(`return g.kurultayReason();`)), "kagan:", await ev(`return g.kaganReason();`));
+await ev(`g.hud.openHero(); g.hud.tab = "unvan"; g.hud.render();`);
+await page.waitForTimeout(300);
+await page.screenshot({ path: `${out}-1.png` });
+await ev(`g.hud.close(); g.holdKurultay();`);
+await page.waitForTimeout(300);
+await page.screenshot({ path: `${out}-2.png` });
+await page.locator(".battle .bbox.choice .btn").first().click();
+await page.waitForTimeout(300);
+await page.locator(".battle .bbox.choice .btn", { hasText: "Armağan" }).click();
+await page.waitForTimeout(400);
+await page.screenshot({ path: `${out}-3.png` });
+console.log("vote text:", (await page.locator(".battle .bbox h2").first().innerText()));
+await dismiss();
+console.log("after 1:", await ev(`return [g.s.kurultay, g.decree("vergi"), g.allyBonus().toFixed(2)];`));
+for (let k = 0; k < 2; k++) {
+  await ev(`g.s.kurultay.next = 0; g.holdKurultay();`);
+  await page.waitForTimeout(200);
+  await page.locator(".battle .bbox.choice .btn").first().click();
+  await page.waitForTimeout(200);
+  await page.locator(".battle .bbox.choice .btn", { hasText: "Doğrudan" }).click();
+  await page.waitForTimeout(300);
+  await dismiss();
+}
+console.log("held:", await ev(`return g.s.kurultay;`), "kaganReason:", await ev(`return g.kaganReason();`));
+await ev(`g.s.kurultay.next = 0; g.holdKurultay();`);
+await page.waitForTimeout(200);
+await page.locator(".battle .bbox.choice .btn", { hasText: "Kağanlığını" }).click();
+await page.waitForTimeout(200);
+await page.locator(".battle .bbox.choice .btn", { hasText: "Armağan" }).click();
+await page.waitForTimeout(400);
+console.log("kagan vote:", await page.locator(".battle .bbox h2").first().innerText());
+await page.screenshot({ path: `${out}-4.png` });
+await dismiss();
+console.log("kagan:", await ev(`return [g.s.kagan, g.allyBonus().toFixed(2)];`));
+const chances = await ev(`return g.s.rivals.map((r) => [r.name, r.trait, g.voteChance(r, "kagan", false).toFixed(2), g.voteChance(r, "adalet", false).toFixed(2)]);`);
+console.log("chances:", JSON.stringify(chances));
+console.log("errors:", errs);
+await browser.close();
