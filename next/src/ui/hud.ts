@@ -28,6 +28,7 @@ import { SING_GOLD, TAMGA_COLORS, TAMGA_DEFAULT, TAMGA_MARKS, TAMGA_SHAPES, sing
 import { CITIES, H, NAV, NH, NW, W } from "../world/gen";
 import { assetUrl } from "../render/worldView";
 import { audio } from "../audio";
+import { canNarrate, hush, narrate, speaking } from "../narrator";
 import { LANGS, lang, t, t as tr, type Lang } from "../i18n";
 import { cloudPush, cloudReady, onDeck, steam } from "../platform";
 import { WEEK_TIERS, weekEnd, weekNeed, weekReward, weekTheme } from "../game/weekly";
@@ -120,7 +121,7 @@ export class Hud {
   private panelT = 0;
   private holding = false;
   private sel: Army = { spear: 0, archer: 0, horse: 0 };
-  private battleOpen = false;
+  battleOpen = false;
   private storyOpen = false;
   private sagaOpen = false;
   private craftTier = 1;
@@ -995,13 +996,36 @@ export class Hud {
     audio.play("story");
     const el = document.createElement("div");
     el.className = "battle";
-    el.innerHTML = `<div class="bbox story"><img class="simg" src="${assetUrl(img)}" alt=""><h2>${title}</h2><p>${html}</p><button class="btn go big">${btn}</button></div>`;
+    el.innerHTML = `<div class="bbox story">${this.listenBtn()}<img class="simg" src="${assetUrl(img)}" alt=""><h2>${title}</h2><p>${html}</p><button class="btn go big">${btn}</button></div>`;
     this.root.appendChild(el);
-    el.querySelector(".btn")!.addEventListener("click", () => {
+    this.wireListen(el, title, html);
+    el.querySelector(".btn.go")!.addEventListener("click", () => {
+      hush();
       el.remove();
       this.storyOpen = false;
       this.nextStory();
     });
+  }
+
+  private listenBtn(): string {
+    return canNarrate() ? `<button class="listen" title="${t("Dinle")}" aria-label="${t("Dinle")}"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#ffd56a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="#ffd56a33"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/><path d="M19 6a8.5 8.5 0 0 1 0 12"/></svg></button>` : "";
+  }
+
+  private wireListen(el: HTMLElement, title: string, html: string): void {
+    const b = el.querySelector<HTMLButtonElement>(".listen");
+    if (!b) return;
+    const sync = () => b.classList.toggle("on", speaking());
+    b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (speaking()) hush();
+      else narrate(title, html);
+      sync();
+    });
+    if (settings.narrate && !audio.muted) setTimeout(() => {
+      if (el.isConnected) narrate(title, html);
+      sync();
+    }, 350);
+    const iv = setInterval(() => (el.isConnected ? sync() : clearInterval(iv)), 500);
   }
 
   choice(title: string, img: string, html: string, opts: { label: string; cls: string; fn: () => void }[]): void {
@@ -1013,12 +1037,14 @@ export class Hud {
     this.close();
     const el = document.createElement("div");
     el.className = "battle";
-    el.innerHTML = `<div class="bbox story choice"><img class="simg" src="${assetUrl(img)}" alt=""><h2>${title}</h2><p>${html}</p>${opts.map((o, i) => `<button class="btn big ${o.cls}" data-i="${i}">${o.label}</button>`).join("")}</div>`;
+    el.innerHTML = `<div class="bbox story choice">${this.listenBtn()}<img class="simg" src="${assetUrl(img)}" alt=""><h2>${title}</h2><p>${html}</p>${opts.map((o, i) => `<button class="btn big ${o.cls}" data-i="${i}">${o.label}</button>`).join("")}</div>`;
     this.root.appendChild(el);
+    this.wireListen(el, title, html);
     el.querySelectorAll<HTMLButtonElement>(".btn").forEach((b) =>
       b.addEventListener("click", () => {
         const o = opts[Number(b.dataset.i)];
         if (o.cls.includes("off")) return;
+        hush();
         el.remove();
         this.storyOpen = false;
         o.fn();
@@ -1667,7 +1693,7 @@ export class Hud {
     const g = this.g;
     const cur = curSlot();
     const pct = (v: number) => Math.round(v * 100);
-    const toggle = (k: "eco" | "mini" | "haptic", label: string, note = "") =>
+    const toggle = (k: "eco" | "mini" | "haptic" | "narrate" | "dynMusic", label: string, note = "") =>
       `<div class="setrow"><span>${label}</span><button class="btn sm ${settings[k] ? "on" : ""}" data-a="${this.act(() => {
         settings[k] = !settings[k];
         saveSettings();
@@ -1695,6 +1721,9 @@ export class Hud {
       <h3>${t("Ses")}</h3>
       <div class="setrow"><span>${t("Müzik")}</span><input type="range" min="0" max="100" value="${pct(settings.music)}" data-set="music"><b data-so="music">${pct(settings.music)}</b></div>
       <div class="setrow"><span>${t("Efektler")}</span><input type="range" min="0" max="100" value="${pct(settings.fx)}" data-set="fx"><b data-so="fx">${pct(settings.fx)}</b></div>
+      ${toggle("dynMusic", t("Dinamik müzik"))}
+      <p class="dim">${t("Müzik savaşta kösle hızlanır, şehirde def ve zille çarşıya döner, harami yaklaşınca tedirgin bir nabız atar, Kıpçak bozkırında hömeye kayar.")}</p>
+      ${canNarrate() ? `${toggle("narrate", t("Anlatıcı"))}<p class="dim">${t("Hikâye ekranları açılınca anlatıcı sesli okur; her ekrandaki düğmeyle tek tek de dinleyebilirsin.")}</p>` : `<div class="setrow"><span>${t("Anlatıcı")}</span><em class="dim">${t("Bu cihazda bu dil için ses yok")}</em></div>`}
       <h3>${t("Görüntü")}</h3>
       <div class="setrow"><span>${t("Arayüz boyutu")}</span>${[0.85, 1, 1.15, 1.3].map((v) => `<button class="btn sm ${settings.ui === v ? "on" : ""}" data-a="${this.act(() => {
         settings.ui = v;

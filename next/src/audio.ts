@@ -7,7 +7,15 @@ const RAST = [0, 2, 4, 5, 7, 9, 11, 12, 14, 16, 17, 19];
 const ROOT = 146.83;
 const KEY = "kk_audio";
 
-type Mood = { scale: number[]; root: number; tempo: number; rest: number; wind: number; drum: boolean; bell: boolean };
+type Mood = { scale: number[]; root: number; tempo: number; rest: number; wind: number; drum: boolean; bell: boolean; war?: boolean; zil?: boolean; pulse?: boolean; throat?: boolean; lead?: number };
+export type MusicScene = "travel" | "battle" | "city" | "danger" | "steppe";
+/** Sahne müziği mevsim havasını ezer; "travel" mevsimin kendisidir. */
+const SCENES: Record<Exclude<MusicScene, "travel">, Partial<Mood>> = {
+  battle: { scale: HICAZ, root: 146.83, tempo: 0.6, rest: 0.35, drum: true, war: true, bell: false, lead: 1.3 },
+  city: { scale: RAST, root: 164.81, tempo: 0.78, rest: 0.7, drum: true, zil: true, bell: false, lead: 1.1 },
+  danger: { scale: HICAZ, root: 110, tempo: 1.3, rest: 1.5, drum: false, pulse: true, bell: false, lead: 0.8 },
+  steppe: { scale: HUSEYNI, root: 110, tempo: 1.2, rest: 1.3, drum: false, throat: true, bell: false, lead: 0.9 },
+};
 const MOODS: Record<string, Mood> = {
   bahar: { scale: RAST, root: 146.83, tempo: 1, rest: 1, wind: 0.014, drum: false, bell: false },
   yaz: { scale: HICAZ, root: 146.83, tempo: 0.82, rest: 0.8, wind: 0.02, drum: true, bell: false },
@@ -30,7 +38,42 @@ class SoundSystem {
   private moodK = "";
   private night = false;
   private cricketT = 0;
+  private scene: MusicScene = "travel";
+  private ducked = false;
+  private pulseT = 0;
+  private throatT = 0;
   muted = localStorage.getItem(KEY) === "off";
+
+  get currentScene(): MusicScene {
+    return this.scene;
+  }
+
+  setScene(sc: MusicScene): void {
+    if (sc === this.scene) return;
+    this.scene = sc;
+    this.phrase = 0;
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    this.nextNote = Math.min(this.nextNote, t + 0.5);
+    const g = this.musicLevel();
+    this.music.gain.cancelScheduledValues(t);
+    this.music.gain.setTargetAtTime(g * 0.25, t, 0.15);
+    this.music.gain.setTargetAtTime(g, t + 0.5, 0.4);
+    if (sc === "battle") [0, 0.3, 0.6].forEach((d) => this.drum(t + 0.5 + d, true));
+  }
+
+  duck(on: boolean): void {
+    this.ducked = on;
+    if (this.ctx) this.music.gain.setTargetAtTime(this.musicLevel(), this.ctx.currentTime, 0.3);
+  }
+
+  private musicLevel(): number {
+    return settings.music * (this.ducked ? 0.3 : 1);
+  }
+
+  private cur(): Mood {
+    return this.scene === "travel" ? this.mood : { ...this.mood, ...SCENES[this.scene] };
+  }
 
   setMood(season: string, night: boolean): void {
     this.night = night;
@@ -75,7 +118,7 @@ class SoundSystem {
 
   volumes(): void {
     if (!this.ctx) return;
-    this.music.gain.setTargetAtTime(settings.music, this.ctx.currentTime, 0.05);
+    this.music.gain.setTargetAtTime(this.musicLevel(), this.ctx.currentTime, 0.05);
     this.fx.gain.setTargetAtTime(settings.fx, this.ctx.currentTime, 0.05);
   }
 
@@ -130,38 +173,101 @@ class SoundSystem {
   private schedule(): void {
     const ctx = this.ctx!;
     if (ctx.state !== "running") return;
-    const m = this.mood;
-    if (this.night && this.moodK === "yaz" && ctx.currentTime > this.cricketT) {
-      this.cricketT = ctx.currentTime + 0.9 + Math.random() * 1.6;
-      for (let k = 0; k < 3; k++) this.tone(4200 + Math.random() * 300, ctx.currentTime + 0.05 + k * 0.07, 0.04, 0.012, "sine");
+    const m = this.cur();
+    const now = ctx.currentTime;
+    if (this.night && this.moodK === "yaz" && this.scene === "travel" && now > this.cricketT) {
+      this.cricketT = now + 0.9 + Math.random() * 1.6;
+      for (let k = 0; k < 3; k++) this.tone(4200 + Math.random() * 300, now + 0.05 + k * 0.07, 0.04, 0.012, "sine");
     }
-    while (this.nextNote < ctx.currentTime + 0.6) {
+    if (m.pulse && now > this.pulseT) {
+      this.pulseT = now + 1.15;
+      this.drum(now + 0.05, true, 0.06);
+      this.drum(now + 0.32, true, 0.035);
+    }
+    if (m.throat && now > this.throatT) {
+      this.throatT = now + 7 + Math.random() * 6;
+      this.throat(m.root / 2, now + 0.1);
+    }
+    const lead = 0.11 * (m.lead ?? 1);
+    while (this.nextNote < now + 0.6) {
       const t = this.nextNote;
       if (this.phrase <= 0) {
         this.phrase = 4 + Math.floor(Math.random() * 6);
         this.nextNote += (1.6 + Math.random() * 2.4) * m.rest;
-        if (m.drum) [0, 0.36, 0.54, 0.9].forEach((d, i) => this.drum(t + d * m.tempo, i % 2 === 0));
+        if (m.war) [0, 0.25, 0.5, 0.62, 0.75, 1].forEach((d, i) => this.drum(t + d * m.tempo * 1.4, i % 3 === 0, i % 3 === 0 ? 0.13 : 0.05));
+        else if (m.drum) [0, 0.36, 0.54, 0.9].forEach((d, i) => this.drum(t + d * m.tempo, i % 2 === 0));
         continue;
       }
       this.phrase--;
       this.step = Math.max(0, Math.min(m.scale.length - 1, this.step + [-2, -1, -1, 1, 1, 2, 0][Math.floor(Math.random() * 7)]));
       const f = m.root * 2 ** (m.scale[this.step] / 12);
-      this.pluck(f, t, 0.11, this.music, m.bell ? 2.4 : 1.4);
+      this.pluck(f, t, lead, this.music, m.bell ? 2.4 : m.war ? 0.9 : 1.4);
+      if (m.war && Math.random() < 0.5) this.pluck(f * 2, t + 0.08, lead * 0.45, this.music, 0.6);
       if (m.bell && Math.random() < 0.3) this.bell(f * 4, t + 0.2);
       else if (Math.random() < 0.25) this.pluck(f, t + 0.12 * m.tempo, 0.06, this.music);
-      if (m.drum && Math.random() < 0.3) this.drum(t, Math.random() < 0.4);
+      if (m.war) this.drum(t, Math.random() < 0.5, 0.07);
+      else if (m.drum && Math.random() < 0.3) this.drum(t, Math.random() < 0.4);
+      if (m.zil && Math.random() < 0.22) this.zil(t + 0.05);
       this.nextNote += [0.32, 0.48, 0.48, 0.64, 0.96][Math.floor(Math.random() * 5)] * m.tempo;
     }
   }
 
-  private drum(t: number, dum: boolean): void {
+  /** Def zili: kısa, parlak metal şıngırtısı. */
+  private zil(t: number): void {
+    const ctx = this.ctx!;
+    const s = ctx.createBufferSource();
+    s.buffer = this.noise;
+    const hp = ctx.createBiquadFilter();
+    hp.type = "highpass";
+    hp.frequency.value = 6500;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.035, t);
+    g.gain.exponentialRampToValueAtTime(0.0006, t + 0.18);
+    s.connect(hp).connect(g).connect(this.music);
+    s.start(t, Math.random() * 0.5);
+    s.stop(t + 0.2);
+  }
+
+  /** Hömey: kalın temel ses üstünde gezinen ıslıklı armonik. */
+  private throat(f: number, t: number): void {
+    const ctx = this.ctx!;
+    const dur = 4.5;
+    const o = ctx.createOscillator();
+    o.type = "sawtooth";
+    o.frequency.value = f;
+    const bp = ctx.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.Q.value = 18;
+    const harm = [6, 8, 9, 10, 12];
+    bp.frequency.setValueAtTime(f * harm[0], t);
+    harm.forEach((h, i) => bp.frequency.linearRampToValueAtTime(f * h, t + 0.6 + i * 0.8));
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.05, t + 0.6);
+    g.gain.setValueAtTime(0.05, t + dur - 0.8);
+    g.gain.linearRampToValueAtTime(0, t + dur);
+    const body = ctx.createBiquadFilter();
+    body.type = "lowpass";
+    body.frequency.value = f * 3;
+    const bg = ctx.createGain();
+    bg.gain.setValueAtTime(0, t);
+    bg.gain.linearRampToValueAtTime(0.03, t + 0.6);
+    bg.gain.setValueAtTime(0.03, t + dur - 0.8);
+    bg.gain.linearRampToValueAtTime(0, t + dur);
+    o.connect(bp).connect(g).connect(this.music);
+    o.connect(body).connect(bg).connect(this.music);
+    o.start(t);
+    o.stop(t + dur + 0.05);
+  }
+
+  private drum(t: number, dum: boolean, vol?: number): void {
     const ctx = this.ctx!;
     const o = ctx.createOscillator();
     o.type = "sine";
     o.frequency.setValueAtTime(dum ? 110 : 320, t);
     o.frequency.exponentialRampToValueAtTime(dum ? 55 : 180, t + 0.12);
     const g = ctx.createGain();
-    g.gain.setValueAtTime(dum ? 0.09 : 0.04, t);
+    g.gain.setValueAtTime(vol ?? (dum ? 0.09 : 0.04), t);
     g.gain.exponentialRampToValueAtTime(0.0008, t + (dum ? 0.25 : 0.1));
     o.connect(g).connect(this.music);
     o.start(t);

@@ -5,7 +5,8 @@ import type { Hud } from "../ui/hud";
 import { ROW_NEED, TALENT_BY_ID, branchSpent, type Talent } from "./talents";
 import { CONS_BY_ID, REFINES, gearCost, type Cost, type Mat } from "./crafting";
 import { GIVERS, SIDE_TEXT, type SideKind, type SideQuest } from "./sidequests";
-import { audio } from "../audio";
+import { audio, type MusicScene } from "../audio";
+import { settings } from "../settings";
 import { Sim, TACTICS, TACTIC_KEYS, fight, odds, stanceWeights, tacticDelta, type BattleResult, type Boss, type Champion, type Tactic } from "./battle";
 import { BUILDINGS, BUILDING_BY_ID, CITY_NAME, DAY_SEC, RES_KEYS, UNITS, UNIT_KEYS, army, armyPower, armySize, buildCost, buildTime, prodPerMin, storageCap, trainSpeed, unitUnlocked, xpNeed, type Army, type BuildingId, type Res, type Unit } from "./data";
 import { CITY_TRADE, GOODS, GOOD_KEYS, PLUS_CHANCE, SLOTS, STAT_INFO, canPlus, classItem, goodMult, itemPrice, itemStats, makeHorse, makeItem, plusCost, rollItem, setPiece, setPlus, skillLv, uniqueItem, type Good, type Item, type Skill, type Slot, type Stat } from "./rpg";
@@ -1215,6 +1216,7 @@ export class Game {
       this.seasonTick();
       this.marches(dt, now);
     }
+    this.musicTick(dt);
     this.fogT += dt;
     if (this.fogT > 0.25) {
       this.fogT = 0;
@@ -6403,6 +6405,25 @@ export class Game {
 
   achDone(id: string): boolean {
     return this.ach.has(id);
+  }
+
+  private musicT = 0;
+
+  private musicTick(dt: number): void {
+    this.musicT -= dt;
+    if (this.musicT > 0) return;
+    this.musicT = 0.5;
+    audio.setScene(settings.dynMusic ? this.musicScene() : "travel");
+  }
+
+  musicScene(): MusicScene {
+    const s = this.s;
+    const h = s.hero;
+    if (this.battleLock || this.hud.battleOpen) return "battle";
+    if (s.free && s.bandits.some((b) => Math.hypot(b.x - h.x, b.y - h.y) < 280)) return "danger";
+    if (this.nearCity(170) >= 0) return "city";
+    if (inKipchak(h.x, h.y)) return "steppe";
+    return "travel";
   }
 
   private seasonTick(): void {
