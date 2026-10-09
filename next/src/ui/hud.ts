@@ -20,6 +20,7 @@ import { kidAge } from "../game/dynasty";
 import { BOYS } from "../game/korkut";
 import { Archery } from "./archery";
 import { Gamepad, type PadButton } from "./gamepad";
+import { CODEX, CODEX_CATS, codexText, codexTitle, type CodexCat } from "../game/codex";
 import { KUT_TIERS, kutArmy, kutTier, kutVote } from "../game/kut";
 import { SING_GOLD, TAMGA_COLORS, TAMGA_DEFAULT, TAMGA_MARKS, TAMGA_SHAPES, singRenown, tamgaSvg, type Tamga } from "../game/ozan";
 import { CITIES, H, NAV, NH, NW, W } from "../world/gen";
@@ -711,6 +712,7 @@ export class Hud {
     const items: [string, string, string, () => void][] = [
       [title ? (started ? t("Destana devam et") : t("Yeni destan")) : t("Oyuna dön"), started ? `${s.hero.name} · ${cl?.name ?? ""} · ${t("Sv")} ${s.hero.lv}${inf?.renown ? ` · ${ic("crown")}${inf.renown}` : ""}` : t("Bir köle olarak başla, hakan olarak öl"), "go", () => this.closeMenu()],
       [t("Kayıt yuvaları"), t("Yükle, yeni yuva aç, dışa/içe aktar"), "", () => this.menuTo("ayar")],
+      ...(started ? ([[t("Bitig"), t("Bozkır ansiklopedisi · {n}/{m} sayfa", { n: s.bitig?.length ?? 0, m: CODEX.length }), "", () => this.menuTo("bitig")]] as [string, string, string, () => void][]) : []),
       [t("Ayarlar"), t("Ses, görüntü, anlatıcı, dil"), "", () => this.menuTo("ayar")],
       ...(desktop ? ([[t("Oyundan çık"), t("İlerlemen kaydedilir"), "red", () => { g.saveNow(); window.close(); }]] as [string, string, string, () => void][]) : []),
     ];
@@ -1517,6 +1519,24 @@ export class Hud {
       <button class="btn sm red reset" data-a="${this.act(() => confirm("Bu yuvadaki tüm ilerlemen silinip yeni bir oyun başlayacak. Emin misin?") && g.resetGame())}">${t("Bu yuvada yeni oyun başlat")}</button>`;
   }
 
+  bitigOpen = "";
+
+  private bitigHtml(): string {
+    const got = new Set(this.g.s.bitig ?? []);
+    const cats = (Object.keys(CODEX_CATS) as CodexCat[]).map((c) => {
+      const list = CODEX.filter((e) => e.cat === c);
+      const rows = list.map((e) => {
+        if (!got.has(e.id)) return `<div class="cxrow lock">${ic("lock", "gimg")}<div class="bi2"><b>? ? ?</b><small class="dim">${t("İpucu")}: ${e.hint}</small></div></div>`;
+        const open = this.bitigOpen === e.id;
+        return `<div class="cxrow ${open ? "open" : ""}" data-a="${this.act(() => (this.bitigOpen = open ? "" : e.id))}">${ic(e.icon, "gimg")}<div class="bi2"><b>${codexTitle(e)}</b>${open ? `<p>${codexText(e)}</p>` : `<small class="dim">${codexText(e).slice(0, 70)}…</small>`}</div></div>`;
+      }).join("");
+      const n = list.filter((e) => got.has(e.id)).length;
+      const cat = CODEX_CATS[c];
+      return `<h3>${ic(cat.icon)} ${lang() === "en" ? cat.en : cat.name} <em class="dim">${n}/${list.length}</em></h3>${rows}`;
+    }).join("");
+    return `<p class="dim">${t("Bitig, yolculuğunda öğrendiklerini kaydeder. Yeni yerler gördükçe, yeni işler yaptıkça sayfalar dolar.")} <b>${got.size}/${CODEX.length}</b></p>${cats}`;
+  }
+
   private achHtml(): string {
     const g = this.g;
     const n = ACHIEVEMENTS.filter((a) => g.achDone(a.id)).length;
@@ -1706,7 +1726,7 @@ export class Hud {
     const s = g.s;
     const h = s.hero;
     const need = xpNeed(h.lv);
-    const tabs = this.tabs([["karakter", t("Karakter")], ["beceri", `${t("Beceriler")}${h.spts ? ` (${h.spts})` : ""}`], ["yetenek", `${t("Yetenekler")}${h.tpts ? ` (${h.tpts})` : ""}`], ["techizat", `${t("Teçhizat")}${h.bag.length ? ` (${h.bag.length})` : ""}`], ["ordu", t("Birlik")], ...(s.free ? ([["unvan", `${t("Hedefler")}${g.dailyClaimable() ? " ●" : ""}`]] as [string, string][]) : []), ["ayar", "⚙"]]);
+    const tabs = this.tabs([["karakter", t("Karakter")], ["beceri", `${t("Beceriler")}${h.spts ? ` (${h.spts})` : ""}`], ["yetenek", `${t("Yetenekler")}${h.tpts ? ` (${h.tpts})` : ""}`], ["techizat", `${t("Teçhizat")}${h.bag.length ? ` (${h.bag.length})` : ""}`], ["ordu", t("Birlik")], ...(s.free ? ([["unvan", `${t("Hedefler")}${g.dailyClaimable() ? " ●" : ""}`]] as [string, string][]) : []), ["bitig", "Bitig"], ["ayar", "⚙"]]);
     let body = "";
     if (this.tab === "karakter") {
       const cl = g.cls();
@@ -1771,6 +1791,8 @@ export class Hud {
         }).join("");
     } else if (this.tab === "ayar") {
       body = this.settingsHtml();
+    } else if (this.tab === "bitig") {
+      body = this.bitigHtml();
     } else if (this.tab === "unvan") {
       body = this.dailyHtml() + (s.beylik ? this.kutHtml() + this.familyHtml() : "") + (s.free ? this.korkutHtml() + this.gamesHtml() + this.ozanHtml() : "") + this.kurultayHtml() + this.rivalsHtml() + this.nemesisHtml() + this.titlesHtml();
     } else if (this.tab === "techizat") {

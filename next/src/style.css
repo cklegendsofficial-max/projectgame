@@ -391,9 +391,15 @@ body.titled #hud > .top, body.titled #hud > .track, body.titled #hud > .actbar, 
 .mbtn.go { background: linear-gradient(90deg, #6a4210f2, #3b2614f0); border-color: #d9a33a; }
 .mbtn.red b { color: #ffb0a0; }
 .kkmenu .mfoot { display: flex; gap: 6px; align-items: center; font-size: 12px; }
+.top .res b { white-space: nowrap; }
 .top .res.spd { cursor: pointer; pointer-events: auto; min-width: 34px; justify-content: center; letter-spacing: -2px; }
 .top .res.spd b { color: #cdb48a; font-size: 12px; }
 .top .res.spd.fast b { color: #ffd56a; text-shadow: 0 0 8px rgba(255, 200, 90, .6); }
+.cxrow { display: flex; gap: 10px; align-items: flex-start; padding: 7px 8px; margin-bottom: 5px; border-radius: 10px; background: #00000030; border: 1px solid #6b4a2455; cursor: pointer; }
+.cxrow .gimg { width: 40px; height: 40px; flex: none; }
+.cxrow.open { background: #3b261480; border-color: #b8843e; }
+.cxrow p { margin: 4px 0 0; font: 14px/1.5 Georgia, serif; color: #f4e6c6; }
+.cxrow.lock { cursor: default; opacity: .6; }
 .padcross { position: fixed; left: 50%; top: 50%; width: 34px; height: 34px; margin: -17px 0 0 -17px; border: 2px solid rgba(255, 220, 140, .9); border-radius: 50%; box-shadow: 0 0 0 2px rgba(0, 0, 0, .45), 0 0 12px rgba(255, 200, 90, .5); pointer-events: none; z-index: 5; display: none; }
 .padcross::after { content: ""; position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: #ffd98a; }
 .padcross.on { display: block; }

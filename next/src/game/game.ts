@@ -31,6 +31,8 @@ import { SING_GOLD, SONG_MAX, TAMGA_DEFAULT, compose, singRenown, type SongCtx, 
 import { TORE_CASES, kutArmy, kutLoy, kutTier, kutVote, type ToreCase } from "./kut";
 import { SCARS, VET_LV_MAX, VET_MAX, VET_RANKS, VET_XP, makeVet, vetBonus, vetTitle } from "./vets";
 import { ACHIEVEMENTS, steamUnlock, storeUnlocked, unlockedSet } from "./achievements";
+import { CODEX, codexTitle } from "./codex";
+import { t as tr } from "../i18n";
 import { SEASONS, SEASON_DAYS, seasonOf, type Season, type SeasonId } from "./seasons";
 import { FACTIONS, FACTION_KEYS, HOSTILE, REP_RANKS, RANK_PERKS, factionOf, repRank, type FactionId } from "./factions";
 import { CLASS_BY_ID, CLASS_SKILLS, SKILL_MAX, WEAPON_NAME, WEAPON_STAT, skillPow, skillRank, type ClassDef, type ClassId, type ClassSkill, type WeaponKind } from "./classes";
@@ -5423,6 +5425,19 @@ export class Game {
       steamUnlock(a.id);
       audio.play("level");
       this.hud.toast(`🏆 Başarım: ${a.name} · ${a.desc}`, "good");
+    }
+    const cx = (this.s.bitig ??= []);
+    for (const e of CODEX) {
+      if (cx.includes(e.id)) continue;
+      let ok = false;
+      try {
+        ok = e.open(this);
+      } catch {
+        ok = false;
+      }
+      if (!ok) continue;
+      cx.push(e.id);
+      this.hud.toast(`📜 ${tr("Bitig'e yeni sayfa")}: ${codexTitle(e)}`, "info");
     }
   }
 
