@@ -84,7 +84,22 @@ const HERO_SPEED = 32;
 const BANDIT_SPEED = 21;
 const MARCH_SPEED = 26;
 export const NEWS_GOLD = 30;
+export interface Hint {
+  kind: "acil" | "firsat" | "hikaye";
+  icon: string;
+  title: string;
+  text: string;
+  at?: { x: number; y: number } | null;
+  open?: "hero" | "goals" | "mongol";
+}
+
 const TRIP_MIN = 600;
+const TELL_TRUE = 0.7;
+const TACTIC_TELLS: Record<Tactic, string[]> = {
+  hucum: ["Toynak sesleri yaklaşıyor; atlılar ön safta toplanıyor.", "Düşman başı kılıcını havaya kaldırdı; adamları mahmuzlamaya hazır.", "Toz bulutu büyüyor: üstüne doğru at sürüyorlar."],
+  duvar: ["Kalkanlar birbirine kenetleniyor; mızrak uçları güneşte parlıyor.", "Düşman tepenin üstünde sık saf tuttu, kımıldamıyor.", "Davullar ağır ağır vuruyor; kimse saftan çıkmıyor."],
+  pusu: ["Sazlıkta kıpırtı var; birkaç okçu gözden kayboldu.", "Düşmanın yarısı ortalıkta yok; yamaçta kuşlar ürktü.", "Fazla sessizler. Kayalıkların ardında yay gerilme sesi mi?"],
+};
 const TRIP_BIOME: Record<Biome, string[]> = {
   kum: ["Kum tepeleri başladı; develer ağırlaştı, su tulumları sayılıyor.", "Çöl başladı. Kılavuz yıldızlara ve rüzgârın izine bakıyor."],
   bozkir: ["Uçsuz bucaksız bozkır açıldı; rüzgâr otları dalgalandırıyor.", "Bozkıra çıkıldı. Uzakta bir tarla kuşu ötüyor."],
@@ -124,6 +139,7 @@ export class Game {
   private lastCity = -2;
   private trip: { to: number; cum: number[]; total: number; t: number; night: boolean; biome: Biome; half: boolean; seen: Set<number>; storm: boolean; flavor: number } | null = null;
   private sceneDay: Record<string, number> = {};
+  private readEdge = false;
   lastTactic: Tactic = "hucum";
   private spawnAt = new Map<number, number>();
   battleLock = false;
@@ -1457,6 +1473,7 @@ export class Game {
         const w = this.slaveWage() + Math.floor(Math.random() * 3);
         s.res.gold += w;
         this.hud.toast(`Vardiya bitti. Efendin sana ${w} akçe verdi.${up ? " Seviye atladın!" : ""}`, "good");
+        this.slaveEvent();
       } else {
         const k = Math.min(n.left, this.workGain(n.kind));
         n.left -= k;
@@ -1508,6 +1525,126 @@ export class Game {
     });
   }
 
+  /** Ufuk: şu an en anlamlı acil iş, fırsat ve hikâye adımı. */
+  horizon(): Hint[] {
+    const s = this.s;
+    const h = s.hero;
+    const out: Hint[] = [];
+    const nearest = <T extends { x: number; y: number }>(l: T[]) => l.reduce<T | null>((a, b) => (!a || Math.hypot(b.x - h.x, b.y - h.y) < Math.hypot(a.x - h.x, a.y - h.y) ? b : a), null);
+    if (s.raid) {
+      const v = s.villages[s.raid.v];
+      out.push({ kind: "acil", icon: "j_bandit", title: tr("{v} yağmalanıyor", { v: v.name }), text: tr("Haramiler köyü basıyor. Yetişirsen köy sana bağlanır."), at: v });
+    }
+    const mg = s.mongol;
+    if (mg?.stage === 2) {
+      const left = Math.ceil(this.mongolDaysLeft());
+      if (left <= 4) out.push({ kind: "acil", icon: "heroes/boss_hakan", title: tr("Moğollar {c} kapısında", { c: CITY_NAME[ROUTE[mg.next]] }), text: tr("{n} gün sonra şehir düşebilir. Haraç, ittifak ya da savaş: kararını ver.", { n: left }), open: "mongol" });
+    }
+    if (s.free && h.hp < this.maxHp() * 0.35) {
+      const c = nearest(CITIES);
+      out.push({ kind: "acil", icon: "healer", title: tr("Ağır yaralısın"), text: tr("Bir handa dinlenmeden yeni bir savaşa girme."), at: c });
+    }
+    if (s.free && h.lv >= 2 && armySize(h.army) === 0) out.push({ kind: "acil", icon: "u_spear", title: tr("Ordun yok"), text: tr("Tek başına bozkır affetmez. Bir köyden gönüllü topla."), at: nearest(s.villages) });
+    if (s.wanted >= 2) out.push({ kind: "acil", icon: "wanted", title: tr("Aranıyorsun"), text: tr("Muhafızlar peşinde. Şehirlerden uzak dur ya da zamanla unutulmayı bekle.") });
+    const pts = h.points + h.spts + h.tpts;
+    if (pts) out.push({ kind: "firsat", icon: "crown", title: tr("{n} dağıtılmamış puan", { n: pts }), text: tr("Kahraman ekranında güç, beceri ve yeteneklerine dağıt."), open: "hero" });
+    if (s.free) {
+      const ci = this.nearCity();
+      const known = (id: string): Partial<Record<Good, [number, number]>> | undefined =>
+        ci >= 0 && CITIES[ci].id === id ? Object.fromEntries(GOOD_KEYS.map((k) => [k, [this.buyPrice(id, k), this.sellPrice(id, k)]])) : s.intel?.[id]?.p;
+      let best: { a: string; b: string; k: Good; buy: number; sell: number } | null = null;
+      for (const a of CITIES) {
+        const pa = known(a.id);
+        if (!pa || this.hostile(a.id)) continue;
+        for (const b of CITIES) {
+          if (a === b) continue;
+          const pb = known(b.id);
+          if (!pb) continue;
+          for (const k of GOOD_KEYS) {
+            const buy = pa[k]?.[0];
+            const sell = pb[k]?.[1];
+            if (!buy || !sell || sell < buy * 1.25) continue;
+            if (!best || sell - buy > best.sell - best.buy) best = { a: a.id, b: b.id, k, buy, sell };
+          }
+        }
+      }
+      if (best) out.push({ kind: "firsat", icon: GOODS[best.k].icon, title: `${CITY_NAME[best.a]} → ${CITY_NAME[best.b]}: ${GOODS[best.k].name}`, text: tr("~{a} al, ~{b} sat. Birim başı ~{p} kâr (son duyduğun fiyatlarla).", { a: best.buy, b: best.sell, p: best.sell - best.buy }), at: CITIES.find((c) => c.id === best!.a) });
+      const coffer = Object.entries(s.serais).filter(([, v]) => v.coffer >= 80).sort((x, y) => y[1].coffer - x[1].coffer)[0];
+      if (coffer) out.push({ kind: "firsat", icon: "map/serai", title: tr("{c} kervansarayı", { c: CITY_NAME[coffer[0]] }), text: tr("Kasada {n} altın birikti. Uğrayıp al.", { n: Math.floor(coffer[1].coffer) }), at: CITIES.find((c) => c.id === coffer[0]) });
+      if (this.dailyClaimable()) out.push({ kind: "firsat", icon: "chest", title: tr("Günlük ödül hazır"), text: tr("Hedefler sekmesinden al."), open: "goals" });
+    }
+    const ch = s.free ? this.chapter() : null;
+    if (ch) out.push({ kind: "hikaye", icon: ch.img, title: ch.title, text: ch.goal, at: ch.goto(this) });
+    const q = this.quest();
+    if (q) out.push({ kind: "hikaye", icon: "quest", title: q.title, text: q.text, at: q.goto?.(this) ?? null });
+    const pick = (k: Hint["kind"], n: number) => out.filter((x) => x.kind === k).slice(0, n);
+    return [...pick("acil", 2), ...pick("firsat", 2), ...pick("hikaye", 2)];
+  }
+
+  /** Kölelik yıllarının seçimli anları; her biri bir kez, belli vardiyalarda. */
+  private slaveEvent(): void {
+    const s = this.s;
+    const n = s.c.shifts;
+    const done = (s.slaveEv ??= []);
+    const once = (id: string) => !done.includes(id) && done.push(id) > 0;
+    const say = (t: string, k: "good" | "bad" | "info" = "info") => this.hud.toast(t, k);
+    if (n >= 2 && once("kahya")) {
+      this.hud.choice("Kâhyanın hilesi", "master", `Kâhya Sencer akçelerini sayarken ikisini kendi kesesine attı. "Efendinin hesabı böyle," dedi, gözünü kırpmadan.`, [
+        { label: "Boyun eğ", cls: "", fn: () => {
+          s.res.gold = Math.max(0, s.res.gold - 2);
+          say("Sustun. İki akçe gitti ama başın dertte değil.");
+        } },
+        { label: "Efendiye şikâyet et · şans %55", cls: "", fn: () => {
+          if (Math.random() < 0.55) {
+            s.res.gold += 8;
+            say("Efendin kâhyayı herkesin önünde azarladı, sana fazladan 8 akçe verdi.", "good");
+          } else {
+            s.res.gold = Math.max(0, s.res.gold - 4);
+            s.hero.hp = Math.max(1, s.hero.hp - this.maxHp() * 0.25);
+            say("Kâhya yalan yere yemin etti; sopayı sen yedin, 4 akçe de ceza.", "bad");
+          }
+        } },
+        { label: "Hesabını tut, bir gün ödeşirsiniz", cls: "", fn: () => {
+          s.hero.skills.emek += 25;
+          say("Her akçeyi aklına yazdın. Emek +25", "good");
+        } },
+      ]);
+    } else if (n >= 5 && once("ayse")) {
+      const k = CITIES.find((c) => c.id === "kashgar")!;
+      this.hud.choice("Ayşe'nin izi", "scroll", `Tarlada yanına düşen yaşlı bir köle fısıldadı: "Senin obandan bir kız gördüm… Ayşe. Kara Tamga atlıları onu doğuya, Kaşgar yoluna götürdü."`, [
+        { label: "Ekmeğini onunla paylaş · 3 akçe", cls: s.res.gold < 3 ? "off" : "", fn: () => {
+          s.res.gold -= 3;
+          this.addKut(2);
+          say("Yaşlı adam dua etti: \"Tengri yolunu açsın.\" Kut +2", "good");
+        } },
+        { label: "Daha çok sor", cls: "", fn: () => {
+          this.reveal(k.x, k.y, 9);
+          this.chron(`${s.hero.name}, Ayşe'nin Kaşgar yoluna götürüldüğünü bir köleden öğrendi.`);
+          say("Kaşgar yolunu aklına kazıdın. Haritada Kaşgar açıldı.", "good");
+        } },
+        { label: "Sus, başını belaya sokma", cls: "", fn: () => say("Başını öne eğip çalışmaya döndün.") },
+      ]);
+    } else if (n >= 9 && s.res.gold < this.freedomCost() && once("kacis")) {
+      this.hud.choice("Gece kaçışı", "master", `Gece ahırda Oğuz adlı bir köle yanına sokuldu: "Surun kuzeyinde bir gedik var. Bu gece gidiyorum. Gel benimle; 80 akçeyi beklersen yaşlanırsın."`, [
+        { label: "Kaçışa katıl · aranırsın, Karahanlılar küser", cls: "bad", fn: () => {
+          this.freeHero(true);
+          s.wanted = Math.max(s.wanted, 2);
+          this.addRep(factionOf("samarkand"), -15, "kaçak köle");
+        } },
+        { label: "Planı efendiye ihbar et · +20 akçe", cls: "", fn: () => {
+          s.res.gold += 20;
+          this.addKut(-3);
+          this.chron(`${s.hero.name}, kaçmak isteyen Oğuz'u efendisine ele verdi.`);
+          say("Efendin 20 akçe verdi. Oğuz'un çığlıkları gece boyu sürdü. Kut -3", "bad");
+        } },
+        { label: "Reddet ama sırrını tut", cls: "", fn: () => {
+          this.addKut(1);
+          say("Oğuz'a yolun açık olsun dedin. Sabah yatağı boştu. Kut +1", "info");
+        } },
+      ]);
+    }
+  }
+
   freedomCost(): number {
     return 80;
   }
@@ -1515,17 +1652,24 @@ export class Game {
   buyFreedom(): void {
     const s = this.s;
     if (s.free || !this.atCapital() || !this.pay({ gold: this.freedomCost() })) return;
+    this.freeHero(false);
+  }
+
+  private freeHero(escaped: boolean): void {
+    const s = this.s;
     s.free = true;
     const c = this.cls();
     const armor = makeItem(s.nextId++, "zirh", 1, 0, c.armor);
     s.hero.equip.zirh = armor;
     this.view.heroPortrait(c.portrait);
-    this.chron(`Semerkant'ta demir halka çözüldü; ${s.hero.name} köle doğdu, hür bir ${c.name} olarak yola düştü.`);
-    this.hud.story(
-      "Hürriyet!",
-      c.portrait,
-      `Efendin akçeleri sayıp boynundaki demir halkayı çözdü. "Git bakalım ${s.hero.name}, yollar senin artık."<br><br>Sırtında eski bir ${armor.name.toLocaleLowerCase("tr")}, kalbinde bir <b>${c.name}</b> ateşi var. ${c.passive}<br><br>Demirciden ${c.weapons.map((w) => WEAPON_NAME[w].toLocaleLowerCase("tr")).join(" ya da ")} al, talim yap, köylerden yoldaş topla. Bir gün kendi beyliğini kuracaksın.`,
-    );
+    const tail = `Sırtında eski bir ${armor.name.toLocaleLowerCase("tr")}, kalbinde bir <b>${c.name}</b> ateşi var. ${c.passive}<br><br>Demirciden ${c.weapons.map((w) => WEAPON_NAME[w].toLocaleLowerCase("tr")).join(" ya da ")} al, talim yap, köylerden yoldaş topla. Bir gün kendi beyliğini kuracaksın.`;
+    if (escaped) {
+      this.chron(`${s.hero.name} bir gece yarısı Semerkant surlarını aştı; kaçak bir köle olarak bozkıra karıştı.`);
+      this.hud.story("Kaçış!", c.portrait, `Ay bulutların ardına girdiğinde surun gediğinden sıyrıldınız. Arkanızda köpekler havladı, meşaleler yandı; ama bozkır sizi yuttu.<br><br><b class="dear">Efendinin adamları seni arıyor (aranma 2). Karahanlılar sana soğuk bakacak.</b><br><br>${tail}`);
+    } else {
+      this.chron(`Semerkant'ta demir halka çözüldü; ${s.hero.name} köle doğdu, hür bir ${c.name} olarak yola düştü.`);
+      this.hud.story("Hürriyet!", c.portrait, `Efendin akçeleri sayıp boynundaki demir halkayı çözdü. "Git bakalım ${s.hero.name}, yollar senin artık."<br><br>${tail}`);
+    }
     const ch = CHAPTERS[0];
     this.hud.story(`Kara Tamga Destanı · Bölüm 1: ${ch.title}`, ch.img, `${ch.intro}<br><br><b>Hedef:</b> ${ch.goal}`, "Yola çık");
   }
@@ -3167,7 +3311,9 @@ export class Game {
     if (!boss && best.odds >= 0.98) return go(best.t, true);
     const chased = this.s.bandits.some((b) => Math.hypot(b.x - h.x, b.y - h.y) < 80);
     const flee = chased ? (armySize(h.army) ? "Kaç · askerlerin %20'si geride kalır" : "Kaç · altınının %15'ini bırakırsın") : "Geri çekil";
-    this.hud.tactics(title, enemy, boss, foe, known ? stance : null, w, opts, this.lastTactic, (t) => go(t, false), flee, () => this.retreat());
+    const told = Math.random() < TELL_TRUE ? stance : oneOf(TACTIC_KEYS.filter((k) => k !== stance));
+    const tell = known ? null : tr(oneOf(TACTIC_TELLS[told]));
+    this.hud.tactics(title, enemy, boss, foe, known ? stance : null, w, opts, this.lastTactic, (t) => go(t, false), flee, () => this.retreat(), tell);
   }
 
   private retreat(): void {
@@ -3215,9 +3361,10 @@ export class Game {
     this.lastTactic = auto ? this.lastTactic : t;
     const champ = this.champion();
     const sim = new Sim(h.army, this.heroBonus() + this.tdelta(t, stance), enemy, enemyBonus, champ, boss);
-    const edge = TACTICS[t].beats === stance ? " — <b class=\"cheap\">üstünlük senin!</b>" : TACTICS[stance].beats === t ? " — <b class=\"dear\">düşman seni okudu!</b>" : "";
+    this.readEdge = !auto && TACTICS[t].beats === stance;
+    const edge = auto ? "" : this.readEdge ? ` — <b class="cheap">${tr("düşmanı okudun! +%25 TP")}</b>` : TACTICS[stance].beats === t ? ` — <b class="dear">${tr("düşman seni okudu!")}</b>` : "";
     for (const k of Object.keys(this.s.buffs)) if (--this.s.buffs[k] <= 0) delete this.s.buffs[k];
-    const tline = `Taktik: ${TACTICS[t].name}${auto ? " (otomatik)" : ""} · Düşman: ${TACTICS[stance].name}${edge}`;
+    const tline = auto ? `${tr("Kolay av: taktiğe gerek kalmadı")} · ${tr("Düşman")}: ${TACTICS[stance].name}` : `Taktik: ${TACTICS[t].name} · Düşman: ${TACTICS[stance].name}${edge}`;
     const before = { ...h.army };
     const hpBefore = h.hp;
     this.hud.showBattle(title, before, enemy, sim, { hpBefore, maxHp: this.maxHp() }, boss, foe, auto, (res) => this.applyBattle(res, enemy, boss, after, tline, before, title), () => {
@@ -3243,7 +3390,9 @@ export class Game {
         h.army[u] += k;
         revived += k;
       }
-    const xp = Math.round((armyPower(enemy) + (boss ? boss.atk * Math.sqrt(boss.hp) * 0.8 : 0)) * (res.win ? 0.7 : 0.15)) + 3;
+    const xp = Math.round((armyPower(enemy) + (boss ? boss.atk * Math.sqrt(boss.hp) * 0.8 : 0)) * (res.win ? 0.7 : 0.15) * (this.readEdge ? 1.25 : 1)) + 3;
+    if (this.readEdge) this.s.c.reads = (this.s.c.reads ?? 0) + 1;
+    this.readEdge = false;
     const lvUp = this.addXp(xp);
     this.s.kills += armySize(res.lostB);
     const songs0 = this.s.songs?.length ?? 0;
@@ -6989,6 +7138,7 @@ export class Game {
       this.hud.toast(`🏆 Başarım: ${a.name} · ${a.desc}`, "good");
     }
     const cx = (this.s.bitig ??= []);
+    const fresh: string[] = [];
     for (const e of CODEX) {
       if (cx.includes(e.id)) continue;
       let ok = false;
@@ -6999,8 +7149,10 @@ export class Game {
       }
       if (!ok) continue;
       cx.push(e.id);
-      this.hud.toast(`📜 ${tr("Bitig'e yeni sayfa")}: ${codexTitle(e)}`, "info");
+      fresh.push(codexTitle(e));
     }
+    if (fresh.length === 1) this.hud.toast(`📜 ${tr("Bitig'e yeni sayfa")}: ${fresh[0]}`, "info");
+    else if (fresh.length > 1) this.hud.toast(`📜 ${tr("Bitig'e {n} yeni sayfa", { n: fresh.length })}: ${fresh.slice(0, 3).join(", ")}${fresh.length > 3 ? "…" : ""}`, "info");
   }
 
   achDone(id: string): boolean {

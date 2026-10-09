@@ -1,4 +1,4 @@
-import { LORD_SERAIS, NEWS_GOLD, type Game, type Quest, type Target } from "../game/game";
+import { LORD_SERAIS, NEWS_GOLD, type Game, type Hint, type Quest, type Target } from "../game/game";
 import { BUILDINGS, DAY_SEC, NODE_NAME, RES_ICON, RES_KEYS, RES_NAME, UNITS, UNIT_KEYS, armySize, buildCost, buildTime, prodPerMin, unitUnlocked, xpNeed, type Army, type Res, type Unit } from "../game/data";
 import { ORDERS, ORDER_KEYS, TACTICS, TACTIC_KEYS, type BattleResult, type Boss, type Order, type Sim, type Tactic } from "../game/battle";
 import { BattleField } from "./battleField";
@@ -108,6 +108,11 @@ export class Hud {
   private sagaEl!: HTMLElement;
   private taskEl!: HTMLElement;
   private mogEl!: HTMLElement;
+  private trackEl!: HTMLElement;
+  private moreEl!: HTMLElement;
+  private trackOpen = false;
+  private ufukAt = 0;
+  private narrow = matchMedia("(max-width: 760px)");
   private jv: JourneyView | null = null;
   private cs: CityScene | null = null;
   private actEl!: HTMLElement;
@@ -177,12 +182,13 @@ export class Hud {
   constructor(private g: Game) {
     this.root.innerHTML = `
       <div class="top"></div>
-      <div class="track"><div class="quest"></div><div class="quest saga hidden"></div><div class="quest task hidden"></div><div class="quest sq hidden"></div><div class="quest mog hidden"></div></div>
+      <div class="track"><div class="quest"></div><div class="quest saga hidden"></div><div class="quest task hidden"></div><div class="quest sq hidden"></div><div class="quest mog hidden"></div><button class="qmore hidden"></button></div>
       <div class="toasts"></div>
       <div class="actbar hidden"></div>
       <div class="bottom">
         <button data-b="capital"><img class="bi" src="${assetUrl("cities/samarkand")}" alt=""><span>${t("Semerkant")}</span></button>
         <button data-b="hero"><img class="bi round" src="${assetUrl("heroes/slave")}" alt=""><span>${t("Kahraman")}</span></button>
+        <button data-b="ufuk" class="ufukbtn"><b class="bi">✦</b><span>${t("Ufuk")}</span></button>
         <button data-b="find">${ic("tug", "bi")}<span>${t("Birliğim")}</span></button>
         <button data-b="snd" class="snd ${audio.muted ? "off" : ""}"><b class="bi">♪</b><span>${t("Ses")}</span></button>
       </div>
@@ -198,6 +204,13 @@ export class Hud {
     this.taskEl = this.root.querySelector(".task")!;
     this.sideEl = this.root.querySelector(".quest.sq")!;
     this.mogEl = this.root.querySelector(".quest.mog")!;
+    this.trackEl = this.root.querySelector(".track")!;
+    this.moreEl = this.root.querySelector(".qmore")!;
+    this.moreEl.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.trackOpen = !this.trackOpen;
+      this.foldTrack();
+    });
     this.mogEl.addEventListener("click", () => {
       const m = g.s.mongol;
       if (m?.stage === 2) g.mongolMenu();
@@ -226,6 +239,11 @@ export class Hud {
       const b = (e.target as HTMLElement).closest("button")?.dataset.b;
       if (b === "capital") this.openPlace({ kind: "capital" });
       if (b === "hero") this.openHero();
+      if (b === "ufuk") {
+        this.openHero();
+        this.tab = "ufuk";
+        this.render();
+      }
       if (b === "find") {
         this.close();
         g.cam.flyTo(g.s.hero.x, g.s.hero.y, Math.max(g.cam.zoom, 0.7));
@@ -907,6 +925,20 @@ export class Hud {
     return settings.speed ?? 1;
   }
 
+  /** Dar ekranda yalnızca ilk görev tek satır görünür; diğerleri "+N" ile açılır. */
+  private foldTrack(): void {
+    const qs = [...this.trackEl.querySelectorAll<HTMLElement>(".quest")].filter((q) => !q.classList.contains("hidden"));
+    const fold = this.narrow.matches && !this.trackOpen;
+    qs.forEach((q, i) => {
+      q.classList.toggle("fold", fold && i > 0);
+      q.classList.toggle("slim", fold && i === 0);
+    });
+    const n = fold ? qs.length - 1 : 0;
+    this.moreEl.classList.toggle("hidden", !this.narrow.matches || qs.length < 2);
+    const label = this.trackOpen ? "▴" : `+${n}`;
+    if (this.moreEl.textContent !== label) this.moreEl.textContent = label;
+  }
+
   journeyOpen(from: string, to: string): void {
     this.jv?.close();
     const g = this.g;
@@ -1045,7 +1077,7 @@ export class Hud {
     el.className = "toast " + kind;
     el.textContent = text;
     this.toasts.appendChild(el);
-    while (this.toasts.children.length > 3) this.toasts.firstElementChild!.remove();
+    while (this.toasts.children.length > (this.narrow.matches ? 2 : 3)) this.toasts.firstElementChild!.remove();
     setTimeout(() => el.classList.add("out"), 2800);
     setTimeout(() => el.remove(), 3300);
   }
@@ -1158,14 +1190,14 @@ export class Hud {
     );
   }
 
-  tactics(title: string, enemy: Army, boss: Boss | null, foe: string, stance: Tactic | null, w: Record<Tactic, number>, opts: { t: Tactic; odds: number }[], last: Tactic, pick: (t: Tactic) => void, flee: string, onFlee: () => void): void {
+  tactics(title: string, enemy: Army, boss: Boss | null, foe: string, stance: Tactic | null, w: Record<Tactic, number>, opts: { t: Tactic; odds: number }[], last: Tactic, pick: (t: Tactic) => void, flee: string, onFlee: () => void, tell: string | null = null): void {
     this.battleOpen = true;
     this.close();
     const el = document.createElement("div");
     el.className = "battle";
     const intel = stance
       ? `<div class="intel known">${ic("scroll")}<div>Gözcülerin haber getirdi: düşman <b>${TACTICS[stance].foe}</b>.</div></div>`
-      : `<div class="intel">${ic("scroll")}<div>Düşmanın niyeti belirsiz. Saflarına bakılırsa: ${TACTIC_KEYS.map((t) => `${TACTICS[t].name} %${Math.round(w[t] * 100)}`).join(" · ")}<small>Çeviklik 6, Ferhat ya da Hırsız sınıfı gözcülük sağlar.</small></div></div>`;
+      : `<div class="intel">${ic("scroll")}<div>${tell ? `<i class="tell">${tell}</i>` : ""}<small>${t("Düşmanı oku: doğru taktik +%25 TP getirir. İşaretler bazen yanıltır.")} ${TACTIC_KEYS.map((k) => `${TACTICS[k].name} %${Math.round(w[k] * 100)}`).join(" · ")}</small><small>Çeviklik 6, Ferhat ya da Hırsız sınıfı gözcülük sağlar.</small></div></div>`;
     el.innerHTML = `<div class="bbox tbox"><h2>${ic("swords")} ${title}</h2>
       <div class="tfoe">${ic(boss?.icon ?? "j_bandit", "bp" + (boss ? " boss" : ""))}<div><b>${boss?.name ?? foe}</b>${armySize(enemy) ? armyHtml(enemy) : ""}</div></div>
       ${intel}
@@ -1230,6 +1262,23 @@ export class Hud {
     this.render();
   }
 
+  private ufukHtml(): string {
+    const g = this.g;
+    const hs = g.horizon();
+    const KIND: Record<Hint["kind"], string> = { acil: t("Acil"), firsat: t("Fırsat"), hikaye: t("Hikâye") };
+    const rows = hs.map((x) => {
+      const go = x.open === "mongol"
+        ? this.act(() => { this.close(); g.mongolMenu(); })
+        : x.open
+          ? this.act(() => (this.tab = x.open === "goals" ? "unvan" : "karakter"))
+          : x.at
+            ? this.act(() => { this.close(); g.goTo({ kind: "point", x: x.at!.x, y: x.at!.y }); g.cam.flyTo(x.at!.x, x.at!.y, Math.max(g.cam.zoom, 0.65)); })
+            : "";
+      return `<div class="ufk ${x.kind}">${ic(x.icon, "gimg")}<div class="bi2"><small>${KIND[x.kind]}</small><b>${x.title}</b><span>${x.text}</span></div>${go ? `<button class="btn sm go" data-a="${go}">${x.at && !x.open ? t("Git") : t("Aç")}</button>` : ""}</div>`;
+    }).join("");
+    return `<p class="dim">${t("Bozkırda yön bulmak zordur. Ufuk, şu an en çok işine yarayacak adımları gösterir.")}</p>${rows || `<p>${t("Ufuk sakin. Keşfe çık, yeni şehirler gör.")}</p>`}`;
+  }
+
   private openHero(): void {
     if (this.place?.kind !== "hero") this.tab = "karakter";
     this.place = { kind: "hero" };
@@ -1243,7 +1292,15 @@ export class Hud {
 
   private tabs(list: [string, string][]): string {
     if (!list.some(([id]) => id === this.tab)) this.tab = list[0][0];
-    return `<div class="tabs">${list.map(([id, n]) => `<button class="tab ${this.tab === id ? "on" : ""}" data-a="${this.act(() => (this.tab = id))}">${t(n)}</button>`).join("")}</div>`;
+    const s = this.g.s;
+    const fresh = !s.tabsSeen;
+    const seen = (s.tabsSeen ??= []);
+    if (fresh) seen.push(...list.map(([id]) => id));
+    if (!seen.includes(this.tab)) seen.push(this.tab);
+    return `<div class="tabs">${list.map(([id, n]) => `<button class="tab ${this.tab === id ? "on" : ""} ${seen.includes(id) ? "" : "new"}" data-a="${this.act(() => {
+      this.tab = id;
+      if (!seen.includes(id)) seen.push(id);
+    })}">${t(n)}</button>`).join("")}</div>`;
   }
 
   private walkBtn(t: Target, label: string): string {
@@ -1508,7 +1565,13 @@ export class Hud {
     const list: [string, string][] = [];
     if (isCap && !s.free) list.push(["efendi", "Efendi"]);
     if (isCap && s.beylik) list.push(["bina", "Binalar"], ["kisla", "Kışla"], ["ordu", "Ordu"], ["sefer", "Seferler"]);
-    list.push(["pazar", "Pazar"], ["demirci", "Demirci"], ["atolye", "Atölye"], ["ors", "Örs"], ["talim", "Talim"], ["han", "Han"]);
+    if (!s.free) list.push(["pazar", "Pazar"], ["han", "Han"]);
+    else {
+      list.push(["pazar", "Pazar"], ["demirci", "Demirci"]);
+      if (s.hero.lv >= 3) list.push(["atolye", "Atölye"]);
+      if (SLOTS.some((k) => g.eq(k))) list.push(["ors", "Örs"]);
+      list.push(["talim", "Talim"], ["han", "Han"]);
+    }
     if (isCap && s.free && !s.beylik) list.push(["beylik", "Beylik"]);
     if (!isCap && s.free) list.push(["kale", s.owned[c.id] ? "Kale ★" : "Kale"]);
     if (s.free && portOf(c.id)) list.push(["liman", "Liman ⚓"]);
@@ -2300,9 +2363,11 @@ export class Hud {
     const s = g.s;
     const h = s.hero;
     const need = xpNeed(h.lv);
-    const tabs = this.tabs([["karakter", t("Karakter")], ["beceri", `${t("Beceriler")}${h.spts ? ` (${h.spts})` : ""}`], ["yetenek", `${t("Yetenekler")}${h.tpts ? ` (${h.tpts})` : ""}`], ["techizat", `${t("Teçhizat")}${h.bag.length ? ` (${h.bag.length})` : ""}`], ["ordu", t("Birlik")], ...(s.free ? ([["unvan", `${t("Hedefler")}${g.dailyClaimable() ? " ●" : ""}`], ["kervan", t("Kervanlar")], ["divan", t("Divan")]] as [string, string][]) : []), ["bitig", "Bitig"], ["ayar", "⚙"]]);
+    const tabs = this.tabs([...(s.free ? ([["ufuk", "✦ " + t("Ufuk")]] as [string, string][]) : []), ["karakter", t("Karakter")], ["beceri", `${t("Beceriler")}${h.spts ? ` (${h.spts})` : ""}`], ...(h.lv >= 2 || h.tpts ? ([["yetenek", `${t("Yetenekler")}${h.tpts ? ` (${h.tpts})` : ""}`]] as [string, string][]) : []), ["techizat", `${t("Teçhizat")}${h.bag.length ? ` (${h.bag.length})` : ""}`], ["ordu", t("Birlik")], ...(s.free ? ([["unvan", `${t("Hedefler")}${g.dailyClaimable() ? " ●" : ""}`]] as [string, string][]) : []), ...(s.free && (h.lv >= 4 || g.seraiCount() > 0 || s.beylik) ? ([["kervan", t("Kervanlar")]] as [string, string][]) : []), ...(s.free && (h.lv >= 5 || s.beylik) ? ([["divan", t("Divan")]] as [string, string][]) : []), ["bitig", "Bitig"], ["ayar", "⚙"]]);
     let body = "";
-    if (this.tab === "karakter") {
+    if (this.tab === "ufuk") {
+      body = this.ufukHtml();
+    } else if (this.tab === "karakter") {
       const cl = g.cls();
       body = `<div class="clsrow" style="--cc:${cl.color}">${ic(cl.portrait, "gimg round")}<div class="bi2"><b>${cl.name} <em>${cl.role}</em></b><small>${cl.passive}</small><small class="dim">${cl.weapons.map((w) => WEAPON_NAME[w]).join(", ")} · ${ARMOR_NAME[cl.armor]}${cl.shield ? ` · ${t("Kalkan")}` : ""}</small>${s.origin ? `<small class="cheap">${ic(ORIGIN_BY_ID[s.origin].icon)} ${lang() === "en" ? ORIGIN_BY_ID[s.origin].en[0] : ORIGIN_BY_ID[s.origin].name}: ${lang() === "en" ? ORIGIN_BY_ID[s.origin].en[2] : ORIGIN_BY_ID[s.origin].perk}</small>` : ""}</div></div>
         ${bar(h.xp, need, "", `${t("Seviye")} ${h.lv} · ${h.xp}/${need} ${t("TP")}`)}
@@ -2548,6 +2613,13 @@ export class Hud {
     const s = g.s;
     const now = performance.now();
     if (this.cs && (this.modal() || g.battleLock)) this.cs.close();
+    this.foldTrack();
+    if (now - this.ufukAt > 1000) {
+      this.ufukAt = now;
+      const b = this.root.querySelector<HTMLElement>(".ufukbtn")!;
+      b.classList.toggle("hidden", !s.free);
+      b.classList.toggle("hot", s.free && g.horizon().some((x) => x.kind === "acil"));
+    }
     if (g.act) {
       this.actEl.classList.remove("hidden");
       this.setHtml(this.actEl, `<b>${g.act.label}…</b>${bar(Math.round((g.act.t / g.act.dur) * 200), 200, "", "")}`);

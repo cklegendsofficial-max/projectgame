@@ -38,7 +38,8 @@ await page.locator(".panel .btn.go.big").click();
 await shot(page, "04-working", 2000);
 await page.waitForTimeout(3500);
 await log("after shift");
-// fast forward shifts
+// fast forward shifts (seçimli kölelik olayları kk-shot ile ayrıca denenir)
+await ev(`g.s.slaveEv = ["kahya", "ayse", "kacis"];`);
 for (let k = 0; k < 30; k++) await ev(`if (!g.act) { g.s.hero.energy = 99; g.work(0); } g.act && (g.act.t = g.act.dur);`);
 await page.waitForTimeout(300);
 await log("after 30 shifts");
