@@ -30,6 +30,8 @@ import { assetUrl } from "../render/worldView";
 import { audio } from "../audio";
 import { LANGS, lang, t, type Lang } from "../i18n";
 import { SUREK_FOOD } from "../game/games";
+import { MYCV_COST, MYCV_GUARD, MYCV_GUARD_MAX, MYCV_UPGRADE } from "../game/mycaravan";
+import type { Good } from "../game/rpg";
 import { BALBAL_GOLD, BALBAL_MAX, BALBAL_STONE, FOE_KIND, balbalBonus, yugCost } from "../game/yug";
 import { SIEGE_ACTS, SIEGE_MAX_DAY, parleyChance, siegeGar } from "../game/siege";
 import { ORIGINS, ORIGIN_BY_ID, type Origin, type OriginId } from "../game/origins";
@@ -214,6 +216,15 @@ export class Hud {
     });
     this.panel.addEventListener("pointerdown", () => (this.holding = true));
     window.addEventListener("pointerup", () => (this.holding = false));
+    this.panel.addEventListener("change", (e) => {
+      const el = e.target as HTMLSelectElement;
+      const cv = el.dataset.cv;
+      if (!cv) return;
+      const [id, f] = cv.split(":");
+      const v = el.value || null;
+      g.setMyCv(Number(id), f === "to" ? { to: v! } : { [f]: v } as { go?: Good | null; back?: Good | null });
+      this.render();
+    });
     this.panel.addEventListener("input", (e) => {
       const el = e.target as HTMLInputElement;
       const k = el.dataset.set as "music" | "fx" | undefined;
@@ -1639,6 +1650,42 @@ export class Hud {
       ${o ? `<button class="btn sm" data-a="${this.act(() => { this.close(); g.cam.flyTo(o.x, o.y, 0.8); })}">Otağı göster</button>` : ""}`;
   }
 
+  private myCvHtml(): string {
+    const g = this.g, s = g.s;
+    const list = g.myCvs();
+    const ci = g.nearCity();
+    const here = ci >= 0 ? CITIES[ci].id : "";
+    const why = here ? g.myCvReason(here) : t("Kervan kurmak için bir şehre git");
+    const total = list.reduce((a, c) => a + c.profit, 0);
+    const goodOpts = (sel: Good | null, from: string, to: string) => `<option value="">${t("— boş —")}</option>` + GOOD_KEYS.map((k) => {
+      const m = g.cvMargin(from, to, k);
+      return `<option value="${k}" ${k === sel ? "selected" : ""}>${GOODS[k].name} (${m >= 0 ? "+" : ""}${m})</option>`;
+    }).join("");
+    const cards = list.map((c) => {
+      const days = g.myCvDays(c);
+      const a = c.dir === 1 ? c.from : c.to, b = c.dir === 1 ? c.to : c.from;
+      const gd = c.dir === 1 ? c.go : c.back;
+      const prog = c.status === "bekle" ? t("Yük bekliyor") : `${CITY_NAME[a]} → ${CITY_NAME[b]} · ${c.cargo ? `${c.cargo} ${gd ? GOODS[gd].name : ""}` : t("boş")}`;
+      return `<div class="mycv">
+        <div class="mycvh">${ic("j_caravan", "gimg")}<div class="bi2"><b>${c.name} <em>${c.trips} ${t("sefer")} · ${c.profit >= 0 ? "+" : ""}${c.profit} ${t("altın")}</em></b><small>${t("Yük")} ${c.cap} · ${t("Muhafız")} ${c.guards}/${MYCV_GUARD_MAX} · ${days.toFixed(1)} ${t("gün")}</small></div></div>
+        ${bar(c.t * 100, 100, "", prog)}
+        <div class="mycvr"><label>${CITY_NAME[c.from]} →</label><select data-cv="${c.id}:to">${CITIES.filter((x) => x.id !== c.from).map((x) => `<option value="${x.id}" ${x.id === c.to ? "selected" : ""}>${CITY_NAME[x.id]}</option>`).join("")}</select></div>
+        <div class="mycvr"><label>${t("Gidiş yükü")}</label><select data-cv="${c.id}:go">${goodOpts(c.go, c.from, c.to)}</select></div>
+        <div class="mycvr"><label>${t("Dönüş yükü")}</label><select data-cv="${c.id}:back">${goodOpts(c.back, c.to, c.from)}</select></div>
+        <div class="row">
+          <button class="btn sm ${c.guards >= MYCV_GUARD_MAX || s.res.gold < MYCV_GUARD ? "off" : ""}" data-a="${this.act(() => g.guardMyCv(c.id))}">${t("Muhafız")} +1 · ${MYCV_GUARD}</button>
+          <button class="btn sm ${c.cap >= 48 || s.res.gold < MYCV_UPGRADE ? "off" : ""}" data-a="${this.act(() => g.upgradeMyCv(c.id))}">${t("Deve")} +10 · ${MYCV_UPGRADE}</button>
+          <button class="btn sm bad" data-a="${this.act(() => g.sellMyCv(c.id))}">${t("Sat")}</button>
+        </div>
+        ${c.log.length ? `<ul class="cvlog">${c.log.map((l) => `<li>${l}</li>`).join("")}</ul>` : ""}
+      </div>`;
+    }).join("");
+    return `<h3>${ic("j_caravan")} ${t("Kervan Kumpanyası")} <small class="dim">${list.length}/${g.myCvMax()} · ${total >= 0 ? "+" : ""}${total} ${t("altın")}</small></h3>
+      <p class="dim">${t("Kendi kervanların iki şehir arasında kendiliğinden alıp satar. Fiyat farkı parantezde: gidişte bir malı ucuza alıp varışta pahalıya sat. Uzun ve korumasız yollar haramilere açıktır; muhafız tut. Her kervansaray bir kervan hakkı daha verir.")}</p>
+      ${cards}
+      <div class="grow">${ic("j_caravan", "gimg")}<div class="bi2"><b>${t("Yeni kervan")} <em>${MYCV_COST} ${t("altın")}</em></b><small class="${why ? "dim" : "cheap"}">${why || `${CITY_NAME[here]}: ${t("hazır")}`}</small></div><button class="btn sm go ${why ? "off" : ""}" data-a="${this.act(() => g.buyMyCaravan(here))}">${t("Kervan kur")}</button></div>`;
+  }
+
   private yugHtml(): string {
     const g = this.g, s = g.s, en = lang() === "en";
     const un = g.unmourned();
@@ -1924,7 +1971,7 @@ export class Hud {
     const s = g.s;
     const h = s.hero;
     const need = xpNeed(h.lv);
-    const tabs = this.tabs([["karakter", t("Karakter")], ["beceri", `${t("Beceriler")}${h.spts ? ` (${h.spts})` : ""}`], ["yetenek", `${t("Yetenekler")}${h.tpts ? ` (${h.tpts})` : ""}`], ["techizat", `${t("Teçhizat")}${h.bag.length ? ` (${h.bag.length})` : ""}`], ["ordu", t("Birlik")], ...(s.free ? ([["unvan", `${t("Hedefler")}${g.dailyClaimable() ? " ●" : ""}`]] as [string, string][]) : []), ["bitig", "Bitig"], ["ayar", "⚙"]]);
+    const tabs = this.tabs([["karakter", t("Karakter")], ["beceri", `${t("Beceriler")}${h.spts ? ` (${h.spts})` : ""}`], ["yetenek", `${t("Yetenekler")}${h.tpts ? ` (${h.tpts})` : ""}`], ["techizat", `${t("Teçhizat")}${h.bag.length ? ` (${h.bag.length})` : ""}`], ["ordu", t("Birlik")], ...(s.free ? ([["unvan", `${t("Hedefler")}${g.dailyClaimable() ? " ●" : ""}`], ["kervan", t("Kervanlar")]] as [string, string][]) : []), ["bitig", "Bitig"], ["ayar", "⚙"]]);
     let body = "";
     if (this.tab === "karakter") {
       const cl = g.cls();
@@ -1991,6 +2038,8 @@ export class Hud {
       body = this.settingsHtml();
     } else if (this.tab === "bitig") {
       body = this.bitigHtml();
+    } else if (this.tab === "kervan") {
+      body = this.myCvHtml();
     } else if (this.tab === "unvan") {
       body = this.dailyHtml() + (s.beylik ? this.kutHtml() + this.familyHtml() : "") + (s.free ? this.korkutHtml() + this.gamesHtml() + this.yugHtml() + this.ozanHtml() : "") + this.kurultayHtml() + this.rivalsHtml() + this.nemesisHtml() + this.titlesHtml();
     } else if (this.tab === "techizat") {

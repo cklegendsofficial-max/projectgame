@@ -810,6 +810,15 @@ export class WorldView {
       ex.visible = !!cv.raid;
       ex.alpha = 0.6 + Math.abs(Math.sin(this.time * 8)) * 0.4;
     }
+    for (const mc of s.mycv ?? []) {
+      const id = 900000 + mc.id;
+      liveC.add(id);
+      const c = this.caravan(id, 0xffd56a);
+      const p = game.myCvPos(mc);
+      c.position.set(p.x, p.y + Math.sin(this.time * 5 + mc.id) * 1.2);
+      c.scale.set(inv * 0.85);
+      c.getChildByLabel("ex")!.visible = false;
+    }
     for (const [id, c] of this.caravansM) if (!liveC.has(id)) {
       c.destroy({ children: true });
       this.caravansM.delete(id);

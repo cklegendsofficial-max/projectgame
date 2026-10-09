@@ -34,6 +34,7 @@ import { ACHIEVEMENTS, steamUnlock, storeUnlocked, unlockedSet } from "./achieve
 import { CODEX, codexTitle } from "./codex";
 import { ORIGIN_BY_ID, type OriginId } from "./origins";
 import { SUREK_FOOD, WR_FOES } from "./games";
+import { MYCV_CAP, MYCV_COST, MYCV_FEE, MYCV_GUARD, MYCV_GUARD_MAX, MYCV_NAMES, MYCV_UPGRADE, mycvDays, mycvRisk, type MyCaravan } from "./mycaravan";
 import { BALBAL_GOLD, BALBAL_MAX, BALBAL_STONE, YUG_LATE, balbalBonus, yugCost, type Fallen, type Foe } from "./yug";
 import type { WrestleFoe } from "../ui/wrestle";
 import { SIEGE_MAX_DAY, newSiege, siegeDay, siegeGar, siegeWall, type SiegeAct, type SiegeCtx, type SiegeRun } from "./siege";
@@ -1220,6 +1221,7 @@ export class Game {
     this.titleTick(dt);
     this.achTick(dt);
     this.cqTick(dt);
+    this.myCvTick(dt);
     this.storyTick();
     this.worldEvents(dt, now);
     this.checkContract();
@@ -3926,6 +3928,177 @@ export class Game {
     if (best && score >= 300) this.chron(`${s.hero.name} at üstünde ${hits} kabak vurdu; ihtiyarlar Mete Han'dan beri böylesini görmediklerini söyledi.`);
     saveGame(s);
     return `${best ? "<b class=\"cheap\">Yeni rekor!</b><br>" : ""}+${gold} altın · +${renown} şöhret · +${xp} tecrübe`;
+  }
+
+  myCvs(): MyCaravan[] {
+    return (this.s.mycv ??= []);
+  }
+
+  myCvMax(): number {
+    return 1 + Math.min(3, Object.keys(this.s.serais).length);
+  }
+
+  myCvReason(city: string): string {
+    const s = this.s;
+    if (!s.free) return tr("Önce hürriyetini kazan");
+    if (!this.canStud(city)) return tr("Kervan ancak yurdunda, kervansarayında ya da şehrinde kurulur");
+    if (this.myCvs().length >= this.myCvMax()) return tr("Daha fazla kervan için kervansaray kur");
+    if (s.res.gold < MYCV_COST) return `${MYCV_COST} ${tr("altın")} ${tr("gerekir")}`;
+    return "";
+  }
+
+  cvMargin(from: string, to: string, g: Good): number {
+    return Math.round(this.sellPrice(to, g) * MYCV_FEE - this.buyPrice(from, g));
+  }
+
+  bestGood(from: string, to: string): Good | null {
+    let best: Good | null = null;
+    let m = 2;
+    for (const g of GOOD_KEYS) {
+      const v = this.cvMargin(from, to, g);
+      if (v > m) (m = v), (best = g);
+    }
+    return best;
+  }
+
+  buyMyCaravan(city: string): void {
+    if (this.myCvReason(city)) return;
+    const s = this.s;
+    const here = CITIES.find((c) => c.id === city)!;
+    const to = CITIES.filter((c) => c.id !== city).sort((a, b) => Math.hypot(a.x - here.x, a.y - here.y) - Math.hypot(b.x - here.x, b.y - here.y))[0].id;
+    s.res.gold -= MYCV_COST;
+    const id = (this.myCvs().reduce((a, c) => Math.max(a, c.id), 0) || 0) + 1;
+    this.myCvs().push({ id, name: MYCV_NAMES[(id - 1) % MYCV_NAMES.length], from: city, to, go: this.bestGood(city, to), back: this.bestGood(to, city), cap: MYCV_CAP, guards: 0, dir: 1, t: 0, cargo: 0, paid: 0, trips: 0, profit: 0, status: "bekle", log: [] });
+    this.hud.toast(tr("Kervan kuruldu! Rotasını Kervanlar sekmesinden ayarla."), "good");
+    audio.play("coin");
+    saveGame(s);
+  }
+
+  setMyCv(id: number, patch: Partial<Pick<MyCaravan, "to" | "go" | "back">>): void {
+    const c = this.myCvs().find((x) => x.id === id);
+    if (!c) return;
+    Object.assign(c, patch);
+    if (patch.to && c.cargo === 0) {
+      c.dir = 1;
+      c.t = 0;
+      c.status = "bekle";
+    }
+    saveGame(this.s);
+  }
+
+  guardMyCv(id: number): void {
+    const c = this.myCvs().find((x) => x.id === id);
+    if (!c || c.guards >= MYCV_GUARD_MAX || this.s.res.gold < MYCV_GUARD) return;
+    this.s.res.gold -= MYCV_GUARD;
+    c.guards++;
+    saveGame(this.s);
+  }
+
+  upgradeMyCv(id: number): void {
+    const c = this.myCvs().find((x) => x.id === id);
+    if (!c || c.cap >= 48 || this.s.res.gold < MYCV_UPGRADE) return;
+    this.s.res.gold -= MYCV_UPGRADE;
+    c.cap += 10;
+    saveGame(this.s);
+  }
+
+  sellMyCv(id: number): void {
+    const s = this.s;
+    s.mycv = this.myCvs().filter((x) => x.id !== id);
+    s.res.gold += Math.round(MYCV_COST * 0.4);
+    saveGame(s);
+  }
+
+  private cvCity(id: string): { x: number; y: number } {
+    return CITIES.find((c) => c.id === id)!;
+  }
+
+  myCvDays(c: MyCaravan): number {
+    const a = this.cvCity(c.from), b = this.cvCity(c.to);
+    return mycvDays(Math.hypot(a.x - b.x, a.y - b.y));
+  }
+
+  myCvPos(c: MyCaravan): { x: number; y: number } {
+    const a = this.cvCity(c.dir === 1 ? c.from : c.to), b = this.cvCity(c.dir === 1 ? c.to : c.from);
+    const k = c.status === "bekle" ? 0 : c.t;
+    return { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k + 18 };
+  }
+
+  private cvLog(c: MyCaravan, t: string): void {
+    c.log.unshift(`${this.dayOf().day}. ${tr("gün")}: ${t}`);
+    c.log.length = Math.min(c.log.length, 5);
+  }
+
+  private cvLoad(c: MyCaravan): void {
+    const at = c.dir === 1 ? c.from : c.to;
+    const g = c.dir === 1 ? c.go : c.back;
+    c.status = "yol";
+    c.t = 0;
+    if (!g) return;
+    const dest = c.dir === 1 ? c.to : c.from;
+    const sell0 = this.sellPrice(dest, g) * MYCV_FEE;
+    let cost = 0;
+    let n = 0;
+    while (n < c.cap) {
+      const p = this.buyPrice(at, g);
+      if (this.s.res.gold - cost - p < 100) break;
+      if (p >= sell0 * (1 - 0.03 * n) * 0.97) break;
+      cost += p;
+      n++;
+      const m = this.market(at);
+      m[g] = Math.min(0.7, (m[g] ?? 0) + 0.02);
+    }
+    if (!n) {
+      this.cvLog(c, this.s.res.gold < 200 ? tr("altın yetmedi, boş yola çıktı") : `${GOODS[g].name}: ${tr("kâr yok, boş yola çıktı")}`);
+      return;
+    }
+    this.s.res.gold -= cost;
+    c.cargo = n;
+    c.paid = cost;
+  }
+
+  private cvArrive(c: MyCaravan): void {
+    const at = c.dir === 1 ? c.to : c.from;
+    const g = c.dir === 1 ? c.go : c.back;
+    const a = this.cvCity(c.from), b = this.cvCity(c.to);
+    const safe = (x: string) => this.canStud(x) ? 0.03 : 0;
+    const danger = Math.hypot(a.x - b.x, a.y - b.y) / 4000 * 0.12 - safe(c.from) - safe(c.to);
+    if (c.cargo && g) {
+      if (Math.random() < mycvRisk(c, danger)) {
+        this.cvLog(c, `${tr("haramiler yükü yağmaladı")} (-${c.paid} ${tr("altın")})`);
+        this.hud.toast(`${c.name}: ${tr("haramiler yükü yağmaladı")}!`, "bad");
+        c.profit -= c.paid;
+      } else {
+        let got = 0;
+        for (let k = 0; k < c.cargo; k++) {
+          got += this.sellPrice(at, g) * MYCV_FEE;
+          const m = this.market(at);
+          m[g] = Math.max(-0.7, (m[g] ?? 0) - 0.03);
+        }
+        got = Math.round(got);
+        const pr = got - c.paid;
+        this.s.res.gold += got;
+        this.s.c.profit += Math.max(0, pr);
+        c.profit += pr;
+        this.cvLog(c, `${c.cargo} ${GOODS[g].name} → ${CITY_NAME[at]}: ${pr >= 0 ? "+" : ""}${pr} ${tr("altın")}`);
+      }
+    }
+    c.cargo = 0;
+    c.paid = 0;
+    c.trips++;
+    c.dir = c.dir === 1 ? -1 : 1;
+    this.cvLoad(c);
+  }
+
+  private myCvTick(dt: number): void {
+    for (const c of this.s.mycv ?? []) {
+      if (c.status === "bekle") {
+        this.cvLoad(c);
+        continue;
+      }
+      c.t += dt / (this.myCvDays(c) * DAY_SEC);
+      if (c.t >= 1) this.cvArrive(c);
+    }
   }
 
   addFoe(name: string, kind: Foe["kind"]): void {
