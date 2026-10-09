@@ -49,6 +49,10 @@ export interface WorldState {
   tacWarn: number;
   fest: string[];
   nevruz: number;
+  /** Ak Börü son görüldüğü gün / kurtlarla barış bitiş günü / avlandı mı */
+  boru: number;
+  boruPeace: number;
+  boruSlain: boolean;
 }
 
 export function newWorld(): WorldState {
@@ -69,6 +73,9 @@ export function newWorld(): WorldState {
     tacWarn: 0,
     fest: [],
     nevruz: -1,
+    boru: -99,
+    boruPeace: -1,
+    boruSlain: false,
   };
 }
 

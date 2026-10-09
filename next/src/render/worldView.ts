@@ -1102,6 +1102,16 @@ export class WorldView {
     }
     const hb = this.heroBars;
     hb.clear();
+    const kut = s.beylik ? s.kut ?? 50 : 50;
+    if (kut >= 75 || kut <= 20) {
+      const good = kut >= 75;
+      const p = (this.time * 0.7) % 1;
+      hb.circle(0, 4, 30 + p * 26).stroke({ color: good ? 0xffd86a : 0x5a2a6a, width: 3, alpha: (good ? 0.55 : 0.65) * (1 - p) });
+      for (let i = 0; i < 6; i++) {
+        const a = this.time * (good ? 1.2 : -0.8) + (i * Math.PI) / 3;
+        hb.circle(Math.cos(a) * 30, 4 + Math.sin(a) * 12 - (good ? (this.time * 20 + i * 7) % 20 : 0), good ? 2.4 : 3.2).fill({ color: good ? 0xfff0a0 : 0x3a1a4a, alpha: 0.8 });
+      }
+    }
     const hpK = Math.max(0, Math.min(1, h.hp / game.maxHp()));
     if (hpK < 0.999) {
       hb.rect(-22, -34, 44, 5).fill({ color: 0x000000, alpha: 0.6 });
@@ -1424,6 +1434,27 @@ export class WorldView {
         this.snowG.circle(px, py, r * (0.7 + (i % 3) * 0.25));
       }
       this.snowG.fill({ color: 0xffffff, alpha: 0.85 });
+    } else if (sk === "guz" || sk === "bahar") {
+      const vw = cam.w / cam.zoom;
+      const vh = cam.h / cam.zoom;
+      const x0 = cam.x - vw / 2;
+      const y0 = cam.y - vh / 2;
+      const r = Math.max(2.2, 3.4 / cam.zoom);
+      const fall = sk === "guz";
+      const cols = fall ? [0xd2691e, 0xb8860b, 0x8b4513, 0xe0a030] : [0xffd0e0, 0xffffff, 0xffb6d0];
+      const n = fall ? 46 : 34;
+      for (let c = 0; c < cols.length; c++) {
+        for (let i = c; i < n; i += cols.length) {
+          const fx = ((i * 7919) % 1000) / 1000;
+          const fy = ((i * 104729) % 1000) / 1000;
+          const sp = 0.025 + ((i * 31) % 10) / 300;
+          const px = x0 + ((((fx + this.time * (fall ? 0.03 : 0.012) + Math.sin(this.time * 1.3 + i) * 0.02) % 1) + 1) % 1) * vw;
+          const py = y0 + ((fy + this.time * sp) % 1) * vh;
+          const tw = Math.abs(Math.sin(this.time * 2.5 + i));
+          this.snowG.ellipse(px, py, r * (0.6 + tw * 0.8), r * 0.55);
+        }
+        this.snowG.fill({ color: cols[c], alpha: 0.75 });
+      }
     }
 
     const { t } = game.dayOf();

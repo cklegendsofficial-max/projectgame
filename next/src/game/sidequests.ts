@@ -1,4 +1,5 @@
 import type { Good } from "./rpg";
+import type { FactionId } from "./factions";
 
 export type SideKind = "hunt" | "camp" | "deliver" | "craft" | "kurgan" | "ruin" | "raid" | "ruh";
 
@@ -19,6 +20,10 @@ export interface SideQuest {
   renown: number;
   item: boolean;
   done?: boolean;
+  /** kıtlık çeken şehre yardım */
+  aid?: boolean;
+  /** cephe erzakı: bu devlete karşı savaşa katkı */
+  war?: FactionId;
 }
 
 export const GIVERS = ["Han sahibi Yusuf", "Tüccar Sevinç", "Yaşlı ozan Dede Kayı", "Bey'in kâhyası", "Dul kadın Gülbahar", "Kervanbaşı Temür", "Demirci Usta Arslan", "Kadı Efendi", "Çoban Oğuz", "Sarraf İshak"];

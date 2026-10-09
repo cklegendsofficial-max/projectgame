@@ -128,6 +128,20 @@ await shot("07-era");
 check((await ev<string>(`return g.wd().era;`)) === "altin", "AltÄ±n Ã‡aÄŸ");
 await dismiss();
 
+// dünya görevleri
+const sq = await ev<{ aid: number; war: number }>(`const w = g.wd(); w.short.merv = 6; const out = { aid: 0, war: 0 }; for (let i = 0; i < 30; i++) { const q = g.makeSide("bukhara", []); if (q?.aid) out.aid++; } g.warStart("karahan", "gazne"); w.wars[w.wars.length - 1].side = "karahan"; for (let i = 0; i < 30; i++) { const q = g.makeSide("bukhara", []); if (q?.war) out.war++; } return out;`);
+console.log("world quests", JSON.stringify(sq));
+check(sq.aid > 0 && sq.war > 0, "kıtlık ve cephe görevleri");
+await dismiss();
+
+// Ak Börü
+await ev(`g.hud.close(); g.s.kut = 90; g.s.hero.lv = 8; g.akBoru();`);
+await shot("06b-boru");
+await page.locator(".battle .bbox.choice .btn").first().click().catch(() => {});
+await shot("06c-boru-lead", 900);
+check((await ev<number>(`return g.wd().boru;`)) > 0, "Ak Börü karşılaşması");
+await dismiss();
+
 // takvim
 const cal = await page.evaluate(async () => {
   const m = await import("/src/game/world.ts");
@@ -159,4 +173,5 @@ console.log("occ", JSON.stringify(occ), "->", JSON.stringify(occ2), fac);
 check(JSON.stringify(occ) === JSON.stringify(occ2), "iÅŸgaller kayÄ±tta kaldÄ±");
 console.log("errors:", errs);
 console.log(fails.length ? `FAILS: ${fails.join(" | ")}` : "ALL OK");
+if (fails.length) process.exitCode = 1;
 await browser.close();
