@@ -15,6 +15,7 @@ import { COMPANIONS, COMP_BY_ID, COMP_MAX, ERLIK, FORT_GUARD, GATE_GUARD, KARA_H
 import { LEGACY_PERKS, legacy } from "../game/legacy";
 import { HERD_BUY, HERD_GOLD, HERD_MAX, MOVE_FOOD, OTAG_GOLD, OTAG_WOOD, REST_FOOD, ZONE_DESC, ZONE_NAME, bestZone, zoneOf } from "../game/otag";
 import { VET_LV_MAX, VET_MAX, VET_RANKS, vetBonus, vetTitle } from "../game/vets";
+import { KUT_TIERS, kutArmy, kutTier, kutVote } from "../game/kut";
 import { CITIES, H, NH, NW, W } from "../world/gen";
 import { assetUrl } from "../render/worldView";
 import { audio } from "../audio";
@@ -1315,6 +1316,19 @@ export class Hud {
       ${o ? `<button class="btn sm" data-a="${this.act(() => { this.close(); g.cam.flyTo(o.x, o.y, 0.8); })}">Otağı göster</button>` : ""}`;
   }
 
+  private kutHtml(): string {
+    const s = this.g.s;
+    const k = s.kut ?? 50;
+    const t = kutTier(k);
+    const pct = (x: number): string => `${x >= 0 ? "+" : ""}${Math.round(x * 100)}%`;
+    const left = Math.max(0, (s.tore?.next ?? 0) - this.g.dayOf().day);
+    return `<h3>${ic("crown")} Kut ve Töre <em class="${k >= 45 ? "cheap" : "dear"}">${t.name}</em></h3>
+      ${bar(k, 100, "kut", `Kut ${Math.round(k)}/100`)}
+      <p class="dim">${t.desc}</p>
+      <div class="stats"><div>${ic("tug")}Ordu <b>${pct(kutArmy(k))}</b></div><div>${ic("lord_bey")}Kurultay oyu <b>${pct(kutVote(k))}</b></div><div>${ic("scroll")}Davalar <b>${s.c.tore ?? 0}</b></div></div>
+      <small class="dim">Kut; zaferle, adil hükümle, şölen ve fetihle artar. Yenilgi, soygun, ağır vergi ve kaybedilen şehirle söner. ${left ? `Sıradaki töre davası ~${left} gün sonra.` : "Yakında bir töre davası gelecek."} Kademeler: ${KUT_TIERS.map((x) => x.name).join(" · ")}</small>`;
+  }
+
   private vetsHtml(): string {
     const vets = this.g.s.vets ?? [];
     if (!vets.length) return `<h3>${ic("tug")} Gaziler</h3><p class="dim">Kazandığın savaşlarda saflardan yiğitler öne çıkar. Gaziler savaştıkça rütbe alır ve bütün birliğe güç verir (en fazla ${VET_MAX}).</p>`;
@@ -1433,7 +1447,7 @@ export class Hud {
     } else if (this.tab === "ayar") {
       body = this.settingsHtml();
     } else if (this.tab === "unvan") {
-      body = this.dailyHtml() + this.kurultayHtml() + this.rivalsHtml() + this.nemesisHtml() + this.titlesHtml();
+      body = this.dailyHtml() + (s.beylik ? this.kutHtml() : "") + this.kurultayHtml() + this.rivalsHtml() + this.nemesisHtml() + this.titlesHtml();
     } else if (this.tab === "techizat") {
       const inCity = g.nearCity() >= 0;
       body = `<div class="slots">` + SLOTS.map((sl) => {

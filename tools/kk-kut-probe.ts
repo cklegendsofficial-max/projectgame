@@ -1,0 +1,51 @@
+import { chromium } from "playwright-core";
+
+const mode = process.argv[2] ?? "desk";
+const out = `playtest/kut-${mode}`;
+const browser = await chromium.launch({ channel: "msedge", headless: true, args: ["--enable-gpu", "--ignore-gpu-blocklist", "--use-angle=d3d11"] });
+const vp = mode === "mob" ? { width: 390, height: 844 } : { width: 1280, height: 720 };
+const page = await browser.newPage({ viewport: vp, deviceScaleFactor: mode === "mob" ? 2 : 1 });
+const errs: string[] = [];
+page.on("pageerror", (e) => errs.push(e.message));
+page.on("console", (m) => m.type() === "error" && errs.push(m.text()));
+await page.goto("http://localhost:5174/");
+await page.evaluate(() => localStorage.clear());
+await page.reload();
+await page.waitForFunction(() => !document.getElementById("loading"), null, { timeout: 60000 });
+const ev = <T = unknown>(fn: string) => page.evaluate(`(() => { const g = window.game; ${fn} })()`) as Promise<T>;
+const dismiss = async () => {
+  for (let k = 0; k < 10; k++) {
+    if (!(await page.locator(".battle .bbox.story .btn").count())) break;
+    await page.locator(".battle .bbox.story .btn").first().click();
+    await page.waitForTimeout(200);
+  }
+};
+await page.locator(`.ccard[data-c="alp"]`).click();
+await page.locator(".cname .btn").click();
+await dismiss();
+await ev(`g.s.res.gold = 300; const c = g.targetPos({kind:"capital"}); g.s.hero.x = c.x; g.s.hero.y = c.y; g.buyFreedom();`);
+await dismiss();
+await page.waitForTimeout(1200);
+await dismiss();
+await ev(`g.s.beylik = true; g.s.res.gold = 5000; g.s.res.food = 1000;`);
+console.log("kut start", await ev(`return g.s.kut;`), "bonus", await ev(`return g.heroBonus();`));
+await ev(`g.s.tore.next = 1; g.toreTick(g.dayOf().day);`);
+await page.waitForTimeout(500);
+await page.screenshot({ path: `${out}-1.png` });
+const opts = await page.locator(".battle .bbox .btn").allTextContents();
+console.log("case", await ev(`return g.s.tore.seen;`), "opts", opts);
+await page.locator(".battle .bbox .btn.go").first().click();
+await page.waitForTimeout(400);
+await page.screenshot({ path: `${out}-2.png` });
+await dismiss();
+console.log("after judge kut", await ev(`return g.s.kut;`), "tore count", await ev(`return g.s.c.tore;`), "next", await ev(`return g.s.tore.next;`));
+await ev(`for (let k = 0; k < 6; k++) g.addKut(8, "test");`);
+console.log("kut high", await ev(`return g.s.kut;`), "bonus", await ev(`return g.heroBonus();`), "chron", await ev(`return g.s.chron.slice(-2).map(c => c.t);`));
+await ev(`g.hud.openHero(); g.hud.tab = "unvan"; g.hud.render();`);
+await page.waitForTimeout(300);
+await page.locator(".panel h3", { hasText: "Kut ve Töre" }).scrollIntoViewIfNeeded();
+await page.screenshot({ path: `${out}-3.png` });
+await ev(`g.hud.close(); g.addKut(-95, "test");`);
+console.log("kut low", await ev(`return g.s.kut;`), "bonus", await ev(`return g.heroBonus();`));
+console.log("errors:", errs);
+await browser.close();

@@ -368,6 +368,7 @@ body.nomini .mini { display: none; }
 .brow.skill .bimg { border-radius: 10px; }
 .bar.boss { height: 16px; }
 .bar.boss i { background: linear-gradient(#c58cff, #6a2a9a); }
+.bar.kut i { background: linear-gradient(#bfe6ff, #3a7ac8); }
 .bp.boss { border-color: #c58cff !important; box-shadow: 0 0 18px #c58cff88; }
 .gimg.round, .bimg.round { border-radius: 50%; object-fit: cover; }
 

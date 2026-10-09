@@ -23,6 +23,7 @@ import { BRIBE_GOLD, DECREES, KAGAN_RENOWN, KURULTAY_EVERY, KURULTAY_MAX, decree
 import { ESCORT_GOLD, PIRATE_RISK, SHIP_CAP, SHIP_GOLD, SHIP_MAX, pirateArmy, portOf, routeDays } from "./hazar";
 import { LEGACY_PERKS, hasLegacy, recordEnding } from "./legacy";
 import { HERD_GOLD, HERD_BUY, HERD_MAX, MOVE_FOOD, OTAG_GOLD, OTAG_WOOD, REST_FOOD, ZONE_NAME, bestZone, pasture, zoneOf } from "./otag";
+import { TORE_CASES, kutArmy, kutLoy, kutTier, kutVote, type ToreCase } from "./kut";
 import { SCARS, VET_LV_MAX, VET_MAX, VET_RANKS, VET_XP, makeVet, vetBonus, vetTitle } from "./vets";
 import { ACHIEVEMENTS, steamUnlock, storeUnlocked, unlockedSet } from "./achievements";
 import { SEASONS, SEASON_DAYS, seasonOf, type Season, type SeasonId } from "./seasons";
@@ -597,7 +598,71 @@ export class Game {
   }
 
   heroBonus(): number {
-    return 0.025 * this.stat("lid") + 0.02 * (this.s.hero.lv - 1) + this.cls().mods.army + this.compMods().army + 0.03 * this.tal("nara") + (this.buff("davul") ? 0.15 : 0) + (this.gearMods().army ?? 0) + this.heroRankBonus() + this.allyBonus() + (hasLegacy("tengri") ? 0.06 : 0) + vetBonus(this.s.vets ?? []);
+    return 0.025 * this.stat("lid") + 0.02 * (this.s.hero.lv - 1) + this.cls().mods.army + this.compMods().army + 0.03 * this.tal("nara") + (this.buff("davul") ? 0.15 : 0) + (this.gearMods().army ?? 0) + this.heroRankBonus() + this.allyBonus() + (hasLegacy("tengri") ? 0.06 : 0) + vetBonus(this.s.vets ?? []) + (this.s.beylik ? kutArmy(this.s.kut ?? 50) : 0);
+  }
+
+  addKut(n: number, why = ""): void {
+    const s = this.s;
+    if (!s.beylik || !n) return;
+    const k0 = s.kut ?? 50;
+    s.kut = Math.max(0, Math.min(100, k0 + n));
+    const t0 = kutTier(k0);
+    const t1 = kutTier(s.kut);
+    if (t0 !== t1) {
+      const up = s.kut > k0;
+      this.chron(up ? `${gen(s.hero.name)} kutu parladı: artık ${t1.name} olarak anılıyor.` : `${gen(s.hero.name)} kutu söndü: halk onu ${t1.name} diye anıyor.`);
+      this.hud.toast(`Kut: ${t1.name}! ${t1.desc}`, up ? "good" : "bad");
+    } else if (why && Math.abs(n) >= 3) this.hud.toast(`Kut ${n > 0 ? "+" : ""}${n} · ${why}`, n > 0 ? "good" : "bad");
+  }
+
+  private toreTick(day: number): void {
+    const s = this.s;
+    s.tore ??= { next: 0, seen: [] };
+    if (!s.beylik || this.battleLock) return;
+    if (!s.tore.next) s.tore.next = day + 2;
+    if (day < s.tore.next) return;
+    s.tore.next = day + 3 + Math.floor(Math.random() * 3);
+    let pool = TORE_CASES.filter((c) => !s.tore.seen.includes(c.id));
+    if (!pool.length) {
+      s.tore.seen = [];
+      pool = TORE_CASES;
+    }
+    this.toreOpen(pool[Math.floor(Math.random() * pool.length)]);
+  }
+
+  toreOpen(c: ToreCase): void {
+    const s = this.s;
+    s.tore.seen.push(c.id);
+    const fx = (o: ToreCase["opts"][number]): string => {
+      const f = o.fx;
+      return [f.gold ? `${f.gold > 0 ? "+" : ""}${f.gold} altın` : "", f.food ? `${f.food > 0 ? "+" : ""}${f.food} yiyecek` : ""].filter(Boolean).join(", ");
+    };
+    this.hud.choice(
+      `Töre Davası · ${c.title}`,
+      c.icon,
+      `${c.text}<br><br><small class="dim">Kut: <b>${Math.round(s.kut)}</b> · ${kutTier(s.kut).name}</small>`,
+      c.opts.map((o) => {
+        const poor = (o.fx.gold ?? 0) < 0 && s.res.gold < -(o.fx.gold ?? 0) || (o.fx.food ?? 0) < 0 && s.res.food < -(o.fx.food ?? 0);
+        const cost = fx(o);
+        return { label: `${o.label}${cost && !o.label.includes("(") ? ` (${cost})` : ""}`, cls: poor ? "off" : (o.fx.kut ?? 0) > 0 ? "go" : "", fn: () => this.toreJudge(c, o) };
+      }),
+    );
+  }
+
+  private toreJudge(c: ToreCase, o: ToreCase["opts"][number]): void {
+    const s = this.s;
+    const f = o.fx;
+    if (f.gold && f.gold < 0 && !this.pay({ gold: -f.gold })) return;
+    if (f.food && f.food < 0 && !this.pay({ food: -f.food })) return;
+    this.gain({ gold: Math.max(0, f.gold ?? 0), food: Math.max(0, f.food ?? 0) });
+    if (f.renown) s.renown += f.renown;
+    if (f.loy) for (const ow of Object.values(s.owned)) ow.loy = Math.max(0, Math.min(100, ow.loy + f.loy));
+    s.c.tore = (s.c.tore ?? 0) + 1;
+    this.addKut(f.kut ?? 0);
+    const k = f.kut ?? 0;
+    this.chron(`Töre davası (${c.title}): ${o.out}`);
+    this.hud.story(c.title, c.icon, `${o.out}<br><br><b class="${k >= 0 ? "cheap" : "dear"}">Kut ${k >= 0 ? "+" : ""}${k}</b> → ${Math.round(s.kut)} · ${kutTier(s.kut).name}${f.loy ? `<br>Şehir bağlılığı ${f.loy > 0 ? "+" : ""}${f.loy}` : ""}${f.renown ? `<br>Şöhret +${f.renown}` : ""}`, "Hüküm verildi");
+    saveGame(s);
   }
 
   allyBonus(): number {
@@ -666,6 +731,7 @@ export class Game {
     if (d?.hates.includes(r.trait)) p -= 0.3;
     if (id === "kagan") p -= r.trait === "hirsli" ? 0.3 : r.trait === "onurlu" ? 0.05 : 0.12;
     if (bribe) p += r.trait === "kurnaz" ? 0.25 : 0.15;
+    p += kutVote(this.s.kut ?? 50);
     return Math.max(0.05, Math.min(0.95, p));
   }
 
@@ -2456,6 +2522,7 @@ export class Game {
       const gold = Math.round(this.caravanValue(cv) * 0.25 * this.stealMult());
       this.gain({ gold });
       s.c.robbed++;
+      this.addKut(-4, "kervan soygunu töreye aykırı");
       if (s.c.robbed === 1) this.chron(`${FACTIONS[fac].name} kervanı yolda soyuldu. O günden beri hanlarda ${gen(s.hero.name)} adı fısıltıyla anılıyor.`);
       const lg = this.legendDrop(0.03);
       return `Kervan senin! +${k} ${GOODS[cv.good].name}${k < cv.qty ? ` (yükün doldu, ${cv.qty - k} adet geride kaldı)` : ""}, +${gold} altın.<br><b class="dear">Aranıyorsun (${"★".repeat(s.wanted)}) · ${FACTIONS[fac].name} itibarı −60</b>${lg ? `<br>Efsane: <b class="r4">${lg.name}</b>` : ""}`;
@@ -2468,6 +2535,7 @@ export class Game {
     this.s.res.gold += gold;
     this.s.c.rescued++;
     this.addRep(fac, 25, "kervanı kurtardın");
+    this.addKut(2);
     const k = Math.min(3, cv.qty, Math.max(0, this.carryCap() - this.cargoUsed()));
     if (k) {
       this.s.hero.cargo[cv.good] = (this.s.hero.cargo[cv.good] ?? 0) + k;
@@ -2646,6 +2714,7 @@ export class Game {
     const lvUp = this.addXp(xp);
     this.s.kills += armySize(res.lostB);
     const extra = after(res.win);
+    this.addKut(res.win ? (boss ? 3 : 1) : -2);
     let fled = "";
     if (!res.win) {
       const near = CITIES.map((c, i) => ({ i, d: Math.hypot(c.x - h.x, c.y - h.y) })).sort((a, b) => a.d - b.d)[0];
@@ -2880,6 +2949,7 @@ export class Game {
       s.owned[city] = { loy: 35, gar: army(10, 6, 4), coffer: 0, tax: 1, since: this.dayOf().day, from: f };
       s.c.conquests = (s.c.conquests ?? 0) + 1;
       s.renown += 60;
+      this.addKut(5, `${name} fethi`);
       if (!s.counterAt) s.counterAt = this.now + 8 * DAY_SEC * 1000;
       this.chron(`${name} surlarına ${gen(s.hero.name)} tuğu dikildi. ${fac.ruler} bu hakareti unutmayacak.`);
       this.hud.story(
@@ -3176,6 +3246,8 @@ export class Game {
     const day = this.dayOf().day;
     const se = this.season();
     this.otagDaily();
+    this.toreTick(day);
+    for (const o of Object.values(s.owned)) this.addKut(o.tax === 2 ? -1 : o.tax === 0 ? 0.5 : 0);
     if (this.kurAnn !== s.kurultay.held && /Semerkant|^$/.test(this.kurultayReason())) {
       this.kurAnn = s.kurultay.held;
       this.hud.toast("Beyler Semerkant'ta kurultaya hazır. Hedefler sekmesinden topla.", "good");
@@ -3209,7 +3281,7 @@ export class Game {
       const ev = this.cityEv(city);
       const evLoy = ev ? (ev.loy < 0 && ev === CITY_EVENTS.kitlik ? ev.loy * (1 - Math.min(1, 0.4 * this.cbl(city, "ambar"))) : ev.loy) : 0;
       const decree = s.kurultay.decrees.includes("adalet") ? 0.5 : 0;
-      o.loy = Math.max(0, Math.min(100, o.loy + (TAX[o.tax].loy + garLoy - 1 + (this.cityGov(city)?.loy ?? 0) + evLoy + decree) * el));
+      o.loy = Math.max(0, Math.min(100, o.loy + (TAX[o.tax].loy + garLoy - 1 + (this.cityGov(city)?.loy ?? 0) + evLoy + decree + kutLoy(s.kut ?? 50)) * el));
       if (o.loy < 15 && Math.random() < 0.12 * el) this.loseCity(city, "isyan");
     }
     if (this.battleLock || !s.counterAt || this.now < s.counterAt) return;
@@ -3239,6 +3311,7 @@ export class Game {
     const o = s.owned[city];
     if (!o) return;
     delete s.owned[city];
+    this.addKut(why === "isyan" ? -10 : -6);
     const name = CITY_NAME[city];
     audio.play("lose");
     const t = why === "isyan" ? `${name} halkı ağır yüke dayanamadı ve ayaklandı. Valin kaçtı, garnizonun dağıldı.` : `${FACTIONS[o.from].name} ordusu ${name} surlarını aştı. Garnizonun kılıçtan geçirildi.`;
@@ -3710,6 +3783,7 @@ export class Game {
     if (!o || this.s.res.gold < FEAST_GOLD) return;
     this.s.res.gold -= FEAST_GOLD;
     o.loy = Math.min(100, o.loy + 25);
+    this.addKut(3, "şölen");
     audio.play("quest");
     this.hud.toast(`${CITY_NAME[city]} meydanında şölen! Halk adını anıyor (+25 bağlılık).`, "good");
     saveGame(this.s);
