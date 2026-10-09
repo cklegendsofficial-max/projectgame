@@ -283,6 +283,7 @@ export interface GameState {
   cqDone: string[];
   cqAsk: Record<string, number>;
   origin?: OriginId;
+  surekDay?: number;
   games?: { wrDay: number; wrRound: number; kbDay: number; kbBest: number; champ: number };
 }
 

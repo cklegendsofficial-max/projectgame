@@ -33,7 +33,7 @@ import { SCARS, VET_LV_MAX, VET_MAX, VET_RANKS, VET_XP, makeVet, vetBonus, vetTi
 import { ACHIEVEMENTS, steamUnlock, storeUnlocked, unlockedSet } from "./achievements";
 import { CODEX, codexTitle } from "./codex";
 import { ORIGIN_BY_ID, type OriginId } from "./origins";
-import { WR_FOES } from "./games";
+import { SUREK_FOOD, WR_FOES } from "./games";
 import type { WrestleFoe } from "../ui/wrestle";
 import { SIEGE_MAX_DAY, newSiege, siegeDay, siegeGar, siegeWall, type SiegeAct, type SiegeCtx, type SiegeRun } from "./siege";
 import { BOND_FX, BOND_LEAVE, BOND_QUEST, BOND_START, COMP_QUESTS, SWORN_MULT, type BondEvent, type CompQuest, type CqChoice } from "./bonds";
@@ -625,7 +625,7 @@ export class Game {
   }
 
   heroBonus(): number {
-    return 0.025 * this.stat("lid") + 0.02 * (this.s.hero.lv - 1) + this.cls().mods.army + this.compMods().army + 0.03 * this.tal("nara") + (this.buff("davul") ? 0.15 : 0) + (this.gearMods().army ?? 0) + this.heroRankBonus() + this.allyBonus() + (hasLegacy("tengri") ? 0.06 : 0) + vetBonus(this.s.vets ?? []) + (this.s.beylik ? kutArmy(this.s.kut ?? 50) : 0) + this.famBonus();
+    return 0.025 * this.stat("lid") + 0.02 * (this.s.hero.lv - 1) + this.cls().mods.army + this.compMods().army + 0.03 * this.tal("nara") + (this.buff("davul") ? 0.15 : 0) + (this.buff("surek") ? 0.08 : 0) + (this.gearMods().army ?? 0) + this.heroRankBonus() + this.allyBonus() + (hasLegacy("tengri") ? 0.06 : 0) + vetBonus(this.s.vets ?? []) + (this.s.beylik ? kutArmy(this.s.kut ?? 50) : 0) + this.famBonus();
   }
 
   addKut(n: number, why = ""): void {
@@ -3921,6 +3921,50 @@ export class Game {
     if (best && score >= 300) this.chron(`${s.hero.name} at üstünde ${hits} kabak vurdu; ihtiyarlar Mete Han'dan beri böylesini görmediklerini söyledi.`);
     saveGame(s);
     return `${best ? "<b class=\"cheap\">Yeni rekor!</b><br>" : ""}+${gold} altın · +${renown} şöhret · +${xp} tecrübe`;
+  }
+
+  surekReason(): string {
+    const s = this.s;
+    if (!s.free) return tr("Önce hürriyetini kazan");
+    if (armySize(s.hero.army) < 10) return tr("Sürek avı için en az 10 askerin olmalı");
+    if (s.res.food < SUREK_FOOD) return `${SUREK_FOOD} ${tr("yiyecek gerekir")}`;
+    const left = (s.surekDay ?? -99) + 3 - this.dayOf().day;
+    if (left > 0) return `${tr("Av yorgunluğu")}: ${left} ${tr("gün")}`;
+    return "";
+  }
+
+  surekStart(): boolean {
+    if (this.surekReason()) return false;
+    this.s.res.food -= SUREK_FOOD;
+    this.s.surekDay = this.dayOf().day;
+    saveGame(this.s);
+    return true;
+  }
+
+  surekReward(score: number, kills: Partial<Record<string, number>>): string {
+    const s = this.s;
+    const n = (k: string) => kills[k] ?? 0;
+    const all = Object.values(kills).reduce((a: number, b) => a + (b ?? 0), 0);
+    const food = n("geyik") * 35 + n("domuz") * 25 + n("kurt") * 8 + n("kaplan") * 40;
+    const hides = Math.min(n("geyik") + n("domuz") + n("kaplan") * 2, Math.max(0, Math.floor(this.carryCap() - this.cargoUsed())));
+    const renown = Math.floor(score / 30) + n("kaplan") * 10;
+    this.gain({ food });
+    if (hides) s.hero.cargo.deri = (s.hero.cargo.deri ?? 0) + hides;
+    s.renown += renown;
+    this.addXp(Math.round(score * 0.7));
+    const lines = [`+${food} ${tr("yiyecek")}`, `+${renown} ${tr("şöhret")}`];
+    if (hides) lines.push(`+${hides} ${tr("deri")}`);
+    if (score >= 150) {
+      s.buffs.surek = 3;
+      lines.push(`<b class="cheap">${tr("Ordun avda pişti: sonraki 3 savaşta +%8 güç")}</b>`);
+    }
+    if (n("kaplan")) {
+      this.addKut(2, "kaplan avı");
+      this.chron(`${s.hero.name} sürek avında bir Turan kaplanı vurdu; postu otağın girişine serildi.`);
+    }
+    if (all >= 8) this.bondEvent("hunt");
+    saveGame(s);
+    return lines.join(" · ");
   }
 
   toyDay(): boolean {

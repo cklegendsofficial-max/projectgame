@@ -18,7 +18,7 @@ import { VET_LV_MAX, VET_MAX, VET_RANKS, vetBonus, vetTitle } from "../game/vets
 import { PERSONAS, PERSONA_KEYS } from "../game/director";
 import { kidAge } from "../game/dynasty";
 import { BOYS } from "../game/korkut";
-import { Archery } from "./archery";
+import { Archery, type ArchMode } from "./archery";
 import { Wrestle } from "./wrestle";
 import { KokBoru } from "./kokboru";
 import { Gamepad, type PadButton } from "./gamepad";
@@ -29,6 +29,7 @@ import { CITIES, H, NAV, NH, NW, W } from "../world/gen";
 import { assetUrl } from "../render/worldView";
 import { audio } from "../audio";
 import { LANGS, lang, t, type Lang } from "../i18n";
+import { SUREK_FOOD } from "../game/games";
 import { SIEGE_ACTS, SIEGE_MAX_DAY, parleyChance, siegeGar } from "../game/siege";
 import { ORIGINS, ORIGIN_BY_ID, type Origin, type OriginId } from "../game/origins";
 import { BOND_LIKES, BOND_LIKES_EN, BOND_QUEST, COMP_QUESTS, SWORN_MULT, bondTier } from "../game/bonds";
@@ -1652,14 +1653,16 @@ export class Hud {
 
   archery: Archery | null = null;
 
-  openArchery(): void {
+  openArchery(mode: ArchMode = "kabak"): void {
     const g = this.g;
     if (this.archery || this.minigame || this.modal() || g.battleLock) return;
+    if (mode === "surek" && !g.surekStart()) return;
     this.close();
     g.battleLock = true;
     const el = document.createElement("div");
     el.className = "archery";
-    el.innerHTML = `<canvas></canvas><div class="ahud"></div><div class="ahint">${t("Hedefe dokun ya da <kbd>Boşluk</kbd> · kabak 10 · kurt 20 · kartal 35 · art arda isabet çarpan verir")}</div><button class="btn sm aclose">${t("Bırak")}</button><div class="aresult"></div>`;
+    const hint = mode === "surek" ? t("Hedefe dokun ya da <kbd>Boşluk</kbd> · geyik 25 · domuz 30 · kurt 20 · kaplan 120 (3 ok) · 40 saniye") : t("Hedefe dokun ya da <kbd>Boşluk</kbd> · kabak 10 · kurt 20 · kartal 35 · art arda isabet çarpan verir");
+    el.innerHTML = `<canvas></canvas><div class="ahud"></div><div class="ahint">${hint}</div><button class="btn sm aclose">${t("Bırak")}</button><div class="aresult"></div>`;
     this.root.appendChild(el);
     const hudEl = el.querySelector(".ahud") as HTMLElement;
     const res = el.querySelector(".aresult") as HTMLElement;
@@ -1682,14 +1685,20 @@ export class Hud {
       el.remove();
       g.battleLock = false;
     };
-    const game = new Archery(el.querySelector("canvas")!, (score, hits) => {
-      const note = g.archeryReward(score, hits);
+    const game: Archery = new Archery(el.querySelector("canvas")!, (score, hits) => {
       audio.play(score >= 150 ? "level" : "quest");
-      res.innerHTML = `<div class="bbox"><h2>${t("Kabak Atma bitti")}</h2><p><b>${score}</b> ${t("puan")} · ${hits} ${t("isabet")}<br>${t("En iyi")}: <b>${g.s.ok.best}</b></p><p>${note}</p><div class="row"><button class="btn go again">${t("Tekrar")}</button><button class="btn quit">${t("Kapat")}</button></div></div>`;
+      if (mode === "surek") {
+        const note = g.surekReward(score, game.kills);
+        const k = game.kills;
+        res.innerHTML = `<div class="bbox"><h2>${t("Sürek avı bitti")}</h2><p><b>${score}</b> ${t("puan")} · ${t("geyik")} ${k.geyik ?? 0} · ${t("domuz")} ${k.domuz ?? 0} · ${t("kurt")} ${k.kurt ?? 0} · ${t("kaplan")} ${k.kaplan ?? 0}</p><p>${note}</p><div class="row"><button class="btn go quit">${t("Kapat")}</button></div></div>`;
+      } else {
+        const note = g.archeryReward(score, hits);
+        res.innerHTML = `<div class="bbox"><h2>${t("Kabak Atma bitti")}</h2><p><b>${score}</b> ${t("puan")} · ${hits} ${t("isabet")}<br>${t("En iyi")}: <b>${g.s.ok.best}</b></p><p>${note}</p><div class="row"><button class="btn go again">${t("Tekrar")}</button><button class="btn quit">${t("Kapat")}</button></div></div>`;
+      }
       res.classList.add("on");
-      res.querySelector(".again")!.addEventListener("click", () => { finish(); this.openArchery(); });
+      res.querySelector(".again")?.addEventListener("click", () => { finish(); this.openArchery(); });
       res.querySelector(".quit")!.addEventListener("click", finish);
-    });
+    }, mode);
     this.archery = game;
     tick = window.setInterval(() => {
       const h = game.hud();
@@ -1789,6 +1798,7 @@ export class Hud {
     return `<h3>${ic("u_archer")} ${t("Bozkır Oyunları")}</h3>
       ${toy ? `<div class="odds good">${ic("tug")} <b>${t("Toy günü!")}</b> ${t("Bugün bütün oyunların ödülü iki katı.")}</div>` : `<p class="dim">${t("Her 7 günde bir Toy kurulur; o gün ödüller iki katıdır.")}</p>`}
       <div class="grow">${ic("u_cavalry", "gimg")}<div class="bi2"><b>${t("Kabak Atma")} <em>${t("atlı okçuluk")}</em></b><small>${t("Dörtnala giderken kabakları, kurtları ve kartalları vur. 30 saniye, 20 ok.")}</small>${st(paid)} · ${t("Rekor")}: ${g.s.ok?.best ?? 0}</small></div><button class="btn sm go" data-a="${this.act(() => this.openArchery())}">${t("Oyna")}</button></div>
+      <div class="grow">${ic("tr_wolf", "gimg")}<div class="bi2"><b>${t("Sürek Avı")} <em>${t("ordu talimi")}</em></b><small>${t("Askerlerinle ormanı çevirip geyik, domuz, kurt ve kaplan avla. Yiyecek ve deri getirir; iyi bir av orduyu 3 savaş boyunca güçlendirir.")}</small><small class="${g.surekReason() ? "dim" : "cheap"}">${g.surekReason() || `${t("Hazır")} · ${SUREK_FOOD} ${t("yiyecek")}`}</small></div><button class="btn sm go ${g.surekReason() ? "off" : ""}" data-a="${this.act(() => this.openArchery("surek"))}">${t("Ava çık")}</button></div>
       <div class="grow">${ic("arena", "gimg")}<div class="bi2"><b>${t("Kuşak Güreşi")} <em>${t("üç pehlivan")}</em></b><small>${t("Zamanlamayla kuşaktan çek, rakibin hamlesine karşı koy. Üç pehlivanı art arda yenen baş pehlivan olur.")}</small><small class="${wo ? "cheap" : "dim"}">${wo ? `${t("Sıradaki rakip")}: ${foe.name} (${foe.round + 1}/3)` : t("Meydan bugün kapandı · antrenman")} · ${t("Baş pehlivan")}: ${g.s.games?.champ ?? 0}</small></div><button class="btn sm go" data-a="${this.act(() => this.openMini("wr"))}">${t("Oyna")}</button></div>
       <div class="grow">${ic("u_cavalry", "gimg")}<div class="bi2"><b>${t("Kökbörü")} <em>${t("oğlak kapma")}</em></b><small>${t("Oğlağı kap, rakip atlılardan sıyrılarak kazana ulaştır. 40 saniye.")}</small>${st(ko)} · ${t("Rekor")}: ${g.s.games?.kbBest ?? 0}</small></div><button class="btn sm go" data-a="${this.act(() => this.openMini("kb"))}">${t("Oyna")}</button></div>`;
   }
@@ -1973,7 +1983,7 @@ export class Hud {
       }).join("") + `</div><p class="dim">Kuşanılmış bir eşyaya dokunarak çıkarabilirsin. Eşyaları şehirlerde satabilirsin.</p>` + this.setsHtml() +
         (CONSUMABLES.some((c) => s.cons[c.id]) || Object.keys(s.buffs).length
           ? `<h3>${ic("healer")} Çanta</h3>` +
-            (Object.keys(s.buffs).length ? `<div class="odds good">Etkin: ${Object.entries(s.buffs).map(([k, n]) => `${CONS_BY_ID[k]?.name ?? k} (${n} savaş)`).join(" · ")}</div>` : "") +
+            (Object.keys(s.buffs).length ? `<div class="odds good">Etkin: ${Object.entries(s.buffs).map(([k, n]) => `${CONS_BY_ID[k]?.name ?? (k === "surek" ? t("Sürek avı talimi") : k)} (${n} savaş)`).join(" · ")}</div>` : "") +
             CONSUMABLES.filter((c) => s.cons[c.id]).map((c) => `<div class="grow">${ic(c.icon, "gimg")}<div class="bi2"><b>${c.name} <em>×${s.cons[c.id]}</em></b><small>${c.desc}</small></div><button class="btn sm go" data-a="${this.act(() => g.useCons(c.id))}">Kullan</button></div>`).join("")
           : "") +
         `<h3>${ic("schest")} Heybe</h3>` +

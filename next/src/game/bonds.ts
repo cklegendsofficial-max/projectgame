@@ -2,7 +2,7 @@ import type { CompId } from "./story";
 import type { RoadFx } from "./road";
 import type { Army } from "./data";
 
-export type BondEvent = "win" | "lose" | "boss" | "conquer" | "kilic" | "feast" | "taxHeavy" | "trade" | "robbed" | "sing" | "toreFair" | "toreHarsh" | "voyage" | "rescue";
+export type BondEvent = "win" | "lose" | "boss" | "conquer" | "kilic" | "feast" | "taxHeavy" | "trade" | "robbed" | "sing" | "toreFair" | "toreHarsh" | "voyage" | "rescue" | "hunt";
 
 export const BOND_START = 20;
 export const BOND_QUEST = 50;
@@ -25,12 +25,13 @@ export const BOND_FX: Record<BondEvent, Partial<Record<CompId, number>>> = {
   toreHarsh: { ayse: -4, batu: 2, korkut: -2 },
   voyage: { lucia: 4, leyla: 2 },
   rescue: { ayse: 3, ferhat: 2, batu: 1 },
+  hunt: { ferhat: 4, batu: 2, korkut: 1 },
 };
 
 export const BOND_LIKES: Record<CompId, string> = {
   ayse: "Merhamet, adil hüküm, şölen",
   korkut: "Türküler, destanlar, adil töre",
-  ferhat: "Boss avları, kurtarmalar, zafer",
+  ferhat: "Sürek avı, boss avları, kurtarmalar",
   batu: "Savaş, fetih, sert yönetim",
   leyla: "Kârlı ticaret, düzen",
   lucia: "Deniz seferleri, ticaret",
@@ -39,7 +40,7 @@ export const BOND_LIKES: Record<CompId, string> = {
 export const BOND_LIKES_EN: Record<CompId, string> = {
   ayse: "Mercy, fair judgment, feasts",
   korkut: "Songs, sagas, fair töre",
-  ferhat: "Boss hunts, rescues, victory",
+  ferhat: "Grand hunts, boss hunts, rescues",
   batu: "War, conquest, a firm hand",
   leyla: "Profitable trade, order",
   lucia: "Sea voyages, trade",

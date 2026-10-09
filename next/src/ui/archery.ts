@@ -1,4 +1,5 @@
-type Kind = "kabak" | "kurt" | "kartal";
+export type Kind = "kabak" | "kurt" | "kartal" | "geyik" | "domuz" | "kaplan";
+export type ArchMode = "kabak" | "surek";
 
 interface Tgt {
   kind: Kind;
@@ -9,6 +10,8 @@ interface Tgt {
   r: number;
   hit: number;
   t: number;
+  hp: number;
+  y0: number;
 }
 
 interface Arrow {
@@ -28,7 +31,9 @@ interface Pop {
 
 export const ARCH_TIME = 30;
 export const ARCH_ARROWS = 24;
-const PTS: Record<Kind, number> = { kabak: 10, kurt: 20, kartal: 35 };
+export const SUREK_TIME = 40;
+export const SUREK_ARROWS = 32;
+const PTS: Record<Kind, number> = { kabak: 10, kurt: 20, kartal: 35, geyik: 25, domuz: 30, kaplan: 120 };
 const SPEED = 950;
 const GRAV = 420;
 const SCROLL = 230;
@@ -51,8 +56,13 @@ export class Archery {
   hits = 0;
   combo = 0;
   done = false;
+  kills: Partial<Record<Kind, number>> = {};
 
-  constructor(private cv: HTMLCanvasElement, private onEnd: (score: number, hits: number) => void) {
+  constructor(private cv: HTMLCanvasElement, private onEnd: (score: number, hits: number) => void, private mode: ArchMode = "kabak") {
+    if (mode === "surek") {
+      this.time = SUREK_TIME;
+      this.arrows = SUREK_ARROWS;
+    }
     this.ctx = cv.getContext("2d")!;
     this.resize();
     cv.addEventListener("pointerdown", this.onDown);
@@ -131,10 +141,20 @@ export class Archery {
   private add(): void {
     const g = this.ground();
     const r = Math.random();
+    const x = this.w + 30;
+    const T = (kind: Kind, y: number, vx: number, rad: number, hp = 1, t = 0): Tgt => ({ kind, x, y, vx, vy: 0, r: rad, hit: 0, t, hp, y0: y });
+    if (this.mode === "surek") {
+      const big = this.tg.some((t) => t.kind === "kaplan" && !t.hit);
+      if (r < 0.38) this.tg.push(T("geyik", g - 22, 90 + Math.random() * 70, 22));
+      else if (r < 0.62) this.tg.push(T("domuz", g - 12, -90 - Math.random() * 60, 18));
+      else if (r < 0.86 || big) this.tg.push(T("kurt", g - 14, 60 + Math.random() * 70, 20));
+      else this.tg.push(T("kaplan", g - 20, 70, 28, 3));
+      return;
+    }
     const kind: Kind = r < 0.55 ? "kabak" : r < 0.82 ? "kurt" : "kartal";
-    if (kind === "kabak") this.tg.push({ kind, x: this.w + 30, y: g - 120 - Math.random() * 80, vx: 0, vy: 0, r: 17, hit: 0, t: 0 });
-    else if (kind === "kurt") this.tg.push({ kind, x: this.w + 30, y: g - 14, vx: 60 + Math.random() * 70, vy: 0, r: 20, hit: 0, t: 0 });
-    else this.tg.push({ kind, x: this.w + 30, y: this.h * (0.18 + Math.random() * 0.22), vx: -40 - Math.random() * 60, vy: 0, r: 16, hit: 0, t: Math.random() * 6 });
+    if (kind === "kabak") this.tg.push(T(kind, g - 120 - Math.random() * 80, 0, 17));
+    else if (kind === "kurt") this.tg.push(T(kind, g - 14, 60 + Math.random() * 70, 20));
+    else this.tg.push(T(kind, this.h * (0.18 + Math.random() * 0.22), -40 - Math.random() * 60, 16, 1, Math.random() * 6));
   }
 
   private loop = (now: number): void => {
@@ -158,6 +178,7 @@ export class Archery {
       t.t += dt;
       t.x += (t.vx - SCROLL) * dt;
       if (t.kind === "kartal") t.y += Math.sin(t.t * 3) * 40 * dt;
+      if (t.kind === "geyik" && !t.hit) t.y = t.y0 - Math.abs(Math.sin(t.t * 4)) * 34;
       if (t.hit) t.hit += dt;
     }
     for (const a of this.ar) {
@@ -167,10 +188,16 @@ export class Archery {
       a.life -= dt;
       for (const t of this.tg) {
         if (t.hit || Math.hypot(a.x - t.x, a.y - t.y) > t.r + 6) continue;
-        t.hit = 0.01;
         a.life = 0;
         this.combo++;
         this.hits++;
+        if (--t.hp > 0) {
+          t.vx += 40;
+          this.pops.push({ x: t.x, y: t.y - 30, t: 0, text: `${"♥".repeat(t.hp)}` });
+          break;
+        }
+        t.hit = 0.01;
+        this.kills[t.kind] = (this.kills[t.kind] ?? 0) + 1;
         const mult = 1 + Math.min(4, Math.floor(this.combo / 3)) * 0.5;
         const pts = Math.round(PTS[t.kind] * mult);
         this.score += pts;
@@ -214,7 +241,7 @@ export class Archery {
       c.ellipse(cx + 34, cy - 10, 40, 14, 0, 0, Math.PI * 2);
       c.fill();
     }
-    c.fillStyle = "#8a9a6a";
+    c.fillStyle = this.mode === "surek" ? "#5a7a4a" : "#8a9a6a";
     const off = (this.dist * 0.25) % 260;
     c.beginPath();
     c.moveTo(0, g - 40);
@@ -278,6 +305,8 @@ export class Archery {
       c.strokeStyle = "#8a5a1a";
       c.lineWidth = 2;
       c.stroke();
+    } else if (t.kind === "geyik" || t.kind === "domuz" || t.kind === "kaplan") {
+      this.drawBeast(t);
     } else if (t.kind === "kurt") {
       const leg = Math.sin(t.t * 18) * 6;
       c.fillStyle = "#5a5a62";
@@ -323,6 +352,71 @@ export class Archery {
       c.fill();
     }
     c.globalAlpha = 1;
+  }
+
+  private drawBeast(t: Tgt): void {
+    const c = this.ctx;
+    const leg = Math.sin(t.t * 16) * 6;
+    const s = t.kind === "kaplan" ? 1.35 : t.kind === "domuz" ? 0.85 : 1.1;
+    const col = t.kind === "geyik" ? "#9a6a3a" : t.kind === "domuz" ? "#3a2e28" : t.hit ? "#ff9a3a" : "#d8802a";
+    const dir = t.kind === "domuz" ? 1 : -1;
+    c.save();
+    c.translate(t.x, t.y);
+    c.scale(s * dir, s);
+    c.strokeStyle = col;
+    c.lineWidth = 3.5;
+    c.beginPath();
+    c.moveTo(-14, 6);
+    c.lineTo(-14 + leg, 20);
+    c.moveTo(14, 6);
+    c.lineTo(14 - leg, 20);
+    c.stroke();
+    c.fillStyle = col;
+    c.beginPath();
+    c.ellipse(0, 0, 24, 11, 0, 0, Math.PI * 2);
+    c.fill();
+    c.beginPath();
+    c.ellipse(-24, -8, 10, 7, -0.3, 0, Math.PI * 2);
+    c.fill();
+    if (t.kind === "geyik") {
+      c.strokeStyle = "#5a3a1a";
+      c.lineWidth = 2;
+      c.beginPath();
+      c.moveTo(-24, -14);
+      c.lineTo(-30, -32);
+      c.lineTo(-38, -36);
+      c.moveTo(-30, -32);
+      c.lineTo(-26, -40);
+      c.moveTo(-22, -14);
+      c.lineTo(-18, -30);
+      c.lineTo(-12, -34);
+      c.stroke();
+    } else if (t.kind === "domuz") {
+      c.strokeStyle = "#f3e6c8";
+      c.lineWidth = 2;
+      c.beginPath();
+      c.moveTo(-31, -4);
+      c.lineTo(-36, -12);
+      c.stroke();
+    } else {
+      c.strokeStyle = "#2a1606";
+      c.lineWidth = 2.5;
+      c.beginPath();
+      for (const x of [-12, -4, 4, 12]) {
+        c.moveTo(x, -10);
+        c.lineTo(x + 3, 2);
+      }
+      c.moveTo(22, -2);
+      c.quadraticCurveTo(36, -14, 40, -4);
+      c.stroke();
+    }
+    c.restore();
+    if (t.hp > 1) {
+      c.fillStyle = "#ff3a2a";
+      c.font = "bold 14px Georgia, serif";
+      c.textAlign = "center";
+      c.fillText("♥".repeat(t.hp), t.x, t.y - 30);
+    }
   }
 
   private drawRider(): void {
