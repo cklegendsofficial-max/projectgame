@@ -13,7 +13,11 @@ export interface Nemesis {
   why: string;
   bro?: boolean;
   han?: boolean;
+  /** töreye göre diyet ödenip barışıldı */
+  peace?: boolean;
 }
+
+export const diyetCost = (lv: number): number => 300 + lv * 120;
 
 export const BRO_MAX = 2;
 

@@ -53,7 +53,7 @@ import { ORIGINS, ORIGIN_BY_ID, type Origin, type OriginId } from "../game/origi
 import { BOND_LIKES, BOND_LIKES_EN, BOND_QUEST, COMP_QUESTS, SWORN_MULT, bondTier } from "../game/bonds";
 import { SETS, SET_FORGE, SET_KEYS, SET_SLOTS, UNIQUES, modsText, type SetId } from "../game/legend";
 import { FACTIONS, FACTION_KEYS, HOSTILE, REP_RANKS, RANK_PERKS, factionOf } from "../game/factions";
-import { BRO_MODS, NEM_TRAITS, nemName } from "../game/nemesis";
+import { BRO_MODS, NEM_TRAITS, diyetCost, nemName } from "../game/nemesis";
 import { BIRDS, birdSight, birdXpNeed } from "../game/falcon";
 import { BREEDS, BREED_GOLD, BREED_TIME } from "../game/horse";
 import { TITLE_CATS, titleKey, titleOf } from "../game/titles";
@@ -673,8 +673,9 @@ export class Hud {
         .map((n) => {
           const t = NEM_TRAITS[n.trait];
           const out = g.nemesisOut(n);
-          const where = n.bro ? `<b class="cheap">Kan kardeşin · ${BRO_MODS[n.trait].text}</b>` : n.alive ? (out ? `<b class="dear">Bozkırda seni arıyor</b>` : `${s.camps[n.camp]?.name ?? "?"} çevresinde`) : "Öldürüldü";
-          const btn = n.alive ? `<button class="btn sm" data-a="${this.act(() => { this.close(); const p = out ?? s.camps[n.camp]; g.cam.flyTo(p.x, p.y, 0.8); })}">Bul</button>` : n.bro ? `<em class="cheap">⚭</em>` : `<em class="cheap">✓</em>`;
+          const where = n.bro ? `<b class="cheap">Kan kardeşin · ${BRO_MODS[n.trait].text}</b>` : n.alive ? (out ? `<b class="dear">Bozkırda seni arıyor</b>` : `${s.camps[n.camp]?.name ?? "?"} çevresinde`) : n.peace ? `<b class="cheap">Diyetle barışıldı</b>` : "Öldürüldü";
+          const dc = diyetCost(n.lv);
+          const btn = n.alive ? `<div class="col2"><button class="btn sm" data-a="${this.act(() => { this.close(); const p = out ?? s.camps[n.camp]; g.cam.flyTo(p.x, p.y, 0.8); })}">Bul</button>${n.han ? "" : `<button class="btn sm ${s.res.gold < dc ? "off" : ""}" title="Töreye göre kan bedeli öde, davayı kapat" data-a="${this.act(() => g.payDiyet(n.id))}">Diyet ${dc}</button>`}</div>` : n.bro ? `<em class="cheap">⚭</em>` : `<em class="cheap">${n.peace ? "☮" : "✓"}</em>`;
           return `<div class="grow nem ${n.alive || n.bro ? "" : "dim dead"} ${n.han ? "han" : ""}">${ic("j_bandit", "gimg")}<div class="bi2"><b>${nemName(n)}</b> <small>Sv ${n.lv}</small><small>${t.name} · ${t.desc}</small><small>${where}${n.wins ? ` · seni ${n.wins} kez yendi` : ""}${n.scars ? ` · ${n.scars} yara izi` : ""}</small></div>${btn}</div>`;
         })
         .join("")

@@ -16,7 +16,7 @@ import { DAILY_POOL, today, yesterday, type Daily, type DailyTask } from "./dail
 import { gen } from "./text";
 import { BREEDS, BREED_GOLD, BREED_TIME, SHOP_BREEDS, tulparChance, type Breed } from "./horse";
 import { BIRDS, BIRD_KEYS, BIRD_MAX, BIRD_NAMES, HUNTS, birdSight, birdXpNeed, type BirdFlight, type BirdKind } from "./falcon";
-import { BRO_BETRAY, BRO_MAX, BRO_MODS, LAST_WORDS, NEM_MAX, NEM_TRAITS, REVENGE, SCAR_EPITHETS, TAUNTS, makeNemesis, nemBoss, nemName, type Nemesis } from "./nemesis";
+import { BRO_BETRAY, BRO_MAX, BRO_MODS, LAST_WORDS, NEM_MAX, NEM_TRAITS, REVENGE, SCAR_EPITHETS, TAUNTS, diyetCost, makeNemesis, nemBoss, nemName, type Nemesis } from "./nemesis";
 import { REQ_GOODS, REQ_INFO, RIVAL_DEFS, RIVAL_LINES, RIVAL_TRAITS, STATUS_NAME, giftCost, oneOf, reqGold, rivalArmy, rivalBoss, rivalName, tribute, type BeyReq, type Rival } from "./rivals";
 import { CITY_BLDS, CITY_EVENTS, ENGINE_GOLD, FEAST_GOLD, GOVERNORS, GOV_GOLD, SIEGE_LV, SIEGE_RENOWN, TAX, cityBldCost, cityGarrison, cityTax, wallBonus, type CityBld, type CityEvent, type Governor } from "./conquest";
 import { DEEP_LORE, DEEP_PERKS, DOORS, DOOR_KEYS, RIDDLES, TOMBS, deepBoss, deepGuard, deepTier, tombOf, type DeepPerk, type DeepRun, type DoorKind } from "./deep";
@@ -6005,6 +6005,22 @@ export class Game {
         this.hud.toast(`${c.v.name} köyüne harami baskını! Yardıma koş.`, "bad");
       }
     }
+  }
+
+  /** Töre: kan bedeli ödeyip davayı kan dökmeden kapat. */
+  payDiyet(id: number): void {
+    const s = this.s;
+    const n = s.nemeses.find((x) => x.id === id);
+    if (!n || !n.alive || n.han) return;
+    const cost = diyetCost(n.lv);
+    if (s.res.gold < cost) return this.hud.toast("Diyet için altının yetmiyor", "bad");
+    s.res.gold -= cost;
+    n.alive = false;
+    n.peace = true;
+    this.addKut(3, "töreye göre diyet ödedin");
+    this.chron(`${s.hero.name}, ${nemName(n)} ile aksakallar önünde diyet ödeyip barıştı. Kan davası töreyle kapandı.`);
+    this.hud.story("Diyet", "icons/seal", `Aksakallar halka oldu. ${nemName(n)} kılıcını yere koydu, sen <b>${cost}</b> altın kan bedelini önüne bıraktın. Bir kâse kımız paylaşıldı.<br><br>"Töre kandan büyüktür."<br><br><b class="cheap">Kan davası kapandı · +3 kut</b>`, "Barış olsun");
+    saveGame(s);
   }
 
   // ---------- söylenti ve haber hızı ----------
