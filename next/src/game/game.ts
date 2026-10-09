@@ -34,6 +34,7 @@ import { ACHIEVEMENTS, steamUnlock, storeUnlocked, unlockedSet } from "./achieve
 import { CODEX, codexTitle } from "./codex";
 import { ORIGIN_BY_ID, type OriginId } from "./origins";
 import { SUREK_FOOD, WR_FOES } from "./games";
+import { BALBAL_GOLD, BALBAL_MAX, BALBAL_STONE, YUG_LATE, balbalBonus, yugCost, type Fallen, type Foe } from "./yug";
 import type { WrestleFoe } from "../ui/wrestle";
 import { SIEGE_MAX_DAY, newSiege, siegeDay, siegeGar, siegeWall, type SiegeAct, type SiegeCtx, type SiegeRun } from "./siege";
 import { BOND_FX, BOND_LEAVE, BOND_QUEST, BOND_START, COMP_QUESTS, SWORN_MULT, type BondEvent, type CompQuest, type CqChoice } from "./bonds";
@@ -625,7 +626,7 @@ export class Game {
   }
 
   heroBonus(): number {
-    return 0.025 * this.stat("lid") + 0.02 * (this.s.hero.lv - 1) + this.cls().mods.army + this.compMods().army + 0.03 * this.tal("nara") + (this.buff("davul") ? 0.15 : 0) + (this.buff("surek") ? 0.08 : 0) + (this.gearMods().army ?? 0) + this.heroRankBonus() + this.allyBonus() + (hasLegacy("tengri") ? 0.06 : 0) + vetBonus(this.s.vets ?? []) + (this.s.beylik ? kutArmy(this.s.kut ?? 50) : 0) + this.famBonus();
+    return 0.025 * this.stat("lid") + 0.02 * (this.s.hero.lv - 1) + this.cls().mods.army + this.compMods().army + 0.03 * this.tal("nara") + (this.buff("davul") ? 0.15 : 0) + (this.buff("surek") ? 0.08 : 0) + (this.buff("yug") ? 0.05 : 0) + balbalBonus(this.s.foes ?? []) + (this.gearMods().army ?? 0) + this.heroRankBonus() + this.allyBonus() + (hasLegacy("tengri") ? 0.06 : 0) + vetBonus(this.s.vets ?? []) + (this.s.beylik ? kutArmy(this.s.kut ?? 50) : 0) + this.famBonus();
   }
 
   addKut(n: number, why = ""): void {
@@ -2629,6 +2630,7 @@ export class Game {
         const wasHan = n.han;
         this.chron(`${n.wins ? `${n.wins} kez galip gelen ` : ""}${nemName(n)}, ${s.hero.name} karşısında son nefesini verdi. Kan davası kapandı.`);
         this.sing("kan", { foe: nemName(n) });
+        this.addFoe(nemName(n), "nemesis");
         const renown = 10 + 8 * n.lv + (wasHan ? 60 : 0);
         s.renown += renown;
         this.repNear(b.x, b.y, 15 + 5 * n.lv, `${nemName(n)} öldürüldü`);
@@ -3075,6 +3077,7 @@ export class Game {
     const extra = after(res.win);
     this.addKut(res.win ? (boss ? 3 : 1) : -2);
     this.bondEvent(res.win ? (boss ? "boss" : "win") : "lose");
+    if (res.win && boss) this.addFoe(boss.name, "boss");
     const dir = this.dir();
     dir.fight = this.dayOf().day;
     dir.losses = res.win ? 0 : dir.losses + 1;
@@ -3106,6 +3109,7 @@ export class Game {
       const risk = (lost / had) * (res.win ? 0.35 : 0.6) * (1 - v.lv * 0.08);
       if (Math.random() < risk || s.hero.army[v.u] <= 0) {
         s.vets = s.vets.filter((x) => x.id !== v.id);
+        (s.fallen ??= []).push({ name: vetTitle(v), lv: v.lv, kills: v.kills, day });
         this.chron(`${VET_RANKS[v.lv - 1]} ${vetTitle(v)}, ${title.replace(/<[^>]+>/g, "")} savaşında düştü. ${v.kills} düşman götürdü yanında.`);
         out.push(`<b class="dear">${vetTitle(v)} şehit düştü.</b>`);
         if (v.lv >= 2) this.sing("gazi", { foe: vetTitle(v) });
@@ -3705,6 +3709,7 @@ export class Game {
     for (const o of Object.values(s.owned)) this.addKut(o.tax === 2 ? -1 : o.tax === 0 ? 0.5 : 0);
     if (Object.values(s.owned).some((o) => o.tax === 2)) this.bondEvent("taxHeavy");
     this.bondDaily();
+    this.yugDaily(day);
     if (this.kurAnn !== s.kurultay.held && /Semerkant|^$/.test(this.kurultayReason())) {
       this.kurAnn = s.kurultay.held;
       this.hud.toast("Beyler Semerkant'ta kurultaya hazır. Hedefler sekmesinden topla.", "good");
@@ -3921,6 +3926,77 @@ export class Game {
     if (best && score >= 300) this.chron(`${s.hero.name} at üstünde ${hits} kabak vurdu; ihtiyarlar Mete Han'dan beri böylesini görmediklerini söyledi.`);
     saveGame(s);
     return `${best ? "<b class=\"cheap\">Yeni rekor!</b><br>" : ""}+${gold} altın · +${renown} şöhret · +${xp} tecrübe`;
+  }
+
+  addFoe(name: string, kind: Foe["kind"]): void {
+    const foes = (this.s.foes ??= []);
+    if (foes.some((f) => f.name === name)) return;
+    foes.push({ name, kind, day: this.dayOf().day });
+  }
+
+  unmourned(): Fallen[] {
+    return (this.s.fallen ?? []).filter((f) => !f.mourned);
+  }
+
+  yugReason(): string {
+    const n = this.unmourned().length;
+    if (!n) return tr("Yas tutulacak gazi yok");
+    const c = yugCost(n);
+    if (this.s.res.food < c.food || this.s.res.gold < c.gold) return `${c.food} ${tr("yiyecek")}, ${c.gold} ${tr("altın")} ${tr("gerekir")}`;
+    return "";
+  }
+
+  holdYug(): void {
+    if (this.yugReason()) return;
+    const s = this.s;
+    const list = this.unmourned();
+    const c = yugCost(list.length);
+    s.res.food -= c.food;
+    s.res.gold -= c.gold;
+    const late = list.filter((f) => f.warned).length;
+    for (const f of list) f.mourned = true;
+    const kut = Math.min(6, list.length * 2 - late);
+    this.addKut(kut, "yuğ");
+    s.renown += 4 * list.length;
+    s.buffs.yug = 3;
+    for (const v of s.vets ?? []) v.xp += 20;
+    this.bondEvent("feast");
+    const names = list.map((f) => f.name).join(", ");
+    this.chron(`${names} için yuğ töreni yapıldı; ağıtlar yakıldı, atları kurgana gömüldü.`);
+    audio.play("quest");
+    this.hud.story(tr("Yuğ"), "icons/tug", `Kurganın başında ateşler yakıldı. Ozanlar <b>${names}</b> için ağıt yaktı; yiğitlerin atlarının yeleleri kesildi, kımız toprağa döküldü.<br><br>Ordunun yüreği hafifledi: <b class="cheap">sonraki 3 savaşta +%5 güç</b>, gazilere tecrübe.${kut > 0 ? ` +${kut} kut.` : ""}`, tr("Ruhları şad olsun"));
+    saveGame(s);
+  }
+
+  balbalReason(f: Foe): string {
+    const s = this.s;
+    if (f.raised) return tr("Dikildi");
+    if (!s.beylik) return tr("Önce beyliğini kur");
+    if ((s.foes ?? []).filter((x) => x.raised).length >= BALBAL_MAX) return tr("Kurgan dolu");
+    if (s.res.stone < BALBAL_STONE || s.res.gold < BALBAL_GOLD) return `${BALBAL_STONE} ${tr("taş")}, ${BALBAL_GOLD} ${tr("altın")}`;
+    return "";
+  }
+
+  raiseBalbal(i: number): void {
+    const s = this.s;
+    const f = s.foes?.[i];
+    if (!f || this.balbalReason(f)) return;
+    s.res.stone -= BALBAL_STONE;
+    s.res.gold -= BALBAL_GOLD;
+    f.raised = true;
+    s.renown += 5;
+    this.chron(`Kurgana ${f.name} için bir balbal dikildi; öbür dünyada ${s.hero.name}'e kul olacak.`);
+    this.hud.toast(`${tr("Balbal dikildi")}: ${f.name}`, "good");
+    audio.play("quest");
+    saveGame(s);
+  }
+
+  private yugDaily(day: number): void {
+    for (const f of this.unmourned()) {
+      if (f.warned || day - f.day < YUG_LATE) continue;
+      f.warned = true;
+      this.addKut(-1, `${f.name} için yuğ tutulmadı`);
+    }
   }
 
   surekReason(): string {
@@ -4480,6 +4556,7 @@ export class Game {
           for (const o of s.rivals) if (o !== r && o.status !== "dead") o.rel -= o.trait === "onurlu" ? 25 : 12;
           if (r.wed) this.addKut(-12, "dünürünü öldürdün");
           this.chron(`${dead} ${gen(s.hero.name)} kılıcıyla can verdi. Bozkırda bir tuğ daha devrildi.`);
+          this.addFoe(dead, "rival");
           this.sing("biat", { foe: dead });
           this.hud.toast(`${dead} öldü. +80 şöhret, +3 Ruh Taşı. Diğer beyler tedirgin.`, "bad");
           this.succeed(r, "kilic");

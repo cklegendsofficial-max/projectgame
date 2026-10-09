@@ -17,6 +17,7 @@ import { FAMILY_DEFAULT, type Family } from "./dynasty";
 import type { BoyState } from "./korkut";
 import type { CompId } from "./story";
 import type { OriginId } from "./origins";
+import type { Fallen, Foe } from "./yug";
 
 export interface Village {
   name: string;
@@ -284,6 +285,8 @@ export interface GameState {
   cqAsk: Record<string, number>;
   origin?: OriginId;
   surekDay?: number;
+  fallen?: Fallen[];
+  foes?: Foe[];
   games?: { wrDay: number; wrRound: number; kbDay: number; kbBest: number; champ: number };
 }
 

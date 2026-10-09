@@ -30,6 +30,7 @@ import { assetUrl } from "../render/worldView";
 import { audio } from "../audio";
 import { LANGS, lang, t, type Lang } from "../i18n";
 import { SUREK_FOOD } from "../game/games";
+import { BALBAL_GOLD, BALBAL_MAX, BALBAL_STONE, FOE_KIND, balbalBonus, yugCost } from "../game/yug";
 import { SIEGE_ACTS, SIEGE_MAX_DAY, parleyChance, siegeGar } from "../game/siege";
 import { ORIGINS, ORIGIN_BY_ID, type Origin, type OriginId } from "../game/origins";
 import { BOND_LIKES, BOND_LIKES_EN, BOND_QUEST, COMP_QUESTS, SWORN_MULT, bondTier } from "../game/bonds";
@@ -1638,6 +1639,23 @@ export class Hud {
       ${o ? `<button class="btn sm" data-a="${this.act(() => { this.close(); g.cam.flyTo(o.x, o.y, 0.8); })}">Otağı göster</button>` : ""}`;
   }
 
+  private yugHtml(): string {
+    const g = this.g, s = g.s, en = lang() === "en";
+    const un = g.unmourned();
+    const foes = s.foes ?? [];
+    const raised = foes.filter((f) => f.raised);
+    if (!un.length && !foes.length && !(s.fallen ?? []).length) return `<h3>${ic("tug")} ${t("Yuğ ve Balbal")}</h3><p class="dim">${t("Savaşta düşen gaziler için yuğ töreni tutulur. Öldürdüğün can düşmanları, beyler ve efsanevi düşmanlar için kurganına balbal dikebilirsin.")}</p>`;
+    const c = yugCost(un.length);
+    const why = g.yugReason();
+    const yug = un.length
+      ? `<div class="grow">${ic("tug", "gimg")}<div class="bi2"><b>${t("Yuğ töreni")} <em>${un.length} ${t("gazi")}</em></b><small>${un.map((f) => `${f.name}${f.warned ? " ⚠" : ""}`).join(", ")}</small><small class="${why ? "dim" : "cheap"}">${why || `${c.food} ${t("yiyecek")} · ${c.gold} ${t("altın")} · ${t("3 savaş +%5 güç, kut")}`}</small></div><button class="btn sm go ${why ? "off" : ""}" data-a="${this.act(() => g.holdYug())}">${t("Yas tut")}</button></div>`
+      : `<p class="dim">${t("Bütün gazilerin yası tutuldu.")} (${(s.fallen ?? []).length})</p>`;
+    const stones = raised.length ? `<div class="balbals">${raised.map((f) => `<div class="balbal" title="${f.name}"><i></i><small>${f.name.split(" ").slice(-1)[0]}</small></div>`).join("")}</div>` : "";
+    const rows = foes.map((f, i) => (f.raised ? "" : `<div class="grow sm">${ic(f.kind === "boss" ? "trophy" : f.kind === "rival" ? "lord_bey" : "j_bandit", "gimg")}<div class="bi2"><b>${f.name} <em>${FOE_KIND[f.kind][en ? 1 : 0]}</em></b><small class="dim">${g.balbalReason(f) || `${BALBAL_STONE} ${t("taş")} · ${BALBAL_GOLD} ${t("altın")}`}</small></div><button class="btn sm go ${g.balbalReason(f) ? "off" : ""}" data-a="${this.act(() => g.raiseBalbal(i))}">${t("Balbal dik")}</button></div>`)).join("");
+    return `<h3>${ic("tug")} ${t("Yuğ ve Balbal")}</h3>${yug}
+      <h3>${ic("stone")} ${t("Kurgan")} <small class="dim">${raised.length}/${BALBAL_MAX} · ${t("ordu")} +${(balbalBonus(foes) * 100).toFixed(1)}%</small></h3>${stones}${rows}`;
+  }
+
   private kutHtml(): string {
     const s = this.g.s;
     const k = s.kut ?? 50;
@@ -1974,7 +1992,7 @@ export class Hud {
     } else if (this.tab === "bitig") {
       body = this.bitigHtml();
     } else if (this.tab === "unvan") {
-      body = this.dailyHtml() + (s.beylik ? this.kutHtml() + this.familyHtml() : "") + (s.free ? this.korkutHtml() + this.gamesHtml() + this.ozanHtml() : "") + this.kurultayHtml() + this.rivalsHtml() + this.nemesisHtml() + this.titlesHtml();
+      body = this.dailyHtml() + (s.beylik ? this.kutHtml() + this.familyHtml() : "") + (s.free ? this.korkutHtml() + this.gamesHtml() + this.yugHtml() + this.ozanHtml() : "") + this.kurultayHtml() + this.rivalsHtml() + this.nemesisHtml() + this.titlesHtml();
     } else if (this.tab === "techizat") {
       const inCity = g.nearCity() >= 0;
       body = `<div class="slots">` + SLOTS.map((sl) => {
@@ -1983,7 +2001,7 @@ export class Hud {
       }).join("") + `</div><p class="dim">Kuşanılmış bir eşyaya dokunarak çıkarabilirsin. Eşyaları şehirlerde satabilirsin.</p>` + this.setsHtml() +
         (CONSUMABLES.some((c) => s.cons[c.id]) || Object.keys(s.buffs).length
           ? `<h3>${ic("healer")} Çanta</h3>` +
-            (Object.keys(s.buffs).length ? `<div class="odds good">Etkin: ${Object.entries(s.buffs).map(([k, n]) => `${CONS_BY_ID[k]?.name ?? (k === "surek" ? t("Sürek avı talimi") : k)} (${n} savaş)`).join(" · ")}</div>` : "") +
+            (Object.keys(s.buffs).length ? `<div class="odds good">Etkin: ${Object.entries(s.buffs).map(([k, n]) => `${CONS_BY_ID[k]?.name ?? (k === "surek" ? t("Sürek avı talimi") : k === "yug" ? t("Yuğ") : k)} (${n} savaş)`).join(" · ")}</div>` : "") +
             CONSUMABLES.filter((c) => s.cons[c.id]).map((c) => `<div class="grow">${ic(c.icon, "gimg")}<div class="bi2"><b>${c.name} <em>×${s.cons[c.id]}</em></b><small>${c.desc}</small></div><button class="btn sm go" data-a="${this.act(() => g.useCons(c.id))}">Kullan</button></div>`).join("")
           : "") +
         `<h3>${ic("schest")} Heybe</h3>` +
