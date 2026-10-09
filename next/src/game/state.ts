@@ -177,6 +177,7 @@ export interface Counters {
   slain: number;
   foals: number;
   conquests: number;
+  beyq: number;
 }
 
 export interface GameState {
@@ -375,7 +376,7 @@ export function banditArmy(tier: number): Army {
 }
 
 export function newCounters(): Counters {
-  return { shifts: 0, trains: 0, profit: 0, wins: 0, recruits: 0, bought: 0, moved: 0, camps: 0, built: 0, trained: 0, marched: 0, spent: 0, plus: 0, kurgans: 0, contracts: 0, crafted: 0, raids: 0, sides: 0, robbed: 0, rescued: 0, floors: 0, slain: 0, foals: 0, conquests: 0 };
+  return { shifts: 0, trains: 0, profit: 0, wins: 0, recruits: 0, bought: 0, moved: 0, camps: 0, built: 0, trained: 0, marched: 0, spent: 0, plus: 0, kurgans: 0, contracts: 0, crafted: 0, raids: 0, sides: 0, robbed: 0, rescued: 0, floors: 0, slain: 0, foals: 0, conquests: 0, beyq: 0 };
 }
 
 export function newGame(w: World): GameState {

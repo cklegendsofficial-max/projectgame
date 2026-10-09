@@ -20,7 +20,7 @@ import { BIRDS, birdSight, birdXpNeed } from "../game/falcon";
 import { BREEDS, BREED_GOLD, BREED_TIME } from "../game/horse";
 import { TITLE_CATS, titleKey, titleOf } from "../game/titles";
 import { DAILY_POOL } from "../game/daily";
-import { RIVAL_TRAITS, STATUS_NAME } from "../game/rivals";
+import { REQ_INFO, RIVAL_TRAITS, STATUS_NAME } from "../game/rivals";
 import { DEEP_PERKS, TOMBS, tombOf } from "../game/deep";
 import { ENGINE_GOLD as ENGINE_GOLD_UI, FEAST_GOLD as FEAST_GOLD_UI, TAX as TAX_UI } from "../game/conquest";
 
@@ -464,7 +464,12 @@ export class Hud {
           const t = RIVAL_TRAITS[r.trait];
           const dead = r.status === "dead";
           const btn = dead ? `<em class="dim">✝</em>` : `<button class="btn sm" data-a="${this.act(() => { this.close(); g.cam.flyTo(r.x, r.y, 0.8); })}">Bul</button>`;
-          return `<div class="grow rival ${dead ? "dim dead" : ""}">${ic(r.icon, "gimg")}<div class="bi2"><b>${r.name} ${r.title}</b> <small style="color:${RIVAL_CSS[r.status]}">${STATUS_NAME[r.status]}</small><small>${t.name} · Sv ${r.lv} · ${armySize(r.army)} asker · ${CITY_NAME[r.home]} yöresi</small>${dead ? "" : bar(r.rel + 100, 200, r.rel < 0 ? "hp" : "", `Dostluk ${Math.round(r.rel)}`)}</div>${btn}</div>`;
+          const q = r.req;
+          const p = q && g.reqGoto(r);
+          const reqRow = q
+            ? `<div class="grow req">${ic(REQ_INFO[q.kind].icon, "gimg")}<div class="bi2"><b>${REQ_INFO[q.kind].name} <em>· ${Math.max(0, q.until - g.dayOf().day + 1)} gün</em></b><small>${g.reqText(r)}</small><small class="cheap">Ödül: ${q.gold} altın · dostluk</small></div>${p ? `<button class="btn sm go" data-a="${this.act(() => { this.close(); g.cam.flyTo(p.x, p.y, 0.8); })}">Git</button>` : ""}</div>`
+            : "";
+          return `<div class="grow rival ${dead ? "dim dead" : ""}">${ic(r.icon, "gimg")}<div class="bi2"><b>${r.name} ${r.title}</b> <small style="color:${RIVAL_CSS[r.status]}">${STATUS_NAME[r.status]}</small><small>${t.name} · Sv ${r.lv} · ${armySize(r.army)} asker · ${CITY_NAME[r.home]} yöresi</small>${dead ? "" : bar(r.rel + 100, 200, r.rel < 0 ? "hp" : "", `Dostluk ${Math.round(r.rel)}`)}</div>${btn}</div>${reqRow}`;
         })
         .join("")
     );
@@ -1024,6 +1029,10 @@ export class Hud {
         <div class="stats">${UNIT_KEYS.map((u) => `<div>${ic(UNITS[u].icon)}${UNITS[u].name}: <b>${gar[u]}</b></div>`).join("")}<div>${ic("fortress")}Sur: <b>+%${Math.round(wall * 100)}</b></div></div>
         <div class="grow">${ic("siege", "gimg")}<div class="bi2"><b>Mancınık <em>${s.engines}/3</em></b><small>Her biri sur bonusunu %10 düşürür. Bir kuşatmada harcanır.</small></div><button class="btn sm ${s.engines >= 3 || s.res.gold < ENGINE_GOLD_UI ? "off" : ""}" data-a="${this.act(() => g.buyEngine())}">Kur<br>${ic("coins")}${ENGINE_GOLD_UI}</button></div>
         <p class="dim">Kuşatmaya birliğinle birlikte beyliğinin kışla garnizonu da katılır: <b>${armySize(s.hero.army)}</b> + <b>${armySize(s.garrison)}</b> asker. Sağ kalanlar kışlaya döner.</p>
+        ${(() => {
+          const hp = g.seferHelp(city);
+          return hp ? `<div class="odds good">${ic("tug")} Ortak sefer: <b>${hp.r.name} ${hp.r.title}</b> ${armySize(hp.a)} askerle yanında yürüyor!</div>` : "";
+        })()}
         <div class="odds ${ocls}">Zafer ihtimali: <b>%${Math.round(od * 100)}</b></div>
         ${why ? `<p class="why">${why}</p>` : ""}
         <button class="btn go big ${why || !near ? "off" : ""}" data-a="${this.act(() => { this.close(); g.besiege(city); })}">${ic("swords")} Kuşat</button>`;

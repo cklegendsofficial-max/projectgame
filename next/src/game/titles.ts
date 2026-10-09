@@ -23,6 +23,7 @@ export const TITLE_CATS: TitleCat[] = [
   { id: "slain", icon: "j_bandit", what: "can düşmanı öldür", value: (s) => s.c.slain, tiers: [{ need: 1, name: "Kan Alan", mods: { crit: 0.02, atk: 0.02 } }, { need: 5, name: "İntikamcı", mods: { crit: 0.04, atk: 0.04 } }, { need: 15, name: "Reislerin Kâbusu", mods: { crit: 0.06, atk: 0.07 } }] },
   { id: "foals", icon: "foal", what: "tay yetiştir", value: (s) => s.c.foals, tiers: [{ need: 1, name: "Seyis", mods: { carry: 15 } }, { need: 6, name: "Atbaşı", mods: { carry: 30, spd: 0.03 } }, { need: 20, name: "Tulpar Yetiştiren", mods: { carry: 50, spd: 0.06 } }] },
   { id: "conq", icon: "siege", what: "şehir fethet", value: (s) => s.c.conquests ?? 0, tiers: [{ need: 1, name: "Kale Yıkan", mods: { army: 0.03 } }, { need: 3, name: "Fatih", mods: { army: 0.06, atk: 0.03 } }, { need: 6, name: "Cihangir", mods: { army: 0.1, atk: 0.05 } }] },
+  { id: "beyq", icon: "lord_bey", what: "bey isteğini yerine getir", value: (s) => s.c.beyq ?? 0, tiers: [{ need: 2, name: "Sözünün Eri", mods: { loot: 0.05 } }, { need: 6, name: "Beylerin Dostu", mods: { loot: 0.08, army: 0.03 } }, { need: 15, name: "Kurultay Başı", mods: { loot: 0.12, army: 0.06 } }] },
   { id: "lv", icon: "crown", what: "seviyeye ulaş", value: (s) => s.hero.lv, tiers: [{ need: 10, name: "Alp", mods: { spd: 0.03 } }, { need: 20, name: "Bey", mods: { spd: 0.06 } }, { need: 30, name: "Han", mods: { spd: 0.1 } }] },
 ];
 

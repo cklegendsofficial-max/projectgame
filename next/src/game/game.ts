@@ -16,7 +16,7 @@ import { gen } from "./text";
 import { BREEDS, BREED_GOLD, BREED_TIME, SHOP_BREEDS, tulparChance, type Breed } from "./horse";
 import { BIRDS, BIRD_KEYS, BIRD_MAX, BIRD_NAMES, HUNTS, birdSight, birdXpNeed, type BirdFlight, type BirdKind } from "./falcon";
 import { BRO_BETRAY, BRO_MAX, BRO_MODS, LAST_WORDS, NEM_MAX, NEM_TRAITS, REVENGE, SCAR_EPITHETS, TAUNTS, makeNemesis, nemBoss, nemName, type Nemesis } from "./nemesis";
-import { RIVAL_DEFS, RIVAL_LINES, RIVAL_TRAITS, STATUS_NAME, giftCost, oneOf, rivalArmy, rivalBoss, rivalName, tribute, type Rival } from "./rivals";
+import { REQ_GOODS, REQ_INFO, RIVAL_DEFS, RIVAL_LINES, RIVAL_TRAITS, STATUS_NAME, giftCost, oneOf, reqGold, rivalArmy, rivalBoss, rivalName, tribute, type BeyReq, type Rival } from "./rivals";
 import { ENGINE_GOLD, FEAST_GOLD, SIEGE_LV, SIEGE_RENOWN, TAX, cityGarrison, cityTax, wallBonus } from "./conquest";
 import { DEEP_LORE, DEEP_PERKS, DOORS, DOOR_KEYS, RIDDLES, TOMBS, deepBoss, deepGuard, deepTier, tombOf, type DeepPerk, type DeepRun, type DoorKind } from "./deep";
 import { SEASONS, SEASON_DAYS, seasonOf, type Season, type SeasonId } from "./seasons";
@@ -81,6 +81,7 @@ export class Game {
   birdAim = false;
   fogRev = 0;
   private lastSeason: SeasonId | null = null;
+  private reqT = 2;
   private wasNight = false;
   private deepBest0 = 0;
   private afterBattle: (() => void) | null = null;
@@ -2623,14 +2624,21 @@ export class Game {
     if (!s.beylik) return "Şehir kuşatmak için önce beyliğini kur.";
     if (s.hero.lv < SIEGE_LV) return `Kuşatma için en az ${SIEGE_LV}. seviye ol.`;
     if (s.renown < SIEGE_RENOWN) return `Ordular senin ardından yürümez: en az ${SIEGE_RENOWN} şöhret gerek.`;
-    if (armySize(this.siegeArmy()) < 25) return "Surlara en az 25 askerle yürünür (birliğin + beylik garnizonu).";
+    if (armySize(this.siegeArmy(city)) < 25) return "Surlara en az 25 askerle yürünür (birliğin + beylik garnizonu).";
     return "";
   }
 
-  siegeArmy(): Army {
+  siegeArmy(city?: string): Army {
     const h = this.s.hero.army;
     const g = this.s.garrison;
-    return { spear: h.spear + g.spear, archer: h.archer + g.archer, horse: h.horse + g.horse };
+    const a = (city && this.seferHelp(city)?.a) || army();
+    return { spear: h.spear + g.spear + a.spear, archer: h.archer + g.archer + a.archer, horse: h.horse + g.horse + a.horse };
+  }
+
+  seferHelp(city: string): { r: Rival; a: Army } | null {
+    const r = this.s.rivals.find((x) => x.status === "ally" && x.req?.kind === "sefer" && x.req.city === city);
+    if (!r) return null;
+    return { r, a: { spear: Math.floor(r.army.spear / 2), archer: Math.floor(r.army.archer / 2), horse: Math.floor(r.army.horse / 2) } };
   }
 
   cityGar(city: string): Army {
@@ -2642,7 +2650,7 @@ export class Game {
   }
 
   siegeOdds(city: string): number {
-    return odds(this.siegeArmy(), this.heroBonus(), this.cityGar(city), this.siegeWall(city), this.champion(), null);
+    return odds(this.siegeArmy(city), this.heroBonus(), this.cityGar(city), this.siegeWall(city), this.champion(), null);
   }
 
   buyEngine(): void {
@@ -2666,21 +2674,26 @@ export class Game {
     const used = s.engines;
     s.engines = 0;
     const g0 = { ...s.garrison };
-    const tot = this.siegeArmy();
+    const help = this.seferHelp(city);
+    const a0 = help?.a ?? army();
+    const tot = this.siegeArmy(city);
     s.hero.army = { ...tot };
     s.garrison = army();
     this.retreatHook = () => {
-      for (const u of UNIT_KEYS) s.hero.army[u] -= g0[u];
+      for (const u of UNIT_KEYS) s.hero.army[u] -= g0[u] + a0[u];
       s.garrison = g0;
       s.engines = used;
       this.hud.toast("Kuşatmadan vazgeçtin; ordu kışlaya döndü.");
     };
-    this.battle(`${name} kuşatması`, gar, wall, (win) => {
+    this.battle(`${name} kuşatması${help ? ` · ${rivalName(help.r)} yanında` : ""}`, gar, wall, (win) => {
       this.retreatHook = null;
       for (const u of UNIT_KEYS) {
-        const back = tot[u] ? Math.min(s.hero.army[u], Math.round((g0[u] * s.hero.army[u]) / tot[u])) : 0;
-        s.hero.army[u] -= back;
+        const left = s.hero.army[u];
+        const back = tot[u] ? Math.min(left, Math.round((g0[u] * left) / tot[u])) : 0;
+        const ally = tot[u] ? Math.min(left - back, Math.round((a0[u] * left) / tot[u])) : 0;
+        s.hero.army[u] -= back + ally;
         s.garrison[u] += back;
+        if (help) help.r.army[u] = Math.max(0, help.r.army[u] - a0[u] + ally);
       }
       s.rep[f] = Math.max(-500, this.rep(f) - (win ? 400 : 150));
       if (!win) {
@@ -2806,6 +2819,11 @@ export class Game {
       s.rivalDay = day;
       this.rivalDaily();
     }
+    this.reqT -= dt;
+    if (this.reqT <= 0) {
+      this.reqT = 1.5;
+      this.reqTick();
+    }
     const h = s.hero;
     const heroPow = this.heroPower();
     const safe = this.nearCity() >= 0 || Math.hypot(h.x - CAPITAL.x, h.y - CAPITAL.y) < 450;
@@ -2914,6 +2932,8 @@ export class Game {
         }
       }
     }
+    const asks = live.filter((r) => (r.status === "ally" || r.status === "vassal") && !r.req);
+    if (asks.length && Math.random() < 0.55) this.reqNew(oneOf(asks));
     const fight2 = live.filter((r) => r.status === "peace" || r.status === "war");
     if (fight2.length >= 2 && Math.random() < 0.3) {
       const a = fight2[Math.floor(Math.random() * fight2.length)];
@@ -2946,6 +2966,12 @@ export class Game {
       f();
     };
     const opts: { label: string; cls: string; fn: () => void }[] = [];
+    const q = r.req;
+    if (q?.kind === "goods") {
+      const ok = (s.hero.cargo[q.good!] ?? 0) >= q.n!;
+      opts.push({ label: `${q.n} ${GOODS[q.good!].name} teslim et · +${q.gold} altın`, cls: ok ? "go" : "off", fn: done(() => this.deliverReq(i)) });
+    }
+    if (q) opts.push({ label: `İsteği geri çevir (${REQ_INFO[q.kind].name})`, cls: "", fn: done(() => this.dropReq(i)) });
     if (r.status === "peace" || r.status === "ally")
       opts.push({ label: `Hediye gönder · ${cost} altın`, cls: s.res.gold >= cost ? "go" : "off", fn: done(() => this.rivalGift(i)) });
     if (r.status === "peace") {
@@ -2965,7 +2991,7 @@ export class Game {
     this.hud.choice(
       rivalName(r),
       `icons/${r.icon}`,
-      `<i>"${line}"</i><br><br><b>${tr.name}</b> · ${tr.desc}<br>Durum: <b>${STATUS_NAME[r.status]}</b> · Dostluk: <b>${Math.round(r.rel)}</b> · Seviye ${r.lv} · ${armySize(r.army)} asker`,
+      `<i>"${q ? REQ_INFO[q.kind].line : line}"</i><br><br><b>${tr.name}</b> · ${tr.desc}<br>Durum: <b>${STATUS_NAME[r.status]}</b> · Dostluk: <b>${Math.round(r.rel)}</b> · Seviye ${r.lv} · ${armySize(r.army)} asker${q ? `<br><br><b>İstek:</b> ${this.reqText(r)} · ödül ${q.gold} altın · son gün ${q.until}` : ""}`,
       opts,
     );
   }
@@ -3068,6 +3094,123 @@ export class Game {
         } },
       ],
     );
+  }
+
+  // ---------- bey requests ----------
+
+  reqText(r: Rival): string {
+    const q = r.req;
+    if (!q) return "";
+    const s = this.s;
+    if (q.kind === "camp") return `${s.camps[q.camp!]?.name ?? "Harami"} kampını dağıt`;
+    if (q.kind === "goods") return `${q.n} ${GOODS[q.good!].name} getir (yükünde ${s.hero.cargo[q.good!] ?? 0})`;
+    if (q.kind === "foe") {
+      const f = s.rivals.find((x) => x.id === q.foe);
+      return `${f ? rivalName(f) : "Düşman"} ordusunu yen`;
+    }
+    return `${CITY_NAME[q.city!]} şehrini birlikte fethet (ordusunun yarısı kuşatmana katılır)`;
+  }
+
+  reqGoto(r: Rival): { x: number; y: number } | null {
+    const q = r.req;
+    if (!q) return null;
+    if (q.kind === "camp") return this.s.camps[q.camp!] ?? null;
+    if (q.kind === "foe") return this.s.rivals.find((x) => x.id === q.foe) ?? null;
+    if (q.kind === "sefer") return this.cityPos(q.city!);
+    return r;
+  }
+
+  private reqDone(r: Rival): boolean {
+    const q = r.req!;
+    const s = this.s;
+    if (q.kind === "camp") return !s.camps[q.camp!]?.alive;
+    if (q.kind === "foe") {
+      const f = s.rivals.find((x) => x.id === q.foe);
+      return !f || f.status === "dead" || f.defeats > (q.base ?? 0);
+    }
+    if (q.kind === "sefer") return !!s.owned[q.city!];
+    return false;
+  }
+
+  private reqNew(r: Rival): void {
+    const s = this.s;
+    const home = this.cityPos(r.home);
+    const day = this.dayOf().day;
+    const opts: BeyReq[] = [];
+    const camps = s.camps.map((c, i) => ({ c, i, d: Math.hypot(c.x - home.x, c.y - home.y) })).filter((x) => x.c.alive && x.d < 1600).sort((a, b) => a.d - b.d);
+    if (camps.length) opts.push({ kind: "camp", camp: camps[0].i, until: day + REQ_INFO.camp.days, gold: reqGold("camp", r.lv) });
+    const good = oneOf(REQ_GOODS);
+    const n = 5 + Math.floor(r.lv / 3);
+    opts.push({ kind: "goods", good, n, until: day + REQ_INFO.goods.days, gold: Math.round(GOODS[good].base * n * 1.7) });
+    const foes = s.rivals.filter((x) => x !== r && (x.status === "peace" || x.status === "war"));
+    if (foes.length) {
+      const f = oneOf(foes);
+      opts.push({ kind: "foe", foe: f.id, base: f.defeats, until: day + REQ_INFO.foe.days, gold: reqGold("foe", r.lv) });
+    }
+    if (r.status === "ally" && s.beylik && s.hero.lv >= SIEGE_LV) {
+      const cities = CITIES.filter((c) => c.id !== CAPITAL.id && !s.owned[c.id]).sort((a, b) => Math.hypot(a.x - home.x, a.y - home.y) - Math.hypot(b.x - home.x, b.y - home.y));
+      if (cities.length) opts.push({ kind: "sefer", city: cities[0].id, until: day + REQ_INFO.sefer.days, gold: reqGold("sefer", r.lv) });
+    }
+    const q = opts.find((o) => o.kind === "sefer" && Math.random() < 0.3) ?? oneOf(opts.filter((o) => o.kind !== "sefer"));
+    r.req = q;
+    this.hud.toast(`${rivalName(r)} ulak yolladı: ${REQ_INFO[q.kind].name}. (Hedefler → Beyler)`, "info");
+  }
+
+  private reqTick(): void {
+    const s = this.s;
+    const day = this.dayOf().day;
+    for (const r of s.rivals) {
+      const q = r.req;
+      if (!q) continue;
+      if (r.status !== "ally" && r.status !== "vassal") {
+        delete r.req;
+        continue;
+      }
+      if (this.reqDone(r)) this.reqReward(r);
+      else if (day > q.until) {
+        delete r.req;
+        r.rel -= r.status === "vassal" ? 8 : 12;
+        this.hud.toast(`${rivalName(r)} isteğini yerine getirmedin; kırgın (dostluk ${Math.round(r.rel)}).`, "bad");
+      }
+    }
+  }
+
+  private reqReward(r: Rival): void {
+    const q = r.req!;
+    const s = this.s;
+    delete r.req;
+    s.res.gold += q.gold;
+    r.rel = Math.min(100, r.rel + (q.kind === "sefer" ? 25 : 15));
+    s.renown += q.kind === "sefer" ? 40 : 15;
+    s.c.beyq = (s.c.beyq ?? 0) + 1;
+    audio.play("quest");
+    this.chron(`${gen(s.hero.name)} ${rivalName(r)} için verdiği sözü tuttu: ${REQ_INFO[q.kind].name.toLowerCase()}.`);
+    this.hud.toast(`${rivalName(r)}: "Sözünü tuttun!" +${q.gold} altın, +${q.kind === "sefer" ? 40 : 15} şöhret, dostluk ${Math.round(r.rel)}`, "good");
+    if (q.kind !== "goods") {
+      const it = this.legendDrop(q.kind === "sefer" ? 0.4 : 0.1);
+      if (it) this.hud.toast(`${rivalName(r)} hazinesinden bir armağan: ${it.name}`, "good");
+    }
+    saveGame(s);
+  }
+
+  deliverReq(i: number): void {
+    const s = this.s;
+    const r = s.rivals[i];
+    const q = r?.req;
+    if (!q || q.kind !== "goods" || (s.hero.cargo[q.good!] ?? 0) < q.n!) return;
+    const paid = s.hero.paid[q.good!] ?? 0;
+    const have = s.hero.cargo[q.good!]!;
+    s.hero.paid[q.good!] = paid * ((have - q.n!) / have);
+    s.hero.cargo[q.good!] = have - q.n!;
+    this.reqReward(r);
+  }
+
+  dropReq(i: number): void {
+    const r = this.s.rivals[i];
+    if (!r?.req) return;
+    delete r.req;
+    r.rel -= 6;
+    this.hud.toast(`${rivalName(r)} isteğini geri çevirdin (dostluk ${Math.round(r.rel)}).`, "bad");
   }
 
   collectCity(city: string): void {

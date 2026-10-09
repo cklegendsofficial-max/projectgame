@@ -4,6 +4,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #1c120a; col
 #game canvas { display: block; }
 #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; zoom: var(--ui, 1); }
 body.nomini .mini { display: none; }
+.grow.req { margin: -4px 0 8px 22px; border-style: dashed; border-color: #e0b04a; background: #e0b04a12; }
 .setrow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin: 6px 0; }
 .setrow > span { flex: 0 0 110px; }
 .setrow input[type="range"] { flex: 1; min-width: 100px; accent-color: #e0b04a; }

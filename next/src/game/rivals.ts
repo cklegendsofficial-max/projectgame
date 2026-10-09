@@ -1,4 +1,5 @@
 import type { Army } from "./data";
+import type { Good } from "./rpg";
 
 export type RivalTrait = "hirsli" | "onurlu" | "kurnaz" | "comert";
 export type RivalStatus = "peace" | "ally" | "war" | "vassal" | "dead";
@@ -20,6 +21,34 @@ export interface Rival {
   status: RivalStatus;
   defeats: number;
   wait: number;
+  req?: BeyReq;
+}
+
+export type ReqKind = "camp" | "goods" | "foe" | "sefer";
+
+export interface BeyReq {
+  kind: ReqKind;
+  camp?: number;
+  good?: Good;
+  n?: number;
+  foe?: string;
+  base?: number;
+  city?: string;
+  until: number;
+  gold: number;
+}
+
+export const REQ_INFO: Record<ReqKind, { name: string; icon: string; days: number; line: string }> = {
+  camp: { name: "Haramileri temizle", icon: "j_bandit", days: 3, line: "Topraklarımda haramiler at koşturuyor. Kampını dağıt, kardeşim." },
+  goods: { name: "Erzak ve teçhizat", icon: "j_caravan", days: 3, line: "Ordum kışa hazırlanıyor; ambarlarım boş. Getirirsen karşılığını fazlasıyla öderim." },
+  foe: { name: "Ortak düşman", icon: "swords", days: 4, line: "Bir bey tuğuma diş biliyor. Onun ordusunu dağıtırsan kan borcum olur." },
+  sefer: { name: "Ortak sefer", icon: "siege", days: 5, line: "Atlarımız yan yana koşsun! O şehrin surlarına birlikte yürüyelim; askerlerim senin emrinde." },
+};
+
+export const REQ_GOODS: Good[] = ["deri", "demir", "pamuk", "hali", "baharat"];
+
+export function reqGold(kind: ReqKind, lv: number): number {
+  return kind === "camp" ? 160 + lv * 20 : kind === "foe" ? 320 + lv * 30 : kind === "sefer" ? 650 + lv * 40 : 0;
 }
 
 export const RIVAL_TRAITS: Record<RivalTrait, { name: string; desc: string; gift: number; war: number }> = {
