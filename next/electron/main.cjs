@@ -1,6 +1,12 @@
 const { app, BrowserWindow, Menu, shell } = require("electron");
 const path = require("node:path");
 
+try {
+  require("steamworks.js").electronEnableSteamOverlay();
+} catch {
+  /* steamworks.js missing: play without Steam */
+}
+
 app.commandLine.appendSwitch("ignore-gpu-blocklist");
 app.commandLine.appendSwitch("enable-gpu-rasterization");
 

@@ -1,5 +1,6 @@
 import { CITIES, H, NAV, NW, NH, W, type World } from "../world/gen";
 import { rng } from "../world/noise";
+import { cloudPush } from "../platform";
 import { BANDIT_NAMES, BUILDINGS, VILLAGE_NAMES, army, type Army, type BuildingId, type NodeKind, type Res, type Unit } from "./data";
 import type { Good, Item, Skill, Slot, Stat } from "./rpg";
 import type { ClassId } from "./classes";
@@ -628,6 +629,7 @@ export function importSave(text: string): boolean {
 export function saveGame(s: GameState): void {
   try {
     localStorage.setItem(slotKey(curSlot()), JSON.stringify({ ...s, explored: encodeBits(s.explored), bandits: [], caravans: [], storms: [], savedAt: Date.now() }));
+    cloudPush();
   } catch {
     /* storage full or blocked */
   }

@@ -29,6 +29,7 @@ import { CITIES, H, NAV, NH, NW, W } from "../world/gen";
 import { assetUrl } from "../render/worldView";
 import { audio } from "../audio";
 import { LANGS, lang, t, t as tr, type Lang } from "../i18n";
+import { cloudPush, cloudReady, onDeck, steam } from "../platform";
 import { SUREK_FOOD } from "../game/games";
 import { GIFT_GOLD, PEACE_GOLD, SPY_MAX, SPY_OPS, TRADE_GOLD, spyCost } from "../game/spy";
 import { MYCV_COST, MYCV_GUARD, MYCV_GUARD_MAX, MYCV_UPGRADE } from "../game/mycaravan";
@@ -1589,7 +1590,7 @@ export class Hud {
         g.saveNow();
         location.reload();
       })}">${LANGS[l]}</button>`).join("")}</div>
-      <p class="dim">${t("Dil değişikliği sayfa yenilenince tamamlanır. Hikâye metinlerinin çevirisi sürüyor.")}</p>
+      <p class="dim">${t("Dil değişikliği sayfa yenilenince tamamlanır.")}</p>
       <h3>${t("Ses")}</h3>
       <div class="setrow"><span>${t("Müzik")}</span><input type="range" min="0" max="100" value="${pct(settings.music)}" data-set="music"><b data-so="music">${pct(settings.music)}</b></div>
       <div class="setrow"><span>${t("Efektler")}</span><input type="range" min="0" max="100" value="${pct(settings.fx)}" data-set="fx"><b data-so="fx">${pct(settings.fx)}</b></div>
@@ -1607,6 +1608,7 @@ export class Hud {
       <p class="dim">${t("Oyun her birkaç saniyede bir etkin yuvaya kaydedilir. Yuva değiştirince mevcut oyunun kaydedilir ve sayfa yeniden yüklenir.")}</p>
       ${slots}
       <div class="setrow"><button class="btn sm" data-a="${this.act(() => this.exportFile())}">${ic("scroll")} ${t("Dışa aktar")}</button><button class="btn sm" data-a="${this.act(() => this.importFile())}">${ic("chest")} ${t("İçe aktar")}</button></div>
+      ${this.steamHtml()}
       <h3>${t("Klavye kısayolları")}</h3>
       <p class="dim keys"><kbd>H</kbd> Kahraman · <kbd>C</kbd> Semerkant · <kbd>Boşluk</kbd> Birliğine dön · <kbd>B</kbd> Kuşu uçur · <kbd>M</kbd> Ses · <kbd>F</kbd> Tam ekran · <kbd>WASD</kbd>/<kbd>Oklar</kbd> Kamera · <kbd>+</kbd>/<kbd>−</kbd> Yakınlaş · <kbd>T</kbd> Oyun hızı · <kbd>Esc</kbd> Kapat / Menü</p>
       <h3>${t("Oyun kolu")}</h3>
@@ -1614,6 +1616,19 @@ export class Hud {
       ${this.achHtml()}
       ${this.legacyHtml()}
       <button class="btn sm red reset" data-a="${this.act(() => confirm("Bu yuvadaki tüm ilerlemen silinip yeni bir oyun başlayacak. Emin misin?") && g.resetGame())}">${t("Bu yuvada yeni oyun başlat")}</button>`;
+  }
+
+  private steamHtml(): string {
+    if (!steam) return onDeck ? `<h3>Steam Deck</h3><p class="dim">${t("Steam Deck algılandı: arayüz büyütüldü, oyun kolu kısayolları etkin.")}</p>` : "";
+    const cloud = cloudReady();
+    return `<h3>${ic("seal")} Steam${onDeck ? " Deck" : ""}</h3>
+      <div class="setrow"><span>${t("Hesap")}</span><b>${steam.name() || "—"}</b></div>
+      <div class="setrow"><span>${t("Bulut kaydı")}</span><em class="${cloud ? "good" : "dim"}">${cloud ? t("Açık") : t("Kapalı (Steam ayarı)")}</em>${cloud ? `<button class="btn sm" data-a="${this.act(() => {
+        this.g.saveNow();
+        const ok = cloudPush(true);
+        this.toast(ok ? t("Kayıtlar Steam Bulut'a yüklendi.") : t("Steam Bulut'a yüklenemedi."), ok ? "good" : "bad");
+      })}">${t("Şimdi yedekle")}</button>` : ""}</div>
+      <p class="dim">${t("Başarımlar, kayıt yuvaları ve efsane ocağı Steam Bulut ile cihazlar arasında taşınır; açılışta en yeni kayıt seçilir.")}</p>`;
   }
 
   bitigOpen = "";

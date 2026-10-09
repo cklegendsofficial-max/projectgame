@@ -7,10 +7,16 @@ import { Game } from "./game/game";
 import { Hud } from "./ui/hud";
 import { applyUi, settings } from "./settings";
 import { localizeData } from "./i18n-data";
+import { t } from "./i18n";
+import { cloudPull, cloudPush, deckDefaults, steam, steamPresence, steamStats, syncAchievements } from "./platform";
+import { unlockedSet } from "./game/achievements";
 
 async function boot(): Promise<void> {
   extensions.add(CullerPlugin);
+  deckDefaults();
   applyUi();
+  const restored = cloudPull();
+  if (restored) console.log("steam cloud restored", restored);
   document.documentElement.lang = settings.lang ?? "tr";
   localizeData();
   window.addEventListener("contextmenu", (e) => e.preventDefault());
@@ -43,6 +49,18 @@ async function boot(): Promise<void> {
   });
   window.addEventListener("resize", () => cam.fitMin());
   document.getElementById("loading")!.remove();
+  if (steam) {
+    syncAchievements(unlockedSet());
+    const tick = () => {
+      const s = game.s;
+      const ch = game.chapter();
+      steamPresence(`${s.hero.name} · ${t("Seviye")} ${s.hero.lv}${ch ? ` · ${ch.title}` : ""}`);
+      steamStats({ level: s.hero.lv, renown: s.renown, kills: s.kills, profit: s.c.profit, conquests: s.c.conquests ?? 0 });
+    };
+    tick();
+    setInterval(tick, 60_000);
+    window.addEventListener("beforeunload", () => cloudPush(true));
+  }
 }
 
 void boot();

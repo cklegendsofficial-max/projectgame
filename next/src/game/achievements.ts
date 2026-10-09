@@ -1,4 +1,5 @@
 import type { GameState } from "./state";
+import { syncAchievements } from "../platform";
 
 export interface Achievement {
   id: string;
@@ -56,10 +57,5 @@ export function storeUnlocked(set: Set<string>): void {
 }
 
 export function steamUnlock(id: string): void {
-  const bridge = (window as unknown as { kkSteam?: { unlock: (id: string) => void } }).kkSteam;
-  try {
-    bridge?.unlock(id);
-  } catch {
-    /* steam client unavailable */
-  }
+  syncAchievements([id]);
 }

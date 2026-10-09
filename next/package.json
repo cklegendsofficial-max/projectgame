@@ -39,6 +39,15 @@
       "package.json"
     ],
     "asar": true,
+    "asarUnpack": [
+      "node_modules/steamworks.js/**"
+    ],
+    "linux": {
+      "target": [
+        "dir"
+      ],
+      "category": "Game"
+    },
     "win": {
       "target": [
         "dir",
@@ -49,5 +58,8 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
     }
+  },
+  "optionalDependencies": {
+    "steamworks.js": "^0.4.0"
   }
 }
