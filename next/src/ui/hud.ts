@@ -16,6 +16,7 @@ import { LEGACY_PERKS, legacy } from "../game/legacy";
 import { HERD_BUY, HERD_GOLD, HERD_MAX, MOVE_FOOD, OTAG_GOLD, OTAG_WOOD, REST_FOOD, ZONE_DESC, ZONE_NAME, bestZone, zoneOf } from "../game/otag";
 import { VET_LV_MAX, VET_MAX, VET_RANKS, vetBonus, vetTitle } from "../game/vets";
 import { PERSONAS, PERSONA_KEYS } from "../game/director";
+import { kidAge } from "../game/dynasty";
 import { KUT_TIERS, kutArmy, kutTier, kutVote } from "../game/kut";
 import { SING_GOLD, TAMGA_COLORS, TAMGA_DEFAULT, TAMGA_MARKS, TAMGA_SHAPES, singRenown, tamgaSvg, type Tamga } from "../game/ozan";
 import { CITIES, H, NH, NW, W } from "../world/gen";
@@ -520,7 +521,7 @@ export class Hud {
           const reqRow = q
             ? `<div class="grow req">${ic(REQ_INFO[q.kind].icon, "gimg")}<div class="bi2"><b>${REQ_INFO[q.kind].name} <em>· ${Math.max(0, q.until - g.dayOf().day + 1)} gün</em></b><small>${g.reqText(r)}</small><small class="cheap">Ödül: ${q.gold} altın · dostluk</small></div>${p ? `<button class="btn sm go" data-a="${this.act(() => { this.close(); g.cam.flyTo(p.x, p.y, 0.8); })}">Git</button>` : ""}</div>`
             : "";
-          return `<div class="grow rival ${dead ? "dim dead" : ""}">${ic(r.icon, "gimg")}<div class="bi2"><b>${r.name} ${r.title}</b> <small style="color:${RIVAL_CSS[r.status]}">${STATUS_NAME[r.status]}</small><small>${t.name} · Sv ${r.lv} · ${armySize(r.army)} asker · ${CITY_NAME[r.home]} yöresi</small>${dead ? "" : bar(r.rel + 100, 200, r.rel < 0 ? "hp" : "", `Dostluk ${Math.round(r.rel)}`)}</div>${btn}</div>${reqRow}`;
+          return `<div class="grow rival ${dead ? "dim dead" : ""}">${ic(r.icon, "gimg")}<div class="bi2"><b>${r.name} ${r.title}</b> <small style="color:${RIVAL_CSS[r.status]}">${STATUS_NAME[r.status]}</small><small>${t.name} · Sv ${r.lv} · ${armySize(r.army)} asker · ${CITY_NAME[r.home]} yöresi</small>${r.age && !dead ? `<small class="dim">${r.age} yaşında${(r.gen ?? 1) > 1 ? ` · ${r.gen}. kuşak` : ""} · varis: ${r.heirs?.length ? r.heirs.join(", ") : "yok"}${r.wed ? ` · <b class="cheap">dünürün</b>` : ""}</small>` : ""}${dead ? "" : bar(r.rel + 100, 200, r.rel < 0 ? "hp" : "", `Dostluk ${Math.round(r.rel)}`)}</div>${btn}</div>${reqRow}`;
         })
         .join("")
     );
@@ -1352,6 +1353,18 @@ export class Hud {
       <small class="dim">Kut; zaferle, adil hükümle, şölen ve fetihle artar. Yenilgi, soygun, ağır vergi ve kaybedilen şehirle söner. ${left ? `Sıradaki töre davası ~${left} gün sonra.` : "Yakında bir töre davası gelecek."} Kademeler: ${KUT_TIERS.map((x) => x.name).join(" · ")}</small>`;
   }
 
+  private familyHtml(): string {
+    const g = this.g;
+    const f = g.family();
+    const day = g.dayOf().day;
+    if (!f.spouse) return `<h3>${ic("lord_bey")} Hanedan</h3><p class="dim">Bir hanedan kur: dostluğu 40'ı geçen bir beyle karşılaşınca kızı için dünürcü gönder. Dünürün ittifakı asla bozmaz; doğan oğulların ordunda sancak taşır.</p>`;
+    const from = g.s.rivals.find((r) => r.id === f.spouse!.from);
+    const kids = f.kids.map((k) => `<div class="qrow">${ic(k.son ? "u_spear" : "healer")} ${k.name} <span>${k.son ? "oğul" : "kız"} · ${kidAge(k, day) || "<1"} yaşında${k.son && kidAge(k, day) >= 1 ? " · sancak taşır" : ""}</span></div>`).join("");
+    return `<h3>${ic("lord_bey")} Hanedan <em class="cheap">+%${Math.round(g.famBonus() * 100)} ordu · +%3 müttefik</em></h3>
+      <div class="grow">${ic("healer", "gimg")}<div class="bi2"><b>${f.spouse.name} Hatun</b><small>${from ? `${from.name} ${from.title} kızı · dünürün` : "Eşin"}</small></div></div>
+      ${kids || `<p class="dim">Henüz çocuğun yok. Tengri bir varis bağışlasın.</p>`}`;
+  }
+
   private ozanHtml(): string {
     const g = this.g;
     const s = g.s;
@@ -1491,7 +1504,7 @@ export class Hud {
     } else if (this.tab === "ayar") {
       body = this.settingsHtml();
     } else if (this.tab === "unvan") {
-      body = this.dailyHtml() + (s.beylik ? this.kutHtml() : "") + (s.free ? this.ozanHtml() : "") + this.kurultayHtml() + this.rivalsHtml() + this.nemesisHtml() + this.titlesHtml();
+      body = this.dailyHtml() + (s.beylik ? this.kutHtml() + this.familyHtml() : "") + (s.free ? this.ozanHtml() : "") + this.kurultayHtml() + this.rivalsHtml() + this.nemesisHtml() + this.titlesHtml();
     } else if (this.tab === "techizat") {
       const inCity = g.nearCity() >= 0;
       body = `<div class="slots">` + SLOTS.map((sl) => {

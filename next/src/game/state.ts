@@ -13,6 +13,7 @@ import type { Vet } from "./vets";
 import type { Otag } from "./otag";
 import { TAMGA_DEFAULT, type Song, type Tamga } from "./ozan";
 import { DIR_DEFAULT, type DirState } from "./director";
+import { FAMILY_DEFAULT, type Family } from "./dynasty";
 
 export interface Village {
   name: string;
@@ -268,6 +269,7 @@ export interface GameState {
   ozanDay: number;
   road: { day: number; n: number; seen: string[] };
   dir: DirState;
+  family: Family;
   act3: { ch: number; ending: string; peak: { x: number; y: number } | null };
 }
 
@@ -513,6 +515,7 @@ export function newGame(w: World): GameState {
     ozanDay: -1,
     road: { day: -1, n: 0, seen: [] },
     dir: { ...DIR_DEFAULT, log: [] },
+    family: { ...FAMILY_DEFAULT, kids: [] },
     act3: { ch: 0, ending: "", peak: null },
   };
 }

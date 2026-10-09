@@ -22,6 +22,10 @@ export interface Rival {
   defeats: number;
   wait: number;
   req?: BeyReq;
+  age?: number;
+  heirs?: string[];
+  gen?: number;
+  wed?: boolean;
 }
 
 export type ReqKind = "camp" | "goods" | "foe" | "sefer";

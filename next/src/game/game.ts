@@ -23,6 +23,7 @@ import { BRIBE_GOLD, DECREES, KAGAN_RENOWN, KURULTAY_EVERY, KURULTAY_MAX, decree
 import { ESCORT_GOLD, PIRATE_RISK, SHIP_CAP, SHIP_GOLD, SHIP_MAX, pirateArmy, portOf, routeDays } from "./hazar";
 import { LEGACY_PERKS, hasLegacy, recordEnding } from "./legacy";
 import { HERD_GOLD, HERD_BUY, HERD_MAX, MOVE_FOOD, OTAG_GOLD, OTAG_WOOD, REST_FOOD, ZONE_NAME, bestZone, pasture, zoneOf } from "./otag";
+import { DAUGHTER_NAMES, FAMILY_DEFAULT, KID_EVERY, KID_MAX, SON_NAMES, YEAR_DAYS, brideGold, brideOf, deathChance, kidAge, makeHeirs, pick, type Family } from "./dynasty";
 import { DIR_DEFAULT, PERSONAS, pickRelief, pickThreat, struggling, tensionGain, type DirCtx, type DirState, type PersonaId, type Relief, type Threat } from "./director";
 import { ROAD_CHANCE, ROAD_EVENTS, ROAD_PER_DAY, ROAD_STEP, checkChance, type RoadCtx, type RoadEvent, type RoadFx, type RoadOpt } from "./road";
 import { SING_GOLD, SONG_MAX, TAMGA_DEFAULT, compose, singRenown, type SongCtx, type SongKind, type Tamga } from "./ozan";
@@ -606,7 +607,7 @@ export class Game {
   }
 
   heroBonus(): number {
-    return 0.025 * this.stat("lid") + 0.02 * (this.s.hero.lv - 1) + this.cls().mods.army + this.compMods().army + 0.03 * this.tal("nara") + (this.buff("davul") ? 0.15 : 0) + (this.gearMods().army ?? 0) + this.heroRankBonus() + this.allyBonus() + (hasLegacy("tengri") ? 0.06 : 0) + vetBonus(this.s.vets ?? []) + (this.s.beylik ? kutArmy(this.s.kut ?? 50) : 0);
+    return 0.025 * this.stat("lid") + 0.02 * (this.s.hero.lv - 1) + this.cls().mods.army + this.compMods().army + 0.03 * this.tal("nara") + (this.buff("davul") ? 0.15 : 0) + (this.gearMods().army ?? 0) + this.heroRankBonus() + this.allyBonus() + (hasLegacy("tengri") ? 0.06 : 0) + vetBonus(this.s.vets ?? []) + (this.s.beylik ? kutArmy(this.s.kut ?? 50) : 0) + this.famBonus();
   }
 
   addKut(n: number, why = ""): void {
@@ -995,7 +996,7 @@ export class Game {
     const s = this.s;
     const base = s.rivals.filter((r) => r.status === "ally").length * 0.07 + s.rivals.filter((r) => r.status === "vassal").length * 0.04;
     const ordu = this.decree("sefer");
-    return Math.min(ordu ? 0.35 : 0.2, base * (ordu ? 2 : 1)) + (s.kagan ? 0.05 : 0) + (base > 0 && hasLegacy("kagan") ? 0.05 : 0);
+    return Math.min(ordu ? 0.35 : 0.2, base * (ordu ? 2 : 1)) + (s.kagan ? 0.05 : 0) + (base > 0 && hasLegacy("kagan") ? 0.05 : 0) + (s.family?.spouse ? 0.03 : 0);
   }
 
   decree(id: string): boolean {
@@ -3778,8 +3779,146 @@ export class Game {
     }
   }
 
+  family(): Family {
+    const s = this.s;
+    s.family = { ...FAMILY_DEFAULT, ...s.family, kids: s.family?.kids ?? [] };
+    return s.family;
+  }
+
+  private dynInit(r: Rival): void {
+    if (r.age !== undefined) return;
+    r.age = 34 + Math.floor(Math.random() * 24);
+    r.heirs = makeHeirs([r.name]);
+    r.gen = 1;
+  }
+
+  private dynastyDaily(day: number): void {
+    const s = this.s;
+    for (const r of s.rivals) {
+      if (r.status === "dead") continue;
+      this.dynInit(r);
+      if (day % YEAR_DAYS === 0) {
+        r.age = (r.age ?? 40) + 1;
+        if (Math.random() < deathChance(r.age)) this.succeed(r, "olum");
+      }
+    }
+    const f = this.family();
+    if (f.spouse && f.kids.length < KID_MAX && day >= f.next) {
+      f.next = day + KID_EVERY;
+      if (Math.random() < 0.6) this.kidBorn();
+    }
+  }
+
+  kidBorn(): void {
+    const s = this.s;
+    const f = this.family();
+    const son = Math.random() < 0.55;
+    const name = pick(son ? SON_NAMES : DAUGHTER_NAMES, f.kids.map((k) => k.name));
+    f.kids.push({ name, born: this.dayOf().day, son });
+    this.addKut(3, "hanedan büyüyor");
+    s.renown += 5;
+    this.chron(`${gen(s.hero.name)} otağında bir ${son ? "oğul" : "kız"} doğdu: ${name}. ${f.spouse!.name} Hatun beşiği Tengri'ye gösterdi.`);
+    this.hud.toast(`Otağında bir ${son ? "oğul" : "kız"} doğdu: ${name}! Hanedanın büyüyor.`, "good");
+  }
+
+  succeed(r: Rival, why: "olum" | "kilic"): void {
+    const s = this.s;
+    this.dynInit(r);
+    const old = rivalName(r);
+    const heirs = r.heirs ?? [];
+    if (!heirs.length) {
+      r.status = "dead";
+      if (why === "olum") {
+        this.chron(`${old} yaşlılıktan öldü; ardında varis kalmadı. Soyu kurudu, obası dağıldı.`);
+        this.hud.toast(`${old} varissiz öldü; tuğu devrildi.`, "info");
+      }
+      return;
+    }
+    const heir = heirs.shift()!;
+    const crisis = heirs.length > 0 && (r.trait === "hirsli" || r.trait === "kurnaz") && Math.random() < 0.4;
+    const st0 = r.status;
+    r.name = heir;
+    r.gen = (r.gen ?? 1) + 1;
+    r.age = 20 + Math.floor(Math.random() * 12);
+    r.heirs = crisis ? [] : Math.random() < 0.6 ? makeHeirs([heir]).slice(0, 1) : [];
+    r.lv = Math.max(1, r.lv - 3);
+    if (Math.random() < 0.3) r.trait = oneOf(["hirsli", "onurlu", "kurnaz", "comert"] as const);
+    for (const u of UNIT_KEYS) r.army[u] = Math.floor(r.army[u] * (crisis ? 0.3 : 0.6));
+    r.req = undefined;
+    let note: string;
+    if (why === "kilic") {
+      r.status = "war";
+      r.rel = -70;
+      note = `${old} ${gen(s.hero.name)} kılıcıyla öldü ama oğlu ${heir} babasının tuğunu kaldırdı ve kan davası yemini etti!`;
+    } else if (st0 === "ally") {
+      r.status = r.wed ? "ally" : "peace";
+      r.rel = r.wed ? Math.max(60, r.rel) : Math.round(r.rel * 0.5);
+      note = `${old} öldü; tuğu oğlu ${heir}'e geçti. ${r.wed ? "Dünür bağı sürüyor; ittifak yerinde." : "Yeni bey babasının antını yenilemedi."}`;
+    } else if (st0 === "vassal") {
+      const stay = r.trait === "onurlu" || Math.random() < 0.5;
+      r.status = stay ? "vassal" : "peace";
+      r.rel = stay ? r.rel : 0;
+      note = `${old} öldü; yerine oğlu ${heir} geçti. ${stay ? "Yeni bey biatını tazeledi." : "Yeni bey haracı kesti ve bağımsızlığını ilan etti!"}`;
+    } else if (st0 === "war") {
+      const bury = Math.random() < 0.5;
+      r.status = bury ? "peace" : "war";
+      r.rel = bury ? -20 : r.rel;
+      note = `${old} öldü; oğlu ${heir} tuğu devraldı. ${bury ? "Babasının kinini toprağa gömdü." : "Babasının kinini de devraldı."}`;
+    } else {
+      r.rel = Math.round(r.rel * 0.5);
+      note = `${old} öldü; tuğu oğlu ${heir}'e geçti.`;
+    }
+    if (crisis) note += ` Kardeşleri tahta razı olmadı; taht kavgası ordusunu dağıttı.`;
+    this.chron(note);
+    this.hud.toast(note, why === "kilic" || r.status === "war" ? "bad" : "info");
+  }
+
+  marryReason(r: Rival): string {
+    const s = this.s;
+    this.dynInit(r);
+    if (!s.beylik) return "Önce beyliğini kur";
+    if (this.family().spouse) return "Zaten evlisin";
+    if (r.status !== "peace" && r.status !== "ally") return "Yalnızca barıştaki beylerle dünür olunur";
+    if (r.rel < 40) return `Dostluk en az 40 olmalı (${Math.round(r.rel)})`;
+    if (s.res.gold < brideGold(r.lv)) return `${brideGold(r.lv)} altın başlık gerek`;
+    return "";
+  }
+
+  marry(i: number): void {
+    const s = this.s;
+    const r = s.rivals[i];
+    if (!r || this.marryReason(r)) return;
+    s.res.gold -= brideGold(r.lv);
+    const bride = brideOf(r.id);
+    const f = this.family();
+    f.spouse = { name: bride, from: r.id };
+    f.next = this.dayOf().day + 6;
+    r.wed = true;
+    r.status = "ally";
+    r.rel = 100;
+    this.addKut(5, "düğün");
+    s.renown += 20;
+    audio.play("quest");
+    this.chron(`${gen(s.hero.name)} ${rivalName(r)} kızı ${bride} ile evlendi. Kırk gün kırk gece düğün yapıldı.`);
+    this.hud.story(
+      "Kırk Gün Kırk Gece",
+      `icons/${r.icon}`,
+      `Davullar çalındı, at yarışları koşuldu, kazanlar kaynadı. ${rivalName(r)} kızı <b>${bride}</b>'yi gelin olarak otağına gönderdi.<br><br>Artık dünürsünüz: <b>${r.name}</b> sonsuza dek müttefikin, ittifak asla bozulmaz.<br>${bride} Hatun otağını yönetir: <b>müttefik gücü +%3</b>. Zamanla çocukların olacak; oğulların ordunda sancak taşır.<br><br>+20 şöhret`,
+      "Toyunuz kutlu olsun",
+    );
+    saveGame(s);
+  }
+
+  famBonus(): number {
+    const f = this.s.family;
+    if (!f?.spouse) return 0;
+    const day = this.dayOf().day;
+    return f.kids.filter((k) => k.son && kidAge(k, day) >= 1).length * 0.015;
+  }
+
   private rivalDaily(): void {
     const s = this.s;
+    this.dynastyDaily(this.dayOf().day);
     const live = s.rivals.filter((r) => r.status !== "dead");
     for (const r of live) {
       if (r.lv < 30 && Math.random() < 0.3) r.lv++;
@@ -3797,7 +3936,7 @@ export class Game {
           this.hud.toast(`${rivalName(r)} barış elçisi yolladı; tuğlar indirildi.`, "good");
         }
       } else if (r.status === "ally") {
-        if (r.rel < 0 && r.trait !== "onurlu") {
+        if (r.rel < 0 && r.trait !== "onurlu" && !r.wed) {
           r.status = "peace";
           this.hud.toast(`${rivalName(r)} ittifakı bozdu; artık sana güvenmiyor.`, "bad");
           continue;
@@ -3861,6 +4000,10 @@ export class Game {
     if (q) opts.push({ label: `İsteği geri çevir (${REQ_INFO[q.kind].name})`, cls: "", fn: done(() => this.dropReq(i)) });
     if (r.status === "peace" || r.status === "ally")
       opts.push({ label: `Hediye gönder · ${cost} altın`, cls: s.res.gold >= cost ? "go" : "off", fn: done(() => this.rivalGift(i)) });
+    if ((r.status === "peace" || r.status === "ally") && s.beylik && !this.family().spouse) {
+      const why = this.marryReason(r);
+      opts.push({ label: `Kızı ${brideOf(r.id)} için dünürcü gönder · ${brideGold(r.lv)} altın${why ? ` · ${why}` : ""}`, cls: why ? "off" : "go", fn: done(() => this.marry(i)) });
+    }
     if (r.status === "peace") {
       opts.push({ label: `İttifak öner${r.rel < 50 ? ` · dostluk ${Math.round(r.rel)}/50` : ""}`, cls: r.rel >= 50 ? "go" : "", fn: done(() => this.rivalAlly(i)) });
       opts.push({ label: `Biat iste · güç oranı ×${ratio.toFixed(1)}`, cls: ratio >= 2 ? "go" : "", fn: done(() => this.rivalDemand(i)) });
@@ -3968,13 +4111,15 @@ export class Game {
           this.hud.toast(`${rivalName(r)} artık tabin.`, "good");
         } },
         { label: "Kılıçtan geçir", cls: "bad", fn: () => {
-          r.status = "dead";
+          const dead = rivalName(r);
           s.renown += 80;
           s.mats.ruh += 3;
           for (const o of s.rivals) if (o !== r && o.status !== "dead") o.rel -= o.trait === "onurlu" ? 25 : 12;
-          this.chron(`${rivalName(r)} ${gen(s.hero.name)} kılıcıyla can verdi. Bozkırda bir tuğ daha devrildi.`);
-          this.sing("biat", { foe: rivalName(r) });
-          this.hud.toast(`${rivalName(r)} öldü. +80 şöhret, +3 Ruh Taşı. Diğer beyler tedirgin.`, "bad");
+          if (r.wed) this.addKut(-12, "dünürünü öldürdün");
+          this.chron(`${dead} ${gen(s.hero.name)} kılıcıyla can verdi. Bozkırda bir tuğ daha devrildi.`);
+          this.sing("biat", { foe: dead });
+          this.hud.toast(`${dead} öldü. +80 şöhret, +3 Ruh Taşı. Diğer beyler tedirgin.`, "bad");
+          this.succeed(r, "kilic");
         } },
         { label: "Serbest bırak (dostluk +30)", cls: "", fn: () => {
           r.status = "peace";
@@ -4761,6 +4906,12 @@ export class Game {
     if (s.c.voyages) lines.push(`Gemileri Hazar'da ${s.c.voyages} sefer yaptı.`);
     if (s.comps.length) lines.push(`Yoldaşları: ${s.comps.map((c) => COMP_BY_ID[c as CompId].name).join(", ")}.`);
     if (s.c.rescued) lines.push(`${s.c.rescued} esiri zincirden kurtardı.`);
+    const fam = s.family;
+    if (fam?.spouse) {
+      const heir = fam.kids.find((k) => k.son) ?? fam.kids[0];
+      lines.push(`${fam.spouse.name} Hatun ile kurduğu hanedan ${fam.kids.length ? `${fam.kids.length} çocukla büyüdü; tuğu ${heir.name} devraldı.` : "varissiz kaldı."}`);
+    }
+    if (s.songs?.length) lines.push(`Ozanlar onun için ${s.songs.length} destan yaktı.`);
     lines.push(`Destan ${this.dayOf().day}. günde tamamlandı.`);
     return `<i>${lines.join(" ")}</i>`;
   }

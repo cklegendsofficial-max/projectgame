@@ -798,7 +798,7 @@ export class WorldView {
     }
     s.rivals.forEach((r) => {
       let e = this.rivalsM.get(r.id);
-      if (e && e.st !== r.status) {
+      if (e && e.st !== r.status + r.name) {
         e.c.destroy({ children: true });
         this.rivalsM.delete(r.id);
         e = undefined;
@@ -822,7 +822,7 @@ export class WorldView {
         tg.position.set(20, -14);
         c.addChild(sh, glow, tg, p, nl);
         this.units.addChild(c);
-        e = { c, st: r.status };
+        e = { c, st: r.status + r.name };
         this.rivalsM.set(r.id, e);
       }
       const c = e.c;
