@@ -13,6 +13,7 @@ import { SIDE_TEXT, type SideQuest } from "../game/sidequests";
 import { CITY_NAME } from "../game/data";
 import { COMPANIONS, COMP_BY_ID, COMP_MAX, ERLIK, FORT_GUARD, GATE_GUARD, KARA_HAN, ENDINGS, KOK_BORU, PEAK_GUARD, endingOf, type CompId } from "../game/story";
 import { LEGACY_PERKS, legacy } from "../game/legacy";
+import { VET_LV_MAX, VET_MAX, VET_RANKS, vetBonus, vetTitle } from "../game/vets";
 import { CITIES, H, NH, NW, W } from "../world/gen";
 import { assetUrl } from "../render/worldView";
 import { audio } from "../audio";
@@ -1287,6 +1288,14 @@ export class Hud {
     return `<h3>${ic("trophy")} Başarımlar <em class="dim">${n}/${ACHIEVEMENTS.length}</em></h3><div class="achs">${ACHIEVEMENTS.map((a) => `<div class="ach ${g.achDone(a.id) ? "on" : ""}" title="${a.desc}">${ic(a.icon)}<b>${a.name}</b><small>${a.desc}</small></div>`).join("")}</div>`;
   }
 
+  private vetsHtml(): string {
+    const vets = this.g.s.vets ?? [];
+    if (!vets.length) return `<h3>${ic("tug")} Gaziler</h3><p class="dim">Kazandığın savaşlarda saflardan yiğitler öne çıkar. Gaziler savaştıkça rütbe alır ve bütün birliğe güç verir (en fazla ${VET_MAX}).</p>`;
+    const icon: Record<string, string> = { spear: "u_spear", archer: "u_archer", horse: "u_cavalry" };
+    return `<h3>${ic("tug")} Gaziler (${vets.length}/${VET_MAX}) <em class="cheap">+%${Math.round(vetBonus(vets) * 100)} güç</em></h3>` +
+      vets.map((v) => `<div class="grow vet">${ic(icon[v.u], "gimg")}<div class="bi2"><b>${vetTitle(v)} <em>${VET_RANKS[v.lv - 1]}</em></b><small>${"★".repeat(v.lv)}${"☆".repeat(VET_LV_MAX - v.lv)} · ${v.kills} düşman · ${v.day}. günden beri${v.scar ? " · yaralı" : ""}</small></div></div>`).join("");
+  }
+
   private legacyHtml(): string {
     const l = legacy();
     const cards = ENDINGS.map((e) => {
@@ -1422,6 +1431,7 @@ export class Hud {
     } else {
       body = `<div class="stats"><div>${ic("tug")}Birlik: <b>${armySize(h.army)}/${g.heroCap()}</b></div><div>${ic("coins")}Ücret: <b>${g.wagePerMin().toFixed(1)}/dk</b></div><div>${ic("shield")}Toplam güç: <b>${Math.round(g.heroPower())}</b></div></div>
         ${armyHtml(h.army)}
+        ${this.vetsHtml()}
         ${s.free ? this.birdHtml() : ""}
         <h3>${ic("tug")} Yoldaşlar (${s.comps.length})</h3>${s.comps.map((id) => {
           const cp = COMP_BY_ID[id as CompId];

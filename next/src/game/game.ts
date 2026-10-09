@@ -22,6 +22,7 @@ import { DEEP_LORE, DEEP_PERKS, DOORS, DOOR_KEYS, RIDDLES, TOMBS, deepBoss, deep
 import { BRIBE_GOLD, DECREES, KAGAN_RENOWN, KURULTAY_EVERY, KURULTAY_MAX, decreeOf } from "./kurultay";
 import { ESCORT_GOLD, PIRATE_RISK, SHIP_CAP, SHIP_GOLD, SHIP_MAX, pirateArmy, portOf, routeDays } from "./hazar";
 import { LEGACY_PERKS, hasLegacy, recordEnding } from "./legacy";
+import { SCARS, VET_LV_MAX, VET_MAX, VET_RANKS, VET_XP, makeVet, vetBonus, vetTitle } from "./vets";
 import { ACHIEVEMENTS, steamUnlock, storeUnlocked, unlockedSet } from "./achievements";
 import { SEASONS, SEASON_DAYS, seasonOf, type Season, type SeasonId } from "./seasons";
 import { FACTIONS, FACTION_KEYS, HOSTILE, REP_RANKS, RANK_PERKS, factionOf, repRank, type FactionId } from "./factions";
@@ -594,7 +595,7 @@ export class Game {
   }
 
   heroBonus(): number {
-    return 0.025 * this.stat("lid") + 0.02 * (this.s.hero.lv - 1) + this.cls().mods.army + this.compMods().army + 0.03 * this.tal("nara") + (this.buff("davul") ? 0.15 : 0) + (this.gearMods().army ?? 0) + this.heroRankBonus() + this.allyBonus() + (hasLegacy("tengri") ? 0.06 : 0);
+    return 0.025 * this.stat("lid") + 0.02 * (this.s.hero.lv - 1) + this.cls().mods.army + this.compMods().army + 0.03 * this.tal("nara") + (this.buff("davul") ? 0.15 : 0) + (this.gearMods().army ?? 0) + this.heroRankBonus() + this.allyBonus() + (hasLegacy("tengri") ? 0.06 : 0) + vetBonus(this.s.vets ?? []);
   }
 
   allyBonus(): number {
@@ -2613,7 +2614,7 @@ export class Game {
     const tline = `Taktik: ${TACTICS[t].name}${auto ? " (otomatik)" : ""} · Düşman: ${TACTICS[stance].name}${edge}`;
     const before = { ...h.army };
     const hpBefore = h.hp;
-    this.hud.showBattle(title, before, enemy, sim, { hpBefore, maxHp: this.maxHp() }, boss, foe, auto, (res) => this.applyBattle(res, enemy, boss, after, tline), () => {
+    this.hud.showBattle(title, before, enemy, sim, { hpBefore, maxHp: this.maxHp() }, boss, foe, auto, (res) => this.applyBattle(res, enemy, boss, after, tline, before, title), () => {
       this.battleLock = false;
       saveGame(this.s);
       const f = this.afterBattle;
@@ -2622,7 +2623,7 @@ export class Game {
     });
   }
 
-  private applyBattle(res: BattleResult, enemy: Army, boss: Boss | null, after: (win: boolean) => string, tline: string): { xp: number; lvUp: boolean; note: string } {
+  private applyBattle(res: BattleResult, enemy: Army, boss: Boss | null, after: (win: boolean) => string, tline: string, before: Army, title: string): { xp: number; lvUp: boolean; note: string } {
     const h = this.s.hero;
     if (res.orders.includes("ricat")) this.s.c.turan = (this.s.c.turan ?? 0) + 1;
     h.army = { ...res.rounds[res.rounds.length - 1].a };
@@ -2649,8 +2650,46 @@ export class Game {
       this.cam.flyTo(h.x, h.y);
       fled = `${res.heroDown ? "Ağır yaralandın. " : ""}Kalanlar seni ${CITY_NAME[c.id]} şehrine taşıdı.`;
     }
-    const note = [tline, extra || fled, revived ? `Ruh Çağrısı: ${revived} asker hayata döndü` : ""].filter(Boolean).join("<br>");
+    const vetNote = this.vetsAfter(before, res, title);
+    const note = [tline, extra || fled, revived ? `Ruh Çağrısı: ${revived} asker hayata döndü` : "", vetNote].filter(Boolean).join("<br>");
     return { xp, lvUp, note };
+  }
+
+  private vetsAfter(before: Army, res: BattleResult, title: string): string {
+    const s = this.s;
+    s.vets ??= [];
+    const out: string[] = [];
+    const day = this.dayOf().day;
+    for (const v of [...s.vets]) {
+      const had = before[v.u];
+      const lost = res.lostA[v.u];
+      if (had <= 0) continue;
+      const risk = (lost / had) * (res.win ? 0.35 : 0.6) * (1 - v.lv * 0.08);
+      if (Math.random() < risk || s.hero.army[v.u] <= 0) {
+        s.vets = s.vets.filter((x) => x.id !== v.id);
+        this.chron(`${VET_RANKS[v.lv - 1]} ${vetTitle(v)}, ${title.replace(/<[^>]+>/g, "")} savaşında düştü. ${v.kills} düşman götürdü yanında.`);
+        out.push(`<b class="dear">${vetTitle(v)} şehit düştü.</b>`);
+        continue;
+      }
+      if (lost / had > 0.3 && !v.scar && Math.random() < 0.3) {
+        v.scar = SCARS[Math.floor(Math.random() * SCARS.length)];
+        out.push(`${v.name} yaralandı; artık ona <b>${vetTitle(v)}</b> diyorlar.`);
+      }
+      v.kills += Math.round(armySize(res.lostB) / Math.max(1, armySize(before)) * (2 + v.lv));
+      if (res.win && v.lv < VET_LV_MAX && ++v.xp >= VET_XP[v.lv]) {
+        v.lv++;
+        out.push(`${vetTitle(v)} ${VET_RANKS[v.lv - 1]} oldu!`);
+        if (v.lv === VET_LV_MAX) this.chron(`${vetTitle(v)} sayısız savaştan sağ çıktı; ordu ona "Alp" diyor.`);
+      }
+    }
+    if (res.win && s.vets.length < VET_MAX && armySize(s.hero.army) >= 10 && Math.random() < 0.3) {
+      const pool = UNIT_KEYS.filter((u) => s.hero.army[u] > 0);
+      const u = pool[Math.floor(Math.random() * pool.length)];
+      const v = makeVet(s.nextId++, u, day, s.vets.map((x) => x.name.split(" ").pop()!));
+      s.vets.push(v);
+      out.push(`<b class="cheap">Saflardan biri öne çıktı: ${v.name}.</b> Artık gazilerin arasında.`);
+    }
+    return out.join("<br>");
   }
 
   addXp(xp: number): boolean {
