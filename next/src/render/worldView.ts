@@ -8,6 +8,7 @@ import { FACTIONS, type FactionId } from "../game/factions";
 import { nemName } from "../game/nemesis";
 import { TOMBS, tombOf } from "../game/deep";
 import { SEASONS } from "../game/seasons";
+import { alongPath, seaPath } from "../game/hazar";
 
 const urls: Record<string, string> = {};
 for (const [p, u] of Object.entries(import.meta.glob<string>("../assets/**/*.webp", { eager: true, query: "?url", import: "default" }))) {
@@ -882,6 +883,21 @@ export class WorldView {
       const pr = (this.time * 0.4) % 1;
       this.fxG.circle(s.act2.gate.x, s.act2.gate.y - 30, 70 + pr * 70).stroke({ color: 0xa64dff, width: 5, alpha: 0.7 * (1 - pr) });
       this.fxG.circle(s.act2.gate.x, s.act2.gate.y - 30, 26 + Math.sin(this.time * 3) * 6).fill({ color: 0xa64dff, alpha: 0.18 });
+    }
+    const vy = s.fleet.voyage;
+    if (vy) {
+      const pts = seaPath(vy.from, vy.to, W, H);
+      const p = alongPath(pts, (s.time - vy.at) / vy.dur);
+      const bob = Math.sin(this.time * 3) * 2;
+      const n = Math.min(3, s.fleet.ships);
+      for (let i = 0; i < n; i++) {
+        const x = p.x - p.dx * i * 34;
+        const y = p.y + bob + i * 10;
+        this.fxG.poly([x - 18, y, x + 18, y, x + 12, y + 9, x - 12, y + 9]).fill({ color: 0x5a3818 });
+        this.fxG.poly([x, y - 30, x, y - 2, x + 15 * p.dx, y - 6]).fill({ color: 0xf2e6c8 });
+        this.fxG.rect(x - 1, y - 32, 2, 32).fill({ color: 0x3a2410 });
+        this.fxG.ellipse(x, y + 10, 24, 4).stroke({ color: 0xffffff, width: 2, alpha: 0.35 });
+      }
     }
     if (s.act3.peak && !s.act3.ending) {
       const pr = (this.time * 0.35) % 1;

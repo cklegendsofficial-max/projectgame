@@ -20,6 +20,35 @@ export const ROUTES: [string, string, number][] = [
   ["tabriz", "constantinople", 2],
 ];
 
+const SEA_PATHS: Record<string, [number, number][]> = {
+  "tabriz-rey": [[0.385, 0.46], [0.405, 0.5], [0.42, 0.52]],
+  "rey-bukhara": [[0.42, 0.52], [0.43, 0.4], [0.435, 0.35]],
+  "tabriz-bukhara": [[0.385, 0.46], [0.41, 0.38], [0.435, 0.35]],
+  "tabriz-constantinople": [[0.25, 0.33], [0.17, 0.32], [0.15, 0.36]],
+};
+
+export function seaPath(from: string, to: string, w: number, h: number): { x: number; y: number }[] {
+  const fwd = SEA_PATHS[`${from}-${to}`];
+  const pts = fwd ?? [...(SEA_PATHS[`${to}-${from}`] ?? [])].reverse();
+  return pts.map(([x, y]) => ({ x: x * w, y: y * h }));
+}
+
+export function alongPath(pts: { x: number; y: number }[], k: number): { x: number; y: number; dx: number } {
+  if (pts.length < 2) return { ...(pts[0] ?? { x: 0, y: 0 }), dx: 1 };
+  const lens = pts.slice(1).map((p, i) => Math.hypot(p.x - pts[i].x, p.y - pts[i].y));
+  let d = Math.max(0, Math.min(1, k)) * lens.reduce((a, b) => a + b, 0);
+  for (let i = 0; i < lens.length; i++) {
+    if (d <= lens[i] || i === lens.length - 1) {
+      const t = lens[i] ? Math.min(1, d / lens[i]) : 0;
+      const a = pts[i];
+      const b = pts[i + 1];
+      return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, dx: Math.sign(b.x - a.x) || 1 };
+    }
+    d -= lens[i];
+  }
+  return { ...pts[pts.length - 1], dx: 1 };
+}
+
 export const SHIP_GOLD = 1500;
 export const SHIP_MAX = 3;
 export const SHIP_CAP = 40;

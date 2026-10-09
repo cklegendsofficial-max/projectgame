@@ -41,6 +41,9 @@ console.log("voyage", await ev(`return g.s.fleet.voyage;`), "cargo", await ev(`r
 await ev(`g.hud.render();`);
 await page.waitForTimeout(200);
 await page.screenshot({ path: `${out}-2.png` });
+await ev(`g.hud.close(); const v = g.s.fleet.voyage; g.s.time = v.at + v.dur * 0.5; g.reveal(850, 900, 10); g.cam.flyTo(850, 900, 0.9);`);
+await page.waitForTimeout(1200);
+await page.screenshot({ path: `${out}-ship.png` });
 const gold0 = await ev<number>(`return g.s.res.gold;`);
 await ev(`g.hud.close(); g.s.time += g.s.fleet.voyage.dur + 1;`);
 await page.waitForTimeout(800);
@@ -66,5 +69,7 @@ for (let k = 0; k < 80; k++) {
   break;
 }
 console.log("calm until", await ev(`return [g.s.fleet.calm ?? 0, g.s.time, g.pirateRisk(false)];`));
+const wet = await page.evaluate(`import("/src/game/hazar.ts").then((m) => { const g = window.game; const out = {}; for (const [a, b] of m.ROUTES.map((r) => [r[0], r[1]])) { const pts = m.seaPath(a, b, 4800, 2800); out[a + "-" + b] = pts.map((p) => g.cellCost(p.x, p.y) === Infinity ? "su" : "KARA").join(","); } return out; })`);
+console.log("waypoints", wet);
 console.log("errors:", errs);
 await browser.close();

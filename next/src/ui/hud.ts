@@ -160,7 +160,8 @@ export class Hud {
     this.taskEl.addEventListener("click", () => {
       const r = g.s.raid;
       const c = g.s.contract;
-      const p = r ? g.s.villages[r.v] : c ? CITIES.find((x) => x.id === c.to) : null;
+      const to = c?.to ?? g.s.fleet.voyage?.to;
+      const p = r ? g.s.villages[r.v] : to ? CITIES.find((x) => x.id === to) : null;
       if (p) g.cam.flyTo(p.x, p.y, Math.max(g.cam.zoom, 0.65));
     });
     this.sagaEl.addEventListener("click", () => {
@@ -1570,10 +1571,12 @@ export class Hud {
     }
     const r = s.raid;
     const ct = s.contract;
-    this.taskEl.classList.toggle("hidden", !r && !ct);
+    const vy = s.fleet.voyage;
+    this.taskEl.classList.toggle("hidden", !r && !ct && !vy);
     this.taskEl.classList.toggle("alert", !!r);
     if (r) this.setHtml(this.taskEl, `${ic("j_bandit", "qi")}<div><small>Baskın · ${dur(r.until - g.now)}</small><b>${s.villages[r.v].name} yağmalanıyor!</b></div>`);
     else if (ct) this.setHtml(this.taskEl, `${ic("j_caravan", "qi")}<div><small>Kervan sözleşmesi · ${dur(ct.until - g.now)}</small><b>${ct.cargo} → ${CITY_NAME[ct.to]}</b></div>`);
+    else if (vy) this.setHtml(this.taskEl, `${ic(GOODS[vy.good].icon, "qi")}<div><small>⚓ Denizde · %${Math.floor(Math.min(1, (s.time - vy.at) / vy.dur) * 100)}${vy.escort ? " · muhafızlı" : ""}</small><b>${vy.qty} ${GOODS[vy.good].name} → ${CITY_NAME[vy.to]}</b></div>`);
     const bld = g.building();
     this.root.querySelector('[data-b="capital"] span')!.textContent = bld ? `⏱ ${dur(s.buildings[bld].until - g.now)}` : "Semerkant";
     const hb = this.root.querySelector('[data-b="hero"]')!;
