@@ -36,7 +36,7 @@ async function boot(): Promise<void> {
   app.ticker.add((tk) => {
     const dt = Math.min(0.1, tk.deltaMS / 1000);
     if (hud.menuOpen) hud.menuTick(dt);
-    else game.update(dt);
+    else for (let i = hud.speed(); i > 0; i--) game.update(dt);
     cam.update(dt, view.layer);
     view.update(dt, game, cam);
     hud.update();

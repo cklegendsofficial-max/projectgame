@@ -8,9 +8,10 @@ export interface Settings {
   mini: boolean;
   haptic: boolean;
   lang: "tr" | "en";
+  speed: 1 | 2 | 3;
 }
 
-const DEF: Settings = { music: 0.5, fx: 0.7, ui: 1, eco: false, mini: true, haptic: true, lang: "tr" };
+const DEF: Settings = { music: 0.5, fx: 0.7, ui: 1, eco: false, mini: true, haptic: true, lang: "tr", speed: 1 };
 
 export function weakDevice(): boolean {
   const nav = navigator as Navigator & { deviceMemory?: number };

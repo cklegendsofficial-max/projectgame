@@ -160,6 +160,9 @@ export class Hud {
       <button class="birdbtn hidden"><img alt=""><span></span></button>
       <div class="panel hidden"></div>`;
     this.top = this.root.querySelector(".top")!;
+    this.top.addEventListener("click", (e) => {
+      if ((e.target as HTMLElement).closest("[data-spd]")) this.cycleSpeed();
+    });
     this.questEl = this.root.querySelector(".quest")!;
     this.sagaEl = this.root.querySelector(".saga")!;
     this.taskEl = this.root.querySelector(".task")!;
@@ -265,6 +268,7 @@ export class Hud {
         g.cam.flyTo(g.s.hero.x, g.s.hero.y, Math.max(g.cam.zoom, 0.7));
       } else if (k === "b" && g.s.bird && g.s.free) g.aimBird();
       else if (k === "m") this.root.querySelector(".snd")!.classList.toggle("off", audio.toggle());
+      else if (k === "t") this.cycleSpeed();
       else if (k === "f" || k === "f11") {
         e.preventDefault();
         toggleFullscreen();
@@ -653,6 +657,7 @@ export class Hud {
     if (b === "a") g.cam.onTap(g.cam.x, g.cam.y);
     else if (b === "start") this.openHero();
     else if (b === "back") this.openMenu();
+    else if (b === "l3") this.cycleSpeed();
     else if (b === "y") g.cam.flyTo(g.s.hero.x, g.s.hero.y, Math.max(g.cam.zoom, 0.7));
     else if (b === "x" && g.s.bird && g.s.free) g.aimBird();
     else if (b === "lb") g.cam.zoomBy(1 / 1.25);
@@ -670,6 +675,18 @@ export class Hud {
 
   panelOpen(): boolean {
     return !this.panel.classList.contains("hidden") || this.battleOpen || this.storyOpen || this.menuOpen;
+  }
+
+  speed(): number {
+    if (this.g.battleLock || this.modal() || this.archery) return 1;
+    return settings.speed ?? 1;
+  }
+
+  cycleSpeed(): void {
+    settings.speed = (((settings.speed ?? 1) % 3) + 1) as 1 | 2 | 3;
+    saveSettings();
+    this.toast(t("Oyun hızı: {n}x", { n: settings.speed }), "info");
+    this.liveT = 0;
   }
 
   menuOpen = false;
@@ -1492,7 +1509,7 @@ export class Hud {
       ${slots}
       <div class="setrow"><button class="btn sm" data-a="${this.act(() => this.exportFile())}">${ic("scroll")} ${t("Dışa aktar")}</button><button class="btn sm" data-a="${this.act(() => this.importFile())}">${ic("chest")} ${t("İçe aktar")}</button></div>
       <h3>${t("Klavye kısayolları")}</h3>
-      <p class="dim keys"><kbd>H</kbd> Kahraman · <kbd>C</kbd> Semerkant · <kbd>Boşluk</kbd> Birliğine dön · <kbd>B</kbd> Kuşu uçur · <kbd>M</kbd> Ses · <kbd>F</kbd> Tam ekran · <kbd>WASD</kbd>/<kbd>Oklar</kbd> Kamera · <kbd>+</kbd>/<kbd>−</kbd> Yakınlaş · <kbd>Esc</kbd> Kapat / Menü</p>
+      <p class="dim keys"><kbd>H</kbd> Kahraman · <kbd>C</kbd> Semerkant · <kbd>Boşluk</kbd> Birliğine dön · <kbd>B</kbd> Kuşu uçur · <kbd>M</kbd> Ses · <kbd>F</kbd> Tam ekran · <kbd>WASD</kbd>/<kbd>Oklar</kbd> Kamera · <kbd>+</kbd>/<kbd>−</kbd> Yakınlaş · <kbd>T</kbd> Oyun hızı · <kbd>Esc</kbd> Kapat / Menü</p>
       <h3>${t("Oyun kolu")}</h3>
       <p class="dim keys">${t("<kbd>Sol çubuk</kbd> Kamera / seçim · <kbd>A</kbd> Nişangâha git, seç · <kbd>B</kbd> Kapat · <kbd>Y</kbd> Birliğine dön · <kbd>X</kbd> Kuşu uçur · <kbd>LB</kbd>/<kbd>RB</kbd> Yakınlaş, sekme · <kbd>LT</kbd>/<kbd>RT</kbd> Yakınlaş · <kbd>Start</kbd> Kahraman · <kbd>Back</kbd> Menü")}</p>
       ${this.achHtml()}
@@ -1943,7 +1960,8 @@ export class Hud {
        <div class="res hero">${ic(g.face(), "ic round")}<b>${t("Sv")} ${h.lv}</b>${h.points + h.spts + h.tpts ? `<small class="pts">+${h.points + h.spts + h.tpts}</small>` : ""}${s.wanted ? `<small class="wanted" title="Aranıyorsun">${"★".repeat(s.wanted)}</small>` : ""}</div>
        ${s.free ? `<div class="res">${ic("crown")}<b>${s.renown}</b></div>` : ""}
        <div class="res day" title="${night ? "Gece: görüş azalır, haramiler cesurlaşır, muhafızlar seni zor bulur, Kurgan Taşları güçlenir ama daha çok Ruh Taşı verir" : "Gündüz"}">${night ? "🌙" : "☀️"}<b>${t("Gün")} ${day.day}</b></div>
-       <div class="res season" title="${se.name}: ${se.desc} (${t("{n} gün kaldı", { n: Math.ceil(g.seasonLeft() / DAY_SEC) })})">${se.icon}<b>${se.name}</b></div>`);
+       <div class="res season" title="${se.name}: ${se.desc} (${t("{n} gün kaldı", { n: Math.ceil(g.seasonLeft() / DAY_SEC) })})">${se.icon}<b>${se.name}</b></div>
+       <div class="res spd ${(settings.speed ?? 1) > 1 ? "fast" : ""}" data-spd title="${t("Oyun hızı (T)")}"><b>${"▶".repeat(settings.speed ?? 1)}</b></div>`);
     const q = g.quest();
     this.setHtml(this.questEl, q
       ? `${ic("quest", "qi")}<div><small>${t("Görev")} ${s.quest + 1}/${g.QUESTS.length}</small><b>${q.title}</b><span>${q.text}</span><em>${costHtml(q.reward, g)}</em></div>`

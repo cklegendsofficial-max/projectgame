@@ -1,7 +1,7 @@
 /** Standart eşleme: 0 A · 1 B · 2 X · 3 Y · 4 LB · 5 RB · 6 LT · 7 RT · 8 Geri · 9 Başlat · 12-15 D-pad */
-export type PadButton = "a" | "b" | "x" | "y" | "lb" | "rb" | "back" | "start";
+export type PadButton = "a" | "b" | "x" | "y" | "lb" | "rb" | "back" | "start" | "l3";
 
-const BTN: [number, PadButton][] = [[0, "a"], [1, "b"], [2, "x"], [3, "y"], [4, "lb"], [5, "rb"], [8, "back"], [9, "start"]];
+const BTN: [number, PadButton][] = [[0, "a"], [1, "b"], [2, "x"], [3, "y"], [4, "lb"], [5, "rb"], [8, "back"], [9, "start"], [10, "l3"]];
 const DEAD = 0.22;
 const REPEAT_FIRST = 0.35;
 const REPEAT_NEXT = 0.12;

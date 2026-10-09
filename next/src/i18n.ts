@@ -45,6 +45,8 @@ const EN: Record<string, string> = {
   Yük: "Load",
   Usta: "Master",
   Gün: "Day",
+  "Oyun hızı: {n}x": "Game speed: {n}x",
+  "Oyun hızı (T)": "Game speed (T)",
   Görev: "Quest",
   "{n} gün kaldı": "{n} days left",
   // şehir sekmeleri
