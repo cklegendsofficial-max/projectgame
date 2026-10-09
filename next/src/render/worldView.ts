@@ -10,6 +10,7 @@ import { TOMBS, tombOf } from "../game/deep";
 import { SEASONS } from "../game/seasons";
 import { alongPath, seaPath } from "../game/hazar";
 import { tamgaCanvas, type Tamga } from "../game/ozan";
+import { boyOf } from "../game/korkut";
 
 const urls: Record<string, string> = {};
 for (const [p, u] of Object.entries(import.meta.glob<string>("../assets/**/*.webp", { eager: true, query: "?url", import: "default" }))) {
@@ -158,6 +159,8 @@ export class WorldView {
   private fortM: Marker | null = null;
   private gateM: Marker | null = null;
   private peakM: Marker | null = null;
+  private boyM: Marker | null = null;
+  private boyK = "";
   private otagM: Marker | null = null;
   private seraiF = new Map<string, Sprite>();
   private ownF = new Map<string, Sprite>();
@@ -721,6 +724,21 @@ export class WorldView {
         this.otagM.y = s.otag.y;
         this.otagM.sp.position.set(s.otag.x, s.otag.y);
         this.otagM.label?.position.set(s.otag.x, s.otag.y + 110 * 0.18);
+      }
+    }
+    const bk = s.boy?.at ? `${s.boy.id}|${s.boy.step}|${s.boy.at.x | 0}` : "";
+    if (bk !== this.boyK) {
+      this.boyK = bk;
+      if (this.boyM) {
+        this.boyM.sp.destroy({ children: true });
+        this.boyM.label?.destroy();
+        this.boyM = null;
+      }
+      const st = s.boy && boyOf(s.boy.id)?.steps[s.boy.step];
+      if (st && s.boy?.at) {
+        this.boyM = this.place(st.img, s.boy.at.x, s.boy.at.y, 120, st.place, 0.85);
+        this.boyM.sp.tint = 0xffe0b0;
+        if (this.boyM.label) this.boyM.label.style.fill = "#ffcf7a";
       }
     }
     if (s.act3.peak && !this.peakM) {

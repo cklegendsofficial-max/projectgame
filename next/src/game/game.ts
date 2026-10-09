@@ -23,6 +23,7 @@ import { BRIBE_GOLD, DECREES, KAGAN_RENOWN, KURULTAY_EVERY, KURULTAY_MAX, decree
 import { ESCORT_GOLD, PIRATE_RISK, SHIP_CAP, SHIP_GOLD, SHIP_MAX, pirateArmy, portOf, routeDays } from "./hazar";
 import { LEGACY_PERKS, hasLegacy, recordEnding } from "./legacy";
 import { HERD_GOLD, HERD_BUY, HERD_MAX, MOVE_FOOD, OTAG_GOLD, OTAG_WOOD, REST_FOOD, ZONE_NAME, bestZone, pasture, zoneOf } from "./otag";
+import { boyOf, type Boy, type BoyStep } from "./korkut";
 import { DAUGHTER_NAMES, FAMILY_DEFAULT, KID_EVERY, KID_MAX, SON_NAMES, YEAR_DAYS, brideGold, brideOf, deathChance, kidAge, makeHeirs, pick, type Family } from "./dynasty";
 import { DIR_DEFAULT, PERSONAS, pickRelief, pickThreat, struggling, tensionGain, type DirCtx, type DirState, type PersonaId, type Relief, type Threat } from "./director";
 import { ROAD_CHANCE, ROAD_EVENTS, ROAD_PER_DAY, ROAD_STEP, checkChance, type RoadCtx, type RoadEvent, type RoadFx, type RoadOpt } from "./road";
@@ -43,6 +44,7 @@ export type Target =
   | { kind: "gate" }
   | { kind: "peak" }
   | { kind: "otag" }
+  | { kind: "boy" }
   | { kind: "point"; x: number; y: number };
 
 export interface Quest {
@@ -2245,6 +2247,8 @@ export class Game {
         return s.act3.peak;
       case "otag":
         return s.otag;
+      case "boy":
+        return s.boy?.at ?? null;
       case "bandit":
         return s.bandits.find((b) => b.id === t.i) ?? null;
       case "caravan":
@@ -2325,6 +2329,7 @@ export class Game {
     if (s.act2.gate && !s.act2.done) test({ kind: "gate" }, s.act2.gate.x, s.act2.gate.y, 2.2);
     if (s.act3.peak) test({ kind: "peak" }, s.act3.peak.x, s.act3.peak.y, 2.2);
     if (s.otag) test({ kind: "otag" }, s.otag.x, s.otag.y, 1.8);
+    if (s.boy?.at) test({ kind: "boy" }, s.boy.at.x, s.boy.at.y, 2);
     return best;
   }
 
@@ -3777,6 +3782,105 @@ export class Game {
       sr.coffer = 0;
       return;
     }
+  }
+
+  boyReason(b: Boy): string {
+    const s = this.s;
+    if (!s.free) return "Önce hürriyetini kazan";
+    if ((s.boysDone ?? []).includes(b.id)) return "Bu boy anlatıldı";
+    if (s.boy) return "Önce başladığın boyu bitir";
+    if (s.hero.lv < b.lv) return `${b.lv}. seviye gerek`;
+    if (this.nearCity() < 0) return "Dede Korkut şehir hanlarında anlatır";
+    return "";
+  }
+
+  private boySpot(city: string): { x: number; y: number } {
+    const c = this.cityPos(city);
+    for (let i = 0; i < 80; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const d = 260 + Math.random() * 260;
+      const x = c.x + Math.cos(a) * d;
+      const y = c.y + Math.sin(a) * d;
+      if (x > 80 && y > 80 && x < W - 80 && y < H - 80 && this.cellCost(x, y) < 3 && this.nearCity(200) < 0 && CITIES.every((k) => Math.hypot(k.x - x, k.y - y) > 200)) return { x, y };
+    }
+    return { x: c.x + 160, y: c.y + 160 };
+  }
+
+  boyStart(id: string): void {
+    const b = boyOf(id);
+    if (!b || this.boyReason(b)) return;
+    const s = this.s;
+    const at = this.boySpot(b.steps[0].near);
+    s.boy = { id, step: 0, at };
+    this.reveal(at.x, at.y, 6);
+    this.chron(`Dede Korkut ${CITY_NAME[CITIES[this.nearCity()].id]} hanında "${b.name}"nu anlattı.`);
+    this.hud.story(`Dede Korkut · ${b.name}`, b.icon, `<i>${b.intro}</i><br><br><b>Hedef:</b> ${b.steps[0].place} (${CITY_NAME[b.steps[0].near]} yakınları)`, "Yola çık");
+    saveGame(s);
+  }
+
+  boyStep(): { b: Boy; st: BoyStep; n: number } | null {
+    const bs = this.s.boy;
+    const b = bs && boyOf(bs.id);
+    if (!bs || !b) return null;
+    return { b, st: b.steps[bs.step], n: bs.step };
+  }
+
+  boyOdds(): number {
+    const x = this.boyStep();
+    if (!x?.st.army) return 1;
+    return this.odds(x.st.army(this.s.hero.lv), x.st.bonus ?? 0, x.st.boss ?? null);
+  }
+
+  boyAct(): void {
+    const x = this.boyStep();
+    const s = this.s;
+    if (!x || !s.boy?.at) return;
+    const { b, st } = x;
+    if (Math.hypot(s.boy.at.x - s.hero.x, s.boy.at.y - s.hero.y) > 120) return;
+    if (st.act === "talk") return this.boyNext(st.done);
+    if (st.act === "pay") {
+      if (!this.pay({ gold: st.cost?.gold ?? 0, food: st.cost?.food ?? 0 })) return this.hud.toast("Yetersiz kaynak", "bad");
+      return this.boyNext(st.done);
+    }
+    if (st.act === "fight") {
+      this.battle(`${b.name} · ${st.place}`, st.army!(s.hero.lv), st.bonus ?? 0, (win) => {
+        if (!win) return `<p class="warn">Geri çekilmek zorunda kaldın. ${st.place} seni bekliyor.</p>`;
+        this.afterBattle = () => this.boyNext(st.done);
+        return `<p class="good">${st.boss ? `${st.boss.name} yenildi!` : "Zafer!"}</p>`;
+      }, st.boss ?? null, st.boss?.name ?? st.place);
+      return;
+    }
+    this.hud.choice(st.place, st.img, st.text, (st.choices ?? []).map((c) => {
+      const poor = (c.fx.gold ?? 0) < 0 && s.res.gold < -(c.fx.gold ?? 0);
+      return { label: c.label, cls: poor ? "off" : "go", fn: () => {
+        const fx = this.roadFx(c.fx);
+        this.boyNext(`${c.text}${fx}`, c.end);
+      } };
+    }));
+  }
+
+  private boyNext(text: string, end = false): void {
+    const s = this.s;
+    const bs = s.boy;
+    const b = bs && boyOf(bs.id);
+    if (!bs || !b) return;
+    const last = end || bs.step >= b.steps.length - 1;
+    if (last) {
+      s.boy = null;
+      s.boysDone = [...(s.boysDone ?? []), b.id];
+      const fx = this.roadFx(b.reward);
+      const lg = b.reward.legend ? this.legendDrop(1) : null;
+      this.sing("destan", { foe: b.name.replace(/ Boyu$/, "") });
+      this.chron(`${s.hero.name}, Dede Korkut'un "${b.name}"nu kendi kılıcıyla yeniden yazdı.`);
+      this.hud.story(`${b.name} tamamlandı`, b.icon, `${text ? `${text}<br><br>` : ""}<i>Dede Korkut gelip boy boyladı, soy soyladı: "Bu destanı ${gen(s.hero.name)} adıyla anlatsınlar."</i>${fx}${lg ? `<br>Efsane: <b class="r4">${lg.name}</b>` : ""}`, "Kopuzun dilli olsun");
+    } else {
+      bs.step++;
+      const nx = b.steps[bs.step];
+      bs.at = nx.near === b.steps[bs.step - 1].near && nx.place === b.steps[bs.step - 1].place ? bs.at : this.boySpot(nx.near);
+      this.reveal(bs.at!.x, bs.at!.y, 6);
+      this.hud.story(b.name, nx.img, `${text ? `${text}<br><br>` : ""}<b>Sıradaki:</b> ${nx.place} (${CITY_NAME[nx.near]} yakınları)`, "Devam");
+    }
+    saveGame(s);
   }
 
   family(): Family {

@@ -17,6 +17,7 @@ import { HERD_BUY, HERD_GOLD, HERD_MAX, MOVE_FOOD, OTAG_GOLD, OTAG_WOOD, REST_FO
 import { VET_LV_MAX, VET_MAX, VET_RANKS, vetBonus, vetTitle } from "../game/vets";
 import { PERSONAS, PERSONA_KEYS } from "../game/director";
 import { kidAge } from "../game/dynasty";
+import { BOYS } from "../game/korkut";
 import { KUT_TIERS, kutArmy, kutTier, kutVote } from "../game/kut";
 import { SING_GOLD, TAMGA_COLORS, TAMGA_DEFAULT, TAMGA_MARKS, TAMGA_SHAPES, singRenown, tamgaSvg, type Tamga } from "../game/ozan";
 import { CITIES, H, NH, NW, W } from "../world/gen";
@@ -869,6 +870,25 @@ export class Hud {
         html = this.frame("Tengri Dağı", "Göğün bozkıra değdiği yer · Gök Tengri Destanı", assetUrl("map/ruins"), body);
         break;
       }
+      case "boy": {
+        const x = g.boyStep();
+        const at = s.boy?.at;
+        if (!x || !at) return this.close();
+        const { b, st, n } = x;
+        const near = Math.hypot(at.x - s.hero.x, at.y - s.hero.y) < 120;
+        let body = `<p>${st.text}</p>`;
+        if (st.act === "fight") {
+          const p = Math.round(g.boyOdds() * 100);
+          body += `${st.boss ? `<div class="brow">${ic(st.boss.icon, "bimg round")}<div class="bi2"><b>${st.boss.name}</b><small>Can ${st.boss.hp} · Saldırı ${st.boss.atk} · Savunma ${st.boss.def}</small></div></div>` : ""}
+            <h3>Düşman</h3>${armyHtml(st.army!(s.hero.lv), "enemy")}<h3>Sen ve birliğin</h3>${armyHtml(s.hero.army)}
+            <div class="odds ${p >= 65 ? "good" : p >= 35 ? "mid" : "bad"}">Zafer şansı: <b>%${p}</b></div>`;
+        }
+        const cost = st.cost ? ` (${[st.cost.gold ? `${st.cost.gold} altın` : "", st.cost.food ? `${st.cost.food} yiyecek` : ""].filter(Boolean).join(", ")})` : "";
+        const poor = st.cost && !g.canAfford({ gold: st.cost.gold ?? 0, food: st.cost.food ?? 0 });
+        body += near ? `<button class="btn ${st.act === "fight" ? "red" : "go"} big ${poor ? "off" : ""}" data-a="${this.act(() => { if (st.act === "fight") this.close(); g.boyAct(); })}">${ic(st.act === "fight" ? "swords" : "scroll")} ${st.btn}${cost}</button>` : this.walkBtn(t, "Oraya yürü");
+        html = this.frame(st.place, `Dede Korkut · ${b.name} · Adım ${n + 1}/${b.steps.length}`, assetUrl(st.img), body);
+        break;
+      }
       case "otag": {
         const o = s.otag;
         if (!o) return this.close();
@@ -1353,6 +1373,24 @@ export class Hud {
       <small class="dim">Kut; zaferle, adil hükümle, şölen ve fetihle artar. Yenilgi, soygun, ağır vergi ve kaybedilen şehirle söner. ${left ? `Sıradaki töre davası ~${left} gün sonra.` : "Yakında bir töre davası gelecek."} Kademeler: ${KUT_TIERS.map((x) => x.name).join(" · ")}</small>`;
   }
 
+  private korkutHtml(): string {
+    const g = this.g;
+    const s = g.s;
+    const cur = g.boyStep();
+    const done = s.boysDone ?? [];
+    const rows = BOYS.map((b) => {
+      const isCur = cur?.b.id === b.id;
+      const fin = done.includes(b.id);
+      const why = g.boyReason(b);
+      const btn = isCur
+        ? `<button class="btn sm go" data-a="${this.act(() => { this.close(); const at = s.boy!.at!; g.cam.flyTo(at.x, at.y, 0.8); })}">Bul</button>`
+        : fin ? `<em class="cheap">✓</em>` : `<button class="btn sm ${why ? "off" : "go"}" title="${why}" data-a="${this.act(() => g.boyStart(b.id))}">Dinle</button>`;
+      const sub = isCur ? `<small class="cheap">Adım ${cur!.n + 1}/${b.steps.length}: ${cur!.st.place} (${CITY_NAME[cur!.st.near]} yakınları)</small>` : fin ? `<small class="dim">Destan tamamlandı</small>` : `<small class="dim">${b.lv}. seviye${why && why !== "Dede Korkut şehir hanlarında anlatır" ? ` · ${why}` : ""}</small>`;
+      return `<div class="grow ${fin ? "dim" : ""}">${ic(b.icon, "gimg")}<div class="bi2"><b>${b.name}</b>${sub}</div>${btn}</div>`;
+    }).join("");
+    return `<h3>${ic("scroll")} Dede Korkut Boyları <em class="dim">${done.length}/${BOYS.length}</em></h3><p class="dim">Dede Korkut şehir hanlarında Oğuz destanlarını anlatır. Dinlediğin boyu kendi kılıcınla yeniden yaz.</p>${rows}`;
+  }
+
   private familyHtml(): string {
     const g = this.g;
     const f = g.family();
@@ -1504,7 +1542,7 @@ export class Hud {
     } else if (this.tab === "ayar") {
       body = this.settingsHtml();
     } else if (this.tab === "unvan") {
-      body = this.dailyHtml() + (s.beylik ? this.kutHtml() + this.familyHtml() : "") + (s.free ? this.ozanHtml() : "") + this.kurultayHtml() + this.rivalsHtml() + this.nemesisHtml() + this.titlesHtml();
+      body = this.dailyHtml() + (s.beylik ? this.kutHtml() + this.familyHtml() : "") + (s.free ? this.korkutHtml() + this.ozanHtml() : "") + this.kurultayHtml() + this.rivalsHtml() + this.nemesisHtml() + this.titlesHtml();
     } else if (this.tab === "techizat") {
       const inCity = g.nearCity() >= 0;
       body = `<div class="slots">` + SLOTS.map((sl) => {
@@ -1829,6 +1867,14 @@ export class Hud {
     if (ot) {
       c.fillStyle = "#ffe08a";
       c.fillRect(ot.x * sx - 3, ot.y * sy - 3, 6, 6);
+    }
+    const ba = g.s.boy?.at;
+    if (ba) {
+      c.strokeStyle = "#ffb24a";
+      c.lineWidth = 2;
+      c.beginPath();
+      c.arc(ba.x * sx, ba.y * sy, 4 + Math.sin(performance.now() / 300), 0, Math.PI * 2);
+      c.stroke();
     }
     const pk = g.s.act3.peak;
     if (pk && !g.s.act3.ending) {
