@@ -142,6 +142,18 @@ await shot("06c-boru-lead", 900);
 check((await ev<number>(`return g.wd().boru;`)) > 0, "Ak Börü karşılaşması");
 await dismiss();
 
+// hükümdarlar ve yıllık destan
+const r0 = await ev<string>(`return window.game.s.wd.rulers.karahan?.name ?? "";`);
+await ev(`g.hud.close(); const R = Math.random; Math.random = () => 0.01; try { g.successions(g.dayOf().day); } finally { Math.random = R; }`);
+await shot("06d-ruler");
+const r1 = await ev<string>(`return g.wd().rulers.karahan?.name ?? "";`);
+check(r1 !== "" && r1 !== r0, `hükümdar değişti (${r1})`);
+await dismiss();
+await ev(`g.hud.close(); g.chron("Deneme olayı bir."); g.chron("Deneme olayı iki."); g.wd().year = 1; g.yearTale(${"40"});`);
+await shot("06e-year");
+check((await ev<number>(`return g.wd().year;`)) === 3, "yıllık destan");
+await dismiss();
+
 // takvim
 const cal = await page.evaluate(async () => {
   const m = await import("/src/game/world.ts");

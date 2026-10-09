@@ -50,7 +50,7 @@ import { FALL_PRICE, FALL_TEXT, LEG_DAYS, MONGOL_DAY, MONGOL_LV, RECOVER_DAYS, R
 import { KIP_ALLY_FX, KIP_ALLY_MODS, KIP_FOOD, KIP_FORT_FX, KIP_GIFT, KIP_GIFT_REP, KIP_HIRE_GAP, KIP_HIRE_N, KIP_HIRE_REP, KIP_RAW, KIP_SELL_MULT, KIP_SELL_REP, KIP_STEPS, KIP_STONES_MODS, STONES, STONE_FX, inKipchak, kipBoss, kipFortArmy, kipHireCost, newKip, stoneXp, type KipPoi, type KipState } from "./kipchak";
 import { SEASONS, SEASON_DAYS, seasonOf, type Season, type SeasonId } from "./seasons";
 import { FACTIONS, FACTION_KEYS, HOSTILE, OCCUPY, REP_RANKS, RANK_PERKS, citiesOf, factionOf, repRank, type FactionId } from "./factions";
-import { DROUGHT_DAYS, ERAS, PEACE_GAP, RIOT_AT, SAFE_CITIES, SHORT_MAX, STYLE_NAME, WAR_CAUSES, WAR_CHANCE, WAR_MAX_DAYS, WAR_MIN_DAY, WAR_PAIRS, WAR_TAKE, WOLF_MAX, WOLF_PACK_AT, WOLF_SACRED, adaptWeights, counterOf, eraOf, favTactic, lifeStyle, moonKind, moonPhase, newWorld, noteTactic, realFest, shortMult, styleMix, warKey, type Style, type War, type WorldState } from "./world";
+import { BASE_TRAIT, HEIRS, RULER_TRAITS, type RulerTrait, DROUGHT_DAYS, ERAS, PEACE_GAP, RIOT_AT, SAFE_CITIES, SHORT_MAX, STYLE_NAME, WAR_CAUSES, WAR_CHANCE, WAR_MAX_DAYS, WAR_MIN_DAY, WAR_PAIRS, WAR_TAKE, WOLF_MAX, WOLF_PACK_AT, WOLF_SACRED, adaptWeights, counterOf, eraOf, favTactic, lifeStyle, moonKind, moonPhase, newWorld, noteTactic, realFest, shortMult, styleMix, warKey, type Style, type War, type WorldState } from "./world";
 import { CLASS_BY_ID, CLASS_SKILLS, SKILL_MAX, WEAPON_NAME, WEAPON_STAT, skillPow, skillRank, type ClassDef, type ClassId, type ClassSkill, type WeaponKind } from "./classes";
 import { ACT2, ACT3, CHAPTERS, COMP_BY_ID, COMP_MAX, ENDINGS, ERLIK, ERLIK_SHADE, FORT_GUARD, GATE_GUARD, KARA_HAN, KASIM, KOK_BORU, PEAK_GUARD, SHADE_GUARD, endingOf, type Chapter, type CompId, type CompMods, type Companion } from "./story";
 import { CAPITAL, SLAVE_RADIUS, banditArmy, campGarrison, importSave, kurganBoss, kurganGuard, loadGame, saveGame as rawSave, useSlot, wipeGame, type Bandit, type Bounty, type Caravan, type Contract, type GameState, type Storm } from "./state";
@@ -173,6 +173,10 @@ export class Game {
     this.s = loadGame(world);
     this.s.wd = { ...newWorld(), ...this.s.wd };
     Object.assign(OCCUPY, this.s.wd.occ);
+    for (const [f, r] of Object.entries(this.s.wd.rulers) as [FactionId, { name: string; gen: string }][]) {
+      FACTIONS[f].ruler = r.name;
+      FACTIONS[f].rulerGen = r.gen;
+    }
     this.reveal(CAPITAL.x, CAPITAL.y, 16);
     this.reveal(this.s.hero.x, this.s.hero.y, 11);
     cam.zoom = 0.75;
@@ -4367,12 +4371,58 @@ export class Game {
       if (Math.abs(war.score) >= WAR_TAKE) this.warTake(war);
       if (day - war.since > WAR_MAX_DAYS || (day - war.since > 14 && Math.random() < 0.05)) this.warEnd(war, day);
     }
-    if (day < WAR_MIN_DAY || w.wars.length >= 2 || this.s.mongol?.stage === 2 || Math.random() > WAR_CHANCE) return;
+    if (day < WAR_MIN_DAY || w.wars.length >= 2 || this.s.mongol?.stage === 2) return;
     const busy = (f: FactionId) => w.wars.some((x) => x.a === f || x.b === f);
     const pairs = WAR_PAIRS.filter(([a, b]) => !busy(a) && !busy(b) && (w.peaceUntil[warKey(a, b)] ?? 0) <= day);
     if (!pairs.length) return;
     const [a, b] = oneOf(pairs);
+    if (Math.random() > WAR_CHANCE * Math.sqrt(RULER_TRAITS[this.rulerTrait(a)].war * RULER_TRAITS[this.rulerTrait(b)].war)) return;
     this.warStart(a, b, day);
+  }
+
+  rulerTrait(f: FactionId): RulerTrait {
+    return this.s.wd?.rulers[f]?.trait ?? BASE_TRAIT[f];
+  }
+
+  /** Hükümdarlar ölür, tahta yenileri geçer; yeni hükümdar seni eskisi kadar tanımaz. */
+  private successions(day: number): void {
+    const s = this.s;
+    const w = this.wd();
+    for (const f of FACTION_KEYS) {
+      const lost = w.wars.some((x) => (x.a === f && x.takes < -1) || (x.b === f && x.takes > 1));
+      if (Math.random() > (lost ? 0.3 : 0.12)) continue;
+      const old = FACTIONS[f].ruler;
+      const pool = HEIRS[f].filter(([n]) => n !== old);
+      const [name, g] = oneOf(pool);
+      const trait = oneOf(Object.keys(RULER_TRAITS) as RulerTrait[]);
+      w.rulers[f] = { name, gen: g, trait, since: day };
+      FACTIONS[f].ruler = name;
+      FACTIONS[f].rulerGen = g;
+      const r0 = this.rep(f);
+      s.rep[f] = Math.round(r0 > 0 ? r0 * 0.7 : r0 * 0.5);
+      const T = RULER_TRAITS[trait];
+      this.chron(`${old} öldü; ${FACTIONS[f].name} tahtına ${name} geçti (${T.name}).`);
+      audio.play("story");
+      if (!this.battleLock && !this.hud.modal())
+        this.hud.story(tr("{f} tahtında yeni hükümdar", { f: FACTIONS[f].name }), `icons/${FACTIONS[f].icon}`, tr("{o} göçtü. Davullar dövüldü, hutbe yeni adla okundu: {n}.", { o: old, n: name }) + `<br><br><b>${tr(T.name)}</b> · ${tr(T.text)}<br><br><span class="dim">${tr("Yeni hükümdar seni eskisi kadar tanımıyor: itibarın biraz soğudu.")}</span>`, tr("Tahtı kutlu olsun"));
+      else this.hud.toast(tr("{f} tahtına {n} geçti.", { f: FACTIONS[f].name, n: name }), "info");
+      return;
+    }
+  }
+
+  /** Her yılın başında ozanlar geçen yılı anlatır. */
+  private yearTale(day: number): void {
+    const s = this.s;
+    const w = this.wd();
+    const year = Math.floor((day - 1) / YEAR_DAYS) + 1;
+    if (year <= w.year) return;
+    const from = (w.year - 1) * YEAR_DAYS + 1;
+    w.year = year;
+    const lines = s.chron.filter((c) => c.d >= from && c.d < day).slice(-7).map((c) => `<li>${c.d}. ${tr("gün")} · ${c.t}</li>`).join("");
+    if (!lines || this.battleLock || this.hud.modal()) return;
+    const ren = 5 + Math.min(20, s.chron.filter((c) => c.d >= from).length);
+    s.renown += ren;
+    this.hud.story(tr("{y}. Yılın Destanı", { y: year - 1 }), "icons/scroll", `${tr("Nevruz ateşinin başında ozan kopuzunu aldı ve geçen yılı anlattı:")}<ul class="runs">${lines}</ul><b class="cheap">+${ren} ${tr("şöhret")}</b> · ${tr("Çağ")}: <b>${tr(ERAS[w.era].name)}</b>`, tr("Yeni yıl kutlu olsun"));
   }
 
   warStart(a: FactionId, b: FactionId, day = this.dayOf().day): void {
@@ -4462,7 +4512,7 @@ export class Game {
     }
     const f = war.side;
     if (win === f || (!win && war.help >= 20)) {
-      const gold = 200 + Math.round(war.help * 12);
+      const gold = Math.round((200 + war.help * 12) * (this.rulerTrait(f) === "comert" ? 1.3 : 1));
       this.gain({ gold });
       s.rep[f] = this.rep(f) + 60 + Math.round(war.help);
       s.renown += 10 + Math.round(war.help / 4);
@@ -4736,7 +4786,10 @@ export class Game {
     this.gain({ food: 40 });
     this.addKut(1);
     for (const c of CITIES) w.short[c.id] = Math.max(0, (w.short[c.id] ?? 0) - 2);
-    if (s.free) this.hud.toast(tr("Bozkırda Nevruz! Ateşler yakıldı, kıtlıklar hafifledi. +40 yiyecek"), "good");
+    if (!s.free) return;
+    this.hud.toast(tr("Bozkırda Nevruz! Ateşler yakıldı, kıtlıklar hafifledi. +40 yiyecek"), "good");
+    this.successions(day);
+    this.yearTale(day);
   }
 
   // ---------- otag ----------

@@ -53,7 +53,28 @@ export interface WorldState {
   boru: number;
   boruPeace: number;
   boruSlain: boolean;
+  /** tahta geçen yeni hükümdarlar */
+  rulers: Partial<Record<FactionId, { name: string; gen: string; trait: RulerTrait; since: number }>>;
+  /** son yıllık destanın yılı */
+  year: number;
 }
+
+export type RulerTrait = "savasci" | "barisci" | "comert" | "kurnaz";
+export const RULER_TRAITS: Record<RulerTrait, { name: string; text: string; war: number }> = {
+  savasci: { name: "Savaşçı", text: "Kılıcı kınında durmaz; komşularına savaş açmaya hazır.", war: 2 },
+  barisci: { name: "Barışçıl", text: "Kervan yollarını kılıçtan çok sever; savaştan kaçınır.", war: 0.4 },
+  comert: { name: "Cömert", text: "Hizmet edenleri altına boğar; ödülleri bol.", war: 1 },
+  kurnaz: { name: "Kurnaz", text: "Entrikayla yönetir; dostunu da düşmanını da tartar.", war: 1.2 },
+};
+
+export const BASE_TRAIT: Record<FactionId, RulerTrait> = { karahan: "savasci", gazne: "comert", selcuk: "savasci", bizans: "kurnaz" };
+
+export const HEIRS: Record<FactionId, [string, string][]> = {
+  karahan: [["Böri Tegin", "Böri Tegin'in"], ["Tamgaç Han", "Tamgaç Han'ın"], ["Kadır Han", "Kadır Han'ın"], ["Yusuf Han", "Yusuf Han'ın"], ["İlig Han", "İlig Han'ın"]],
+  gazne: [["Sultan Mevdud", "Sultan Mevdud'un"], ["Sultan İbrahim", "Sultan İbrahim'in"], ["Sultan Ferruhzad", "Sultan Ferruhzad'ın"], ["Sultan Behram", "Sultan Behram'ın"]],
+  selcuk: [["Alp Arslan", "Alp Arslan'ın"], ["Melikşah", "Melikşah'ın"], ["Çağrı Bey", "Çağrı Bey'in"], ["Kutalmış Bey", "Kutalmış Bey'in"]],
+  bizans: [["İmparator Romanos", "İmparator Romanos'un"], ["İmparator Konstantin", "İmparator Konstantin'in"], ["İmparator Mihail", "İmparator Mihail'in"], ["İmparatoriçe Zoe", "İmparatoriçe Zoe'nin"]],
+};
 
 export function newWorld(): WorldState {
   return {
@@ -76,6 +97,8 @@ export function newWorld(): WorldState {
     boru: -99,
     boruPeace: -1,
     boruSlain: false,
+    rulers: {},
+    year: 1,
   };
 }
 

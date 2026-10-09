@@ -55,7 +55,7 @@ import { ORIGINS, ORIGIN_BY_ID, type Origin, type OriginId } from "../game/origi
 import { BOND_LIKES, BOND_LIKES_EN, BOND_QUEST, COMP_QUESTS, SWORN_MULT, bondTier } from "../game/bonds";
 import { SETS, SET_FORGE, SET_KEYS, SET_SLOTS, UNIQUES, modsText, type SetId } from "../game/legend";
 import { FACTIONS, FACTION_KEYS, HOSTILE, OCCUPY, REP_RANKS, RANK_PERKS, factionOf } from "../game/factions";
-import { ERAS, WOLF_MAX, WOLF_PACK_AT, favTactic, moonPhase, shortMult } from "../game/world";
+import { ERAS, RULER_TRAITS, WOLF_MAX, WOLF_PACK_AT, favTactic, moonPhase, shortMult } from "../game/world";
 import { BRO_MODS, NEM_TRAITS, diyetCost, nemName } from "../game/nemesis";
 import { BIRDS, birdSight, birdXpNeed } from "../game/falcon";
 import { BREEDS, BREED_GOLD, BREED_TIME } from "../game/horse";
@@ -1316,6 +1316,7 @@ export class Hud {
     return `<h3>${ic("scroll")} ${t("Dünyanın Nabzı")}</h3>
       <p><b>${t(E.name)}</b> · <span class="dim">${t(E.text)}</span></p>
       ${wars || `<p class="dim">${t("Devletler arasında şimdilik barış var.")}</p>`}
+      <p class="dim">${FACTION_KEYS.map((f) => `${FACTIONS[f].short}: <b>${FACTIONS[f].ruler}</b> (${t(RULER_TRAITS[g.rulerTrait(f)].name)})`).join(" · ")}</p>
       ${occ ? `<p>${t("İşgal altındaki şehirler")}: ${occ}</p>` : ""}
       ${shorts ? `<p>${t("Kıtlık")}: ${shorts}</p>` : ""}
       ${bar(w.wolves, WOLF_MAX, w.wolves >= WOLF_PACK_AT ? "en" : "", `${t("Kurt nüfusu")} ${Math.round(w.wolves)}`)}
