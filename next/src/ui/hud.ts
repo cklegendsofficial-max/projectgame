@@ -124,6 +124,7 @@ export class Hud {
   private acts = new Map<string, () => void>();
   private actN = 0;
   private panelHtml = "";
+  private panelKey = "";
   private htmlCache = new WeakMap<Element, string>();
   private fogRev = -1;
   private fogC?: HTMLCanvasElement;
@@ -1492,8 +1493,17 @@ export class Hud {
       }
     }
     if (html !== this.panelHtml || !this.panel.firstChild) {
+      const key = `${JSON.stringify(t)}|${this.tab}`;
+      const keep = key === this.panelKey ? [...this.panel.querySelectorAll<HTMLElement>("*")].filter((el) => el.scrollTop > 0).map((el) => [el.className, el.scrollTop] as const) : [];
+      const top = key === this.panelKey ? this.panel.scrollTop : 0;
+      this.panelKey = key;
       this.panelHtml = html;
       this.panel.innerHTML = html;
+      this.panel.scrollTop = top;
+      for (const [cls, y] of keep) {
+        const el = cls ? this.panel.querySelector<HTMLElement>("." + cls.trim().split(/\s+/).map((c) => CSS.escape(c)).join(".")) : null;
+        if (el) el.scrollTop = y;
+      }
     }
   }
 

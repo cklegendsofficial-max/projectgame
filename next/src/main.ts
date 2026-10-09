@@ -40,6 +40,7 @@ async function boot(): Promise<void> {
   game.hud = hud;
   view.attachState(game);
   (window as unknown as { game: Game }).game = game;
+  if (import.meta.env.DEV) void import("./ui/admin").then((m) => m.mountAdmin(game));
   const photo = new PhotoMode(app, game);
   hud.photo = photo;
   cam.fitMin();
