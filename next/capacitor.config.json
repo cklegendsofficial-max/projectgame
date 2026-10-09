@@ -1,0 +1,10 @@
+{
+  "appId": "com.kervankrallik.game",
+  "appName": "Kervan Krallık",
+  "webDir": "dist",
+  "backgroundColor": "#1c120a",
+  "android": {
+    "allowMixedContent": false,
+    "webContentsDebuggingEnabled": false
+  }
+}

@@ -4,7 +4,7 @@ import { TACTICS, TACTIC_KEYS, type BattleResult, type Boss, type Tactic } from 
 import { GOODS, GOOD_KEYS, PLUS_CHANCE, SKILL_INFO, SKILL_KEYS, SLOTS, SLOT_NAME, STAT_INFO, STAT_KEYS, canPlus, itemStats, kindName, plusCost, skillLv, skillNext, type Item, type Slot } from "../game/rpg";
 import { ARMOR_NAME, CLASSES, SKILL_MAX, WEAPON_NAME, skillPow, skillRank, type ClassId } from "../game/classes";
 import { CAPITAL, SAVE_SLOTS, curSlot, exportSave, kurganBoss, slotInfo } from "../game/state";
-import { applyUi, saveSettings, settings, toggleFullscreen } from "../settings";
+import { applyUi, haptic, saveSettings, settings, toggleFullscreen } from "../settings";
 import { ACHIEVEMENTS } from "../game/achievements";
 import { BRANCHES, BRANCH_KEYS, ROW_NEED, TALENTS, branchSpent } from "../game/talents";
 import { CONSUMABLES, CONS_BY_ID, CRAFT_SLOTS, REFINES, gearCost, type Cost, type Mat } from "../game/crafting";
@@ -1136,7 +1136,7 @@ export class Hud {
     const g = this.g;
     const cur = curSlot();
     const pct = (v: number) => Math.round(v * 100);
-    const toggle = (k: "eco" | "mini", label: string, note = "") =>
+    const toggle = (k: "eco" | "mini" | "haptic", label: string, note = "") =>
       `<div class="setrow"><span>${label}</span><button class="btn sm ${settings[k] ? "on" : ""}" data-a="${this.act(() => {
         settings[k] = !settings[k];
         saveSettings();
@@ -1164,6 +1164,7 @@ export class Hud {
       <div class="setrow"><span>Tam ekran</span><button class="btn sm ${document.fullscreenElement ? "on" : ""}" data-a="${this.act(() => toggleFullscreen())}">${document.fullscreenElement ? "Açık" : "Kapalı"}</button><small class="dim">F11 / F</small></div>
       ${toggle("mini", "Mini harita")}
       ${toggle("eco", "Pil tasarrufu", "Pil tasarrufu sayfa yenilenince devreye girer (30 FPS, düşük çözünürlük).")}
+      ${"vibrate" in navigator ? toggle("haptic", "Titreşim") : ""}
       <h3>Kayıt yuvaları</h3>
       <p class="dim">Oyun her birkaç saniyede bir etkin yuvaya kaydedilir. Yuva değiştirince mevcut oyunun kaydedilir ve sayfa yeniden yüklenir.</p>
       ${slots}
@@ -1365,6 +1366,7 @@ export class Hud {
         void box.offsetWidth;
         box.classList.add("shake");
         audio.play("hit");
+        haptic(18);
         log.textContent = `${r.ev.length ? r.ev.join(" · ") + " — " : ""}${i}. tur: ${p.hp >= r.hp ? `${Math.round(p.hp - r.hp)} hasar aldın` : `${Math.round(r.hp - p.hp)} can yeniledin`}${n0a ? `, ${armySize(p.a) - armySize(r.a)} asker kaybın` : ""} · düşman kaybı ${armySize(p.b) - armySize(r.b)}`;
         i++;
         setTimeout(step, 480);
@@ -1375,6 +1377,7 @@ export class Hud {
       setSide(".foe", last.b, n0b);
       setBoss(last.bhp);
       audio.play(res.win ? "win" : "lose");
+      haptic(res.win ? [30, 60, 30] : 200);
       if (lvUp) setTimeout(() => audio.play("level"), 900);
       log.textContent = res.win ? (boss ? `${boss.name} yıkıldı!` : "Düşman kaçıyor!") : res.heroDown ? "Yere düştün…" : "Geri çekilmek zorunda kaldın.";
       el.querySelector(".result")!.innerHTML = `

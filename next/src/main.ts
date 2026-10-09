@@ -10,6 +10,7 @@ import { applyUi, settings } from "./settings";
 async function boot(): Promise<void> {
   extensions.add(CullerPlugin);
   applyUi();
+  window.addEventListener("contextmenu", (e) => e.preventDefault());
   const host = document.getElementById("game")!;
   const app = new Application();
   await app.init({ resizeTo: host, background: "#1c120a", antialias: !settings.eco, resolution: settings.eco ? 1 : Math.min(2, window.devicePixelRatio || 1), autoDensity: true });

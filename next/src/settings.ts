@@ -6,13 +6,22 @@ export interface Settings {
   ui: number;
   eco: boolean;
   mini: boolean;
+  haptic: boolean;
 }
 
-const DEF: Settings = { music: 0.5, fx: 0.7, ui: 1, eco: false, mini: true };
+const DEF: Settings = { music: 0.5, fx: 0.7, ui: 1, eco: false, mini: true, haptic: true };
+
+export function weakDevice(): boolean {
+  const nav = navigator as Navigator & { deviceMemory?: number };
+  const touch = matchMedia("(pointer: coarse)").matches;
+  return touch && ((nav.deviceMemory ?? 8) <= 4 || (nav.hardwareConcurrency ?? 8) <= 4);
+}
 
 function read(): Settings {
   try {
-    return { ...DEF, ...(JSON.parse(localStorage.getItem(KEY) ?? "{}") as Partial<Settings>) };
+    const raw = localStorage.getItem(KEY);
+    if (!raw) return { ...DEF, eco: weakDevice() };
+    return { ...DEF, ...(JSON.parse(raw) as Partial<Settings>) };
   } catch {
     return { ...DEF };
   }
@@ -22,6 +31,10 @@ export const settings: Settings = read();
 
 export function saveSettings(): void {
   localStorage.setItem(KEY, JSON.stringify(settings));
+}
+
+export function haptic(ms: number | number[]): void {
+  if (settings.haptic) navigator.vibrate?.(ms);
 }
 
 export function toggleFullscreen(): void {
