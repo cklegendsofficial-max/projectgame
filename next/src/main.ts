@@ -11,6 +11,7 @@ import { t } from "./i18n";
 import { cloudPull, cloudPush, deckDefaults, steam, steamPresence, steamStats, syncAchievements } from "./platform";
 import { unlockedSet } from "./game/achievements";
 import { loadMods } from "./mods";
+import { PhotoMode } from "./ui/photo";
 
 async function boot(): Promise<void> {
   extensions.add(CullerPlugin);
@@ -39,12 +40,14 @@ async function boot(): Promise<void> {
   game.hud = hud;
   view.attachState(game);
   (window as unknown as { game: Game }).game = game;
+  const photo = new PhotoMode(app, game);
+  hud.photo = photo;
   cam.fitMin();
-  cam.onTap = (x, y) => game.tap(x, y);
+  cam.onTap = (x, y) => !photo.on && game.tap(x, y);
   app.ticker.add((tk) => {
     const dt = Math.min(0.1, tk.deltaMS / 1000);
     if (hud.menuOpen) hud.menuTick(dt);
-    else for (let i = hud.speed(); i > 0; i--) game.update(dt);
+    else if (!photo.on) for (let i = hud.speed(); i > 0; i--) game.update(dt);
     cam.update(dt, view.layer);
     view.update(dt, game, cam);
     hud.update();

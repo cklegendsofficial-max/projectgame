@@ -298,6 +298,7 @@ export class Hud {
       } else if (k === "b" && g.s.bird && g.s.free) g.aimBird();
       else if (k === "m") this.root.querySelector(".snd")!.classList.toggle("off", audio.toggle());
       else if (k === "t") this.cycleSpeed();
+      else if (k === "p" && !this.archery && !this.minigame && !this.modal() && !g.battleLock) this.openPhoto();
       else if (k === "f" || k === "f11") {
         e.preventDefault();
         toggleFullscreen();
@@ -825,10 +826,18 @@ export class Hud {
   }
 
   menuOpen = false;
+  photo: { open(): void; on: boolean } | null = null;
   private menuEl: HTMLElement | null = null;
   private menuDone: (() => void) | null = null;
   private menuFly = 0;
   private menuCity = 0;
+
+  openPhoto(): void {
+    if (!this.photo || this.g.s.cls === null) return;
+    this.close();
+    this.closeMenu();
+    this.photo.open();
+  }
 
   openMenu(title = false, done: (() => void) | null = null): void {
     const g = this.g;
@@ -848,6 +857,7 @@ export class Hud {
       [t("Kayıt yuvaları"), t("Yükle, yeni yuva aç, dışa/içe aktar"), "", () => this.menuTo("ayar")],
       ...(started ? ([[t("Bitig"), t("Bozkır ansiklopedisi · {n}/{m} sayfa", { n: s.bitig?.length ?? 0, m: CODEX.length }), "", () => this.menuTo("bitig")]] as [string, string, string, () => void][]) : []),
       [t("Ayarlar"), t("Ses, görüntü, anlatıcı, dil"), "", () => this.menuTo("ayar")],
+      ...(started && !title ? ([[t("Fotoğraf modu"), t("Arayüzü gizle, süzgeç seç, anı yakala (P)"), "", () => this.openPhoto()]] as [string, string, string, () => void][]) : []),
       ...(desktop ? ([[t("Oyundan çık"), t("İlerlemen kaydedilir"), "red", () => { g.saveNow(); window.close(); }]] as [string, string, string, () => void][]) : []),
     ];
     const el = document.createElement("div");
@@ -1637,6 +1647,7 @@ export class Hud {
         applyUi();
       })}">%${pct(v)}</button>`).join("")}</div>
       <div class="setrow"><span>${t("Tam ekran")}</span><button class="btn sm ${document.fullscreenElement ? "on" : ""}" data-a="${this.act(() => toggleFullscreen())}">${document.fullscreenElement ? t("Açık") : t("Kapalı")}</button><small class="dim">F11 / F</small></div>
+      <div class="setrow"><span>${t("Fotoğraf modu")}</span><button class="btn sm" data-a="${this.act(() => this.openPhoto())}">${ic("scroll")} ${t("Aç")}</button><small class="dim">P</small></div>
       ${toggle("mini", t("Mini harita"))}
       ${toggle("eco", t("Pil tasarrufu"), "Pil tasarrufu sayfa yenilenince devreye girer (30 FPS, düşük çözünürlük).")}
       ${"vibrate" in navigator ? toggle("haptic", t("Titreşim")) : ""}
@@ -1647,7 +1658,7 @@ export class Hud {
       ${this.steamHtml()}
       ${this.modsHtml()}
       <h3>${t("Klavye kısayolları")}</h3>
-      <p class="dim keys"><kbd>H</kbd> Kahraman · <kbd>C</kbd> Semerkant · <kbd>Boşluk</kbd> Birliğine dön · <kbd>B</kbd> Kuşu uçur · <kbd>M</kbd> Ses · <kbd>F</kbd> Tam ekran · <kbd>WASD</kbd>/<kbd>Oklar</kbd> Kamera · <kbd>+</kbd>/<kbd>−</kbd> Yakınlaş · <kbd>T</kbd> Oyun hızı · <kbd>Esc</kbd> Kapat / Menü</p>
+      <p class="dim keys">${t("<kbd>H</kbd> Kahraman · <kbd>C</kbd> Semerkant · <kbd>Boşluk</kbd> Birliğine dön · <kbd>B</kbd> Kuşu uçur · <kbd>M</kbd> Ses · <kbd>F</kbd> Tam ekran · <kbd>WASD</kbd>/<kbd>Oklar</kbd> Kamera · <kbd>+</kbd>/<kbd>−</kbd> Yakınlaş · <kbd>T</kbd> Oyun hızı · <kbd>P</kbd> Fotoğraf modu · <kbd>Esc</kbd> Kapat / Menü")}</p>
       <h3>${t("Oyun kolu")}</h3>
       <p class="dim keys">${t("<kbd>Sol çubuk</kbd> Kamera / seçim · <kbd>A</kbd> Nişangâha git, seç · <kbd>B</kbd> Kapat · <kbd>Y</kbd> Birliğine dön · <kbd>X</kbd> Kuşu uçur · <kbd>LB</kbd>/<kbd>RB</kbd> Yakınlaş, sekme · <kbd>LT</kbd>/<kbd>RT</kbd> Yakınlaş · <kbd>Start</kbd> Kahraman · <kbd>Back</kbd> Menü")}</p>
       ${this.achHtml()}

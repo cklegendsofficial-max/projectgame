@@ -451,6 +451,27 @@ body.titled #hud > .top, body.titled #hud > .track, body.titled #hud > .actbar, 
 .cxrow.open { background: #3b261480; border-color: #b8843e; }
 .cxrow p { margin: 4px 0 0; font: 14px/1.5 Georgia, serif; color: #f4e6c6; }
 .cxrow.lock { cursor: default; opacity: .6; }
+body.photo #hud { display: none; }
+.photo-ov { position: fixed; inset: 0; pointer-events: none; z-index: 20; }
+.photo-ov.vig { background: radial-gradient(ellipse at center, transparent 55%, rgba(20, 10, 4, .6) 100%); }
+.photo-ov.fr1 { box-shadow: inset 0 0 0 14px transparent, inset 0 0 0 17px #e8c88a, inset 0 0 0 20px transparent, inset 0 0 0 21px #e8c88a; }
+.photo-ov.fr2 { border: 22px solid #5a1f12; border-image: repeating-linear-gradient(90deg, #5a1f12 0 12px, #e8c88a 12px 15px, #5a1f12 15px 18px) 22; outline: 2px solid #e8c88a; outline-offset: -24px; }
+.pcap { position: absolute; left: 22px; bottom: calc(22px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; text-shadow: 0 2px 6px #000c; }
+.photo-ov.fr1 .pcap, .photo-ov.fr2 .pcap { left: 40px; bottom: calc(40px + env(safe-area-inset-bottom)); }
+.pcap b { font: 700 26px Georgia, serif; color: #ffe39a; }
+.pcap span { font: 16px Georgia, serif; color: #f4e6c6; }
+.photobar { position: fixed; left: 50%; top: calc(8px + env(safe-area-inset-top)); transform: translateX(-50%); z-index: 30; display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 8px 10px; border-radius: 14px; background: #1c120ad9; border: 1px solid #6b4a24; max-width: calc(100vw - 16px); font-size: calc(13px * var(--ui, 1)); }
+.photobar .prow { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; }
+.photobar small { text-align: center; }
+body.photo .photobar:not(:hover) { opacity: .85; }
+@media (max-width: 700px) {
+  .photobar { width: calc(100vw - 16px); padding: 6px; }
+  .photobar small { display: none; }
+  .photobar .prow { flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start; max-width: 100%; scrollbar-width: none; }
+  .photobar .prow .btn { flex: none; }
+}
+.pflash { position: fixed; inset: 0; background: #fff; z-index: 40; pointer-events: none; animation: pflash .4s ease-out forwards; }
+@keyframes pflash { from { opacity: .8; } to { opacity: 0; } }
 .wtiers { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 6px 0 8px; }
 .wtier { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 4px; border-radius: 10px; border: 1px solid #6b4a24; background: #0003; text-align: center; }
 .wtier b { font: 700 16px Georgia, serif; color: #e8c88a; }
