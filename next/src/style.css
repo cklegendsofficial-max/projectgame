@@ -236,11 +236,11 @@ body.nomini .mini { display: none; }
 .side .army .u .ic { width: 22px; height: 22px; }
 .vs { font: bold 28px Georgia, serif; color: #ffb347; text-shadow: 0 2px 0 #5a3008; }
 .rlog { margin: 12px 0 4px; text-align: center; opacity: .85; min-height: 20px; }
-.field { display: block; width: 100%; height: 150px; margin-top: 10px; border-radius: 10px; border: 1px solid #5a3e1c; box-shadow: inset 0 0 24px #0008; }
+.field { display: block; width: 100%; height: 190px; margin-top: 10px; border-radius: 10px; border: 1px solid #5a3e1c; box-shadow: inset 0 0 24px #0008; }
 .orders { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin-top: 8px; }
 .orders .btn { display: inline-flex; align-items: center; gap: 4px; }
 .orders .btn .ic { width: 18px; height: 18px; }
-@media (max-width: 600px) { .field { height: 120px; } .orders .btn { font-size: 11px; padding: 5px 7px; } }
+@media (max-width: 600px) { .field { height: 150px; } .orders .btn { font-size: 11px; padding: 5px 7px; } }
 .result { text-align: center; }
 .rt { font: bold 40px Georgia, serif; margin: 6px 0; animation: qin .4s cubic-bezier(.2, 1.6, .5, 1); }
 .rt.win { color: #ffd56a; text-shadow: 0 0 20px #ffd56a88; }

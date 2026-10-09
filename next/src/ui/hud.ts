@@ -2386,7 +2386,7 @@ export class Hud {
         setSide(".me", r.a, n0a, r.hp);
         setSide(".foe", r.b, n0b);
         setBoss(r.bhp);
-        field.round(r.a, r.b, r.order, fast ? 380 : 760);
+        field.round(r.a, r.b, r.order, fast ? 380 : 760, r.ev);
         box.classList.remove("shake");
         void box.offsetWidth;
         box.classList.add("shake");
@@ -2402,7 +2402,8 @@ export class Hud {
       const { xp, lvUp, note: extra } = apply(res);
       const last = res.rounds[res.rounds.length - 1];
       field.round(last.a, last.b, undefined, 500);
-      setTimeout(() => field.stop(), 1500);
+      field.finish(res.win);
+      setTimeout(() => field.stop(), 2400);
       setSide(".me", last.a, n0a, last.hp);
       setSide(".foe", last.b, n0b);
       setBoss(last.bhp);

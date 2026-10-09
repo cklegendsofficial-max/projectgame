@@ -14,6 +14,7 @@ import { boyOf } from "../game/korkut";
 import { t as tr } from "../i18n";
 import { settings } from "../settings";
 import { terrainMesh, type TerrainMesh } from "./terrain";
+import { Life } from "./life";
 
 const urls: Record<string, string> = {};
 for (const [p, u] of Object.entries(import.meta.glob<string>("../assets/**/*.webp", { eager: true, query: "?url", import: "default" }))) {
@@ -185,6 +186,7 @@ export class WorldView {
   private stormM = new Map<number, { glow: Sprite; g: Graphics; flash: number }>();
   private glow!: Texture;
   private terrain: TerrainMesh | null = null;
+  private life: Life | null = null;
   private mark: { x: number; y: number; t: number } | null = null;
   private time = 0;
   private visT = 0;
@@ -514,6 +516,13 @@ export class WorldView {
 
   attachState(game: Game): void {
     const s = game.s;
+    if (this.life) {
+      this.life.ground.destroy({ children: true });
+      this.life.air.destroy({ children: true });
+    }
+    this.life = new Life(this.world, s.villages, this.glow);
+    this.layer.addChildAt(this.life.ground, this.layer.getChildIndex(this.deco));
+    this.layer.addChildAt(this.life.air, this.layer.getChildIndex(this.units) + 1);
     this.villageM = s.villages.map((v) => this.place(v.yurt ? "map/yurts" : "map/village", v.x, v.y, 74, v.name, 0.62));
     this.campM = s.camps.map((c) => this.place("map/camp", c.x, c.y, 84, c.name, 0.62));
     this.campFires = s.camps.map((c) => {
@@ -716,7 +725,7 @@ export class WorldView {
   update(dt: number, game: Game, cam: Camera): void {
     const s = game.s;
     this.time += dt;
-    this.terrain?.tick(dt);
+    this.terrain?.tick(dt, game.season());
     const h = s.hero;
     const moving = !!h.path;
     this.hero.position.set(h.x, h.y - (moving ? Math.abs(Math.sin(this.time * 9)) * 3 : 0));
@@ -1114,7 +1123,7 @@ export class WorldView {
     if (sk !== this.seasonK) {
       this.seasonK = sk;
       const S = SEASONS[sk];
-      this.seasonG.clear().rect(0, 0, W, H).fill({ color: S.tint, alpha: S.tintA });
+      this.seasonG.clear().rect(0, 0, W, H).fill({ color: S.tint, alpha: S.tintA * (this.terrain ? 0.4 : 1) });
       this.deco.tint = S.deco;
     }
     this.snowG.clear();
@@ -1139,6 +1148,11 @@ export class WorldView {
     const dark = Math.max(0, Math.cos(t * Math.PI * 2) * -1) * 0.38;
     this.night.clear();
     if (dark > 0.01) this.night.rect(0, 0, W, H).fill({ color: 0x0c1430, alpha: dark });
+    {
+      const vw = cam.w / cam.zoom / 2;
+      const vh = cam.h / cam.zoom / 2;
+      this.life?.update(dt, this.time, { x0: cam.x - vw, y0: cam.y - vh, x1: cam.x + vw, y1: cam.y + vh }, dark, sk === "kis", cam.zoom);
+    }
     this.lights.visible = dark > 0.03;
     this.lights.alpha = Math.min(0.85, dark * 2.4) * (0.92 + Math.sin(this.time * 3) * 0.08);
     if (this.lights.visible) {

@@ -1,5 +1,6 @@
 import { CanvasSource, Geometry, GlProgram, Mesh, Shader, Texture, UniformGroup } from "pixi.js";
 import { GH, GW, H, W, type World } from "../world/gen";
+import type { SeasonId } from "../game/seasons";
 
 const vertex = `
 in vec2 aPosition;
@@ -31,6 +32,7 @@ uniform vec3 uMSand;
 uniform vec3 uMSteppe;
 uniform vec3 uMGrass;
 uniform vec3 uMRock;
+uniform vec4 uSeason; // x kar, y çiçek, z kuraklık, w güz
 
 vec3 tile(sampler2D t, vec2 p) {
   vec3 a = texture2D(t, p).rgb;
@@ -78,6 +80,27 @@ void main() {
   col = mix(col, tinted, 0.28 * k);
   col *= 1.0 - 0.18 * smoothstep(0.0, 0.012, h) * (1.0 - smoothstep(0.012, 0.03, h));
 
+  // mevsimler
+  float L = lum(col);
+  vec3 dry = vec3(L * 1.18, L * 1.02, L * 0.62);
+  col = mix(col, dry, uSeason.z * 0.35 * (wSteppe + wGrass * 0.6));
+  vec3 gold = vec3(L * 1.45, L * 0.98, L * 0.42);
+  col = mix(col, gold, uSeason.w * 0.55 * (wGrass + wSteppe * 0.4));
+  vec4 fine = texture2D(uNoise, wp / 7.0);
+  vec2 cell = floor(wp / 8.0);
+  float hsh = fract(sin(dot(cell, vec2(127.1, 311.7))) * 43758.5453);
+  float patch = smoothstep(0.3, 0.55, nz2.r);
+  vec2 inC = fract(wp / 8.0) - 0.5 - (vec2(fract(hsh * 13.7), fract(hsh * 29.3)) - 0.5) * 0.4;
+  float dot1 = 1.0 - smoothstep(0.14, 0.24, length(inC));
+  float petal = step(1.0 - 0.6 * patch, hsh) * dot1 * uSeason.y * (wGrass + wSteppe * 0.5);
+  float hue = fract(hsh * 7.31);
+  vec3 flower = hue < 0.4 ? vec3(0.92, 0.25, 0.22) : hue < 0.7 ? vec3(0.98, 0.84, 0.30) : vec3(0.96, 0.94, 0.90);
+  col = mix(col * (1.0 + uSeason.y * 0.06 * wGrass), flower, petal * 0.8);
+  float north = 1.3 - vUV.y * 1.45;
+  float cover = smoothstep(0.45, 0.62, uSeason.x * north * 0.8 + h * 0.8 + (nz2.a - 0.5) * 0.3 + (nz.b - 0.5) * 0.35 - wSand * 0.12) * uSeason.x;
+  vec3 snowC = vec3(0.90, 0.93, 0.98) * (0.82 + 0.3 * clamp(lum(dc) / max(0.05, lum(dm)), 0.6, 1.4) * 0.6);
+  col = mix(col, snowC, cover * 0.92);
+
   // su
   float hw = h + (nz2.b - 0.5) * 0.012;
   float wf = 1.0 - smoothstep(-0.004, 0.004, hw);
@@ -95,12 +118,16 @@ void main() {
   float foam = shore * smoothstep(0.5, 0.95, band * (0.6 + wave * 0.8));
   wc = mix(wc, vec3(0.70, 0.82, 0.80), shore * 0.25);
   wc = mix(wc, vec3(0.94, 0.97, 0.96), foam * 0.55);
+  float ice = uSeason.x * (1.0 - smoothstep(0.08, 0.22, depth + vUV.y * 0.25 - 0.1));
+  float crack = smoothstep(0.47, 0.5, abs(fine.a - 0.5) + 0.46) * 0.25;
+  wc = mix(wc, vec3(0.80, 0.88, 0.93) - crack, ice * 0.85);
   wc *= vig;
   col = mix(col, wc, wf);
 
-  // nehir parıltısı
+  // nehir parıltısı (kışın buz)
   float blue = smoothstep(0.02, 0.12, base.b - base.r);
-  col += vec3(1.0, 0.95, 0.8) * sp * 0.25 * blue * (1.0 - wf);
+  col += vec3(1.0, 0.95, 0.8) * sp * 0.25 * blue * (1.0 - wf) * (1.0 - uSeason.x);
+  col = mix(col, vec3(0.82, 0.9, 0.95), blue * (1.0 - wf) * uSeason.x * 0.7 * clamp(north, 0.0, 1.0));
 
   // bulut gölgeleri
   float cs = smoothstep(0.55, 0.78, texture2D(uNoise, wp / 2600.0 + vec2(uTime * 0.0035, uTime * 0.002)).a);
@@ -176,9 +203,17 @@ function dataTex(world: World): Texture {
   return new Texture({ source: new CanvasSource({ resource: c, scaleMode: "linear" }) });
 }
 
+/** Mevsim başına shader hedefleri: kar, çiçek, kuraklık, güz. */
+const SEASON_FX: Record<SeasonId, [number, number, number, number]> = {
+  bahar: [0, 1, 0, 0],
+  yaz: [0, 0, 1, 0],
+  guz: [0, 0, 0.2, 1],
+  kis: [1, 0, 0, 0.15],
+};
+
 export interface TerrainMesh {
   mesh: Mesh<Geometry, Shader>;
-  tick(dt: number): void;
+  tick(dt: number, season: SeasonId): void;
 }
 
 export function terrainMesh(world: World, detail: Record<DetailKey, Texture>): TerrainMesh {
@@ -199,6 +234,7 @@ export function terrainMesh(world: World, detail: Record<DetailKey, Texture>): T
     uMSteppe: { value: new Float32Array(MEANS.steppe), type: "vec3<f32>" },
     uMGrass: { value: new Float32Array(MEANS.grass), type: "vec3<f32>" },
     uMRock: { value: new Float32Array(MEANS.rock), type: "vec3<f32>" },
+    uSeason: { value: new Float32Array(4), type: "vec4<f32>" },
   });
   const shader = new Shader({
     glProgram: GlProgram.from({ vertex, fragment, name: "kk-terrain" }),
@@ -215,11 +251,17 @@ export function terrainMesh(world: World, detail: Record<DetailKey, Texture>): T
   });
   const mesh = new Mesh({ geometry, shader });
   let time = 0;
+  const cur = u.uniforms.uSeason as Float32Array;
+  let first = true;
   return {
     mesh,
-    tick(dt: number) {
+    tick(dt: number, season: SeasonId) {
       time = (time + dt) % 10000;
       u.uniforms.uTime = time;
+      const t = SEASON_FX[season];
+      const k = first ? 1 : Math.min(1, dt * 0.6);
+      first = false;
+      for (let i = 0; i < 4; i++) cur[i] += (t[i] - cur[i]) * k;
     },
   };
 }
