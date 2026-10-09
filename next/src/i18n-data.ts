@@ -8,6 +8,7 @@ import { ORDERS, TACTICS } from "./game/battle";
 import { KUT_TIERS } from "./game/kut";
 import { ZONE_DESC, ZONE_NAME } from "./game/otag";
 import { SEASONS } from "./game/seasons";
+import { localizeStory } from "./i18n-story";
 
 const pct = (p: number): string => `${Math.round(p * 100)}%`;
 
@@ -22,6 +23,7 @@ function words(table: Record<string, string>, en: Record<string, string>): void 
 /** Oyun verisi tablolarını seçilen dile çevirir. Oyun kurulmadan önce bir kez çağrılır. */
 export function localizeData(): void {
   if (lang() !== "en") return;
+  localizeStory();
 
   words(RES_NAME, { gold: "Gold", food: "Food", wood: "Timber", stone: "Stone" });
   words(NODE_NAME, { food: "Fertile Field", wood: "Forest", stone: "Quarry", gold: "Gold Mine" });

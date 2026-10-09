@@ -28,7 +28,7 @@ import { SING_GOLD, TAMGA_COLORS, TAMGA_DEFAULT, TAMGA_MARKS, TAMGA_SHAPES, sing
 import { CITIES, H, NAV, NH, NW, W } from "../world/gen";
 import { assetUrl } from "../render/worldView";
 import { audio } from "../audio";
-import { LANGS, lang, t, type Lang } from "../i18n";
+import { LANGS, lang, t, t as tr, type Lang } from "../i18n";
 import { SUREK_FOOD } from "../game/games";
 import { GIFT_GOLD, PEACE_GOLD, SPY_MAX, SPY_OPS, TRADE_GOLD, spyCost } from "../game/spy";
 import { MYCV_COST, MYCV_GUARD, MYCV_GUARD_MAX, MYCV_UPGRADE } from "../game/mycaravan";
@@ -456,16 +456,16 @@ export class Hud {
     const d = g.daily();
     if (!d) return "";
     return (
-      `<h3>${ic("seal")} Günlük Fermanlar <em class="dim">· seri ${d.streak} gün</em></h3><p class="dim">Her gün yeni üç ferman. Hepsini bitirip sandığı aç; üst üste gelirsen sandık daha cömert olur.</p>` +
+      `<h3>${ic("seal")} ${tr("Günlük Fermanlar")} <em class="dim">· ${tr("seri {n} gün", { n: d.streak })}</em></h3><p class="dim">${tr("Her gün yeni üç ferman. Hepsini bitirip sandığı aç; üst üste gelirsen sandık daha cömert olur.")}</p>` +
       d.tasks
         .map((t, i) => {
           const p = DAILY_POOL.find((x) => x.key === t.key)!;
           const v = g.dailyProg(t);
           const ok = v >= t.need;
-          return `<div class="grow ${t.done ? "dim" : ""}">${ic(p.icon, "gimg")}<div class="bi2"><b>${t.need} ${p.what}</b><div class="fbar" style="--fc:${ok ? "#7fd36a" : "#e0b04a"}"><i style="width:${(v / t.need) * 100}%"></i></div><small>${v}/${t.need} · ${ic("coins")}${g.dailyGold()}</small></div>${t.done ? `<em class="cheap">✓</em>` : `<button class="btn sm ${ok ? "go" : "off"}" data-a="${this.act(() => g.claimDaily(i))}">Al</button>`}</div>`;
+          return `<div class="grow ${t.done ? "dim" : ""}">${ic(p.icon, "gimg")}<div class="bi2"><b>${t.need} ${p.what}</b><div class="fbar" style="--fc:${ok ? "#7fd36a" : "#e0b04a"}"><i style="width:${(v / t.need) * 100}%"></i></div><small>${v}/${t.need} · ${ic("coins")}${g.dailyGold()}</small></div>${t.done ? `<em class="cheap">✓</em>` : `<button class="btn sm ${ok ? "go" : "off"}" data-a="${this.act(() => g.claimDaily(i))}">${tr("Al")}</button>`}</div>`;
         })
         .join("") +
-      (d.chest ? `<div class="odds good">Bugünün sandığı açıldı. Yarın yeni fermanlar gelecek.</div>` : `<button class="btn big ${g.chestReady() ? "go" : "off"}" style="width:100%" data-a="${this.act(() => g.openChest())}"> ${ic("chest")} Ferman sandığını aç</button>`)
+      (d.chest ? `<div class="odds good">${tr("Bugünün sandığı açıldı. Yarın yeni fermanlar gelecek.")}</div>` : `<button class="btn big ${g.chestReady() ? "go" : "off"}" style="width:100%" data-a="${this.act(() => g.openChest())}"> ${ic("chest")} ${tr("Ferman sandığını aç")}</button>`)
     );
   }
 
@@ -613,7 +613,7 @@ export class Hud {
       TITLE_CATS.map((cat) => {
         const v = cat.value(s);
         const next = cat.tiers.find((t) => v < t.need);
-        return `<div class="tcat"><div class="tch">${ic(cat.icon, "gimg")}<div class="bi2"><b>${next ? `${Math.min(v, next.need)}/${next.need} ${cat.what}` : `Tamamlandı · ${cat.what}`}</b>${next ? `<div class="fbar" style="--fc:#e0b04a"><i style="width:${Math.min(100, (v / next.need) * 100)}%"></i></div>` : ""}</div></div><div class="ttiers">${cat.tiers
+        return `<div class="tcat"><div class="tch">${ic(cat.icon, "gimg")}<div class="bi2"><b>${next ? `${Math.min(v, next.need)}/${next.need} ${cat.what}` : `${tr("Tamamlandı")} · ${cat.what}`}</b>${next ? `<div class="fbar" style="--fc:#e0b04a"><i style="width:${Math.min(100, (v / next.need) * 100)}%"></i></div>` : ""}</div></div><div class="ttiers">${cat.tiers
           .map((t, i) => {
             const key = titleKey(cat.id, i);
             const got = s.titles.includes(key);
@@ -1292,7 +1292,7 @@ export class Hud {
     } else if (this.tab === "pazar") {
       const cap = g.carryCap();
       body = `${nearNote}<div class="stats"><div>${ic("j_caravan")}Yük: <b>${g.cargoUsed()}/${cap}</b></div><div>${ic("merchant")}Ticaret: <b>${g.skill("ticaret")}</b></div><div>${ic("coins")}<b>${fmt(s.res.gold)}</b></div></div>
-        <p class="dim">Malın üretildiği şehirde ucuz, talep edildiği şehirde pahalıdır. Çok alırsan fiyat yükselir, çok satarsan düşer; zamanla eski haline döner.</p>
+        <p class="dim">${tr("Malın üretildiği şehirde ucuz, talep edildiği şehirde pahalıdır. Çok alırsan fiyat yükselir, çok satarsan düşer; zamanla eski haline döner.")}</p>
         <div class="odds mid">${g.sea().icon} ${g.sea().name}: ${Object.entries(g.sea().goods).map(([k, m]) => `${GOODS[k as keyof typeof GOODS].name} <b class="${m! > 1 ? "neg" : "cheap"}">${m! > 1 ? "▲" : "▼"}%${Math.round(Math.abs(m! - 1) * 100)}</b>`).join(" · ")}</div>` +
         GOOD_KEYS.map((k) => {
           const bp = g.buyPrice(c.id, k);
@@ -1315,7 +1315,7 @@ export class Hud {
         <h3>${ic("anvil")} Satılık</h3>` +
         (items.map((it) => row(it, `<button class="btn sm ${!near || s.res.gold < g.itemBuyPrice(it) ? "off" : ""}" data-a="${this.act(() => g.buyItem(c.id, it.id))}">${ic("coins")}${g.itemBuyPrice(it)}</button>`)).join("") || "<p>Demircide mal kalmadı.</p>") +
         `<h3>${ic("schest")} Heybendeki eşyalar</h3>` +
-        (s.hero.bag.map((it) => row(it, `<button class="btn sm ${off}" data-a="${this.act(() => g.sellItem(it.id))}">Sat ${ic("coins")}${g.itemSellPrice(it)}</button>`)).join("") || `<p class="dim">Heyben boş.</p>`);
+        (s.hero.bag.map((it) => row(it, `<button class="btn sm ${off}" data-a="${this.act(() => g.sellItem(it.id))}">Sat ${ic("coins")}${g.itemSellPrice(it)}</button>`)).join("") || `<p class="dim">${tr("Heyben boş.")}</p>`);
     } else if (this.tab === "atolye") {
       const zxp = s.hero.skills.zanaat ?? 0;
       const zl = skillLv(zxp);
@@ -2002,40 +2002,40 @@ export class Hud {
     let body = "";
     if (this.tab === "karakter") {
       const cl = g.cls();
-      body = `<div class="clsrow" style="--cc:${cl.color}">${ic(cl.portrait, "gimg round")}<div class="bi2"><b>${cl.name} <em>${cl.role}</em></b><small>${cl.passive}</small><small class="dim">${cl.weapons.map((w) => WEAPON_NAME[w]).join(", ")} · ${ARMOR_NAME[cl.armor]}${cl.shield ? " · Kalkan" : ""}</small>${s.origin ? `<small class="cheap">${ic(ORIGIN_BY_ID[s.origin].icon)} ${lang() === "en" ? ORIGIN_BY_ID[s.origin].en[0] : ORIGIN_BY_ID[s.origin].name}: ${lang() === "en" ? ORIGIN_BY_ID[s.origin].en[2] : ORIGIN_BY_ID[s.origin].perk}</small>` : ""}</div></div>
-        ${bar(h.xp, need, "", `Seviye ${h.lv} · ${h.xp}/${need} TP`)}
-        ${h.points > 0 ? `<div class="odds good">Dağıtılacak <b>${h.points}</b> stat puanın var! ★ işaretliler ${cl.name} için ana özelliklerdir.</div>` : ""}
-        <h3>Özellikler</h3>` +
+      body = `<div class="clsrow" style="--cc:${cl.color}">${ic(cl.portrait, "gimg round")}<div class="bi2"><b>${cl.name} <em>${cl.role}</em></b><small>${cl.passive}</small><small class="dim">${cl.weapons.map((w) => WEAPON_NAME[w]).join(", ")} · ${ARMOR_NAME[cl.armor]}${cl.shield ? ` · ${t("Kalkan")}` : ""}</small>${s.origin ? `<small class="cheap">${ic(ORIGIN_BY_ID[s.origin].icon)} ${lang() === "en" ? ORIGIN_BY_ID[s.origin].en[0] : ORIGIN_BY_ID[s.origin].name}: ${lang() === "en" ? ORIGIN_BY_ID[s.origin].en[2] : ORIGIN_BY_ID[s.origin].perk}</small>` : ""}</div></div>
+        ${bar(h.xp, need, "", `${t("Seviye")} ${h.lv} · ${h.xp}/${need} ${t("TP")}`)}
+        ${h.points > 0 ? `<div class="odds good">${t("Dağıtılacak <b>{n}</b> stat puanın var! ★ işaretliler {c} için ana özelliklerdir.", { n: h.points, c: cl.name })}</div>` : ""}
+        <h3>${t("Özellikler")}</h3>` +
         STAT_KEYS.map((k) => {
           const bonus = g.stat(k) - h.stats[k];
           const prim = cl.primary.includes(k);
           return `<div class="srow ${prim ? "prim" : ""}">${ic(STAT_INFO[k].icon, "gimg")}<div class="bi2"><b>${prim ? "★ " : ""}${STAT_INFO[k].name} <em>${h.stats[k]}${bonus ? ` +${bonus}` : ""}</em></b><small>${STAT_INFO[k].desc}</small></div><button class="btn sm plus ${h.points > 0 ? "" : "off"}" data-a="${this.act(() => g.statUp(k))}">+</button></div>`;
         }).join("") +
-        `<h3>Savaş</h3><div class="stats"><div>${ic("swords")}Saldırı <b>${g.heroAtk().toFixed(1)}</b></div><div>${ic("shield")}Savunma <b>${g.heroDef().toFixed(1)}</b></div><div>Can <b>${Math.floor(h.hp)}/${g.maxHp()}</b></div><div>Enerji <b>${Math.floor(h.energy)}/${g.maxEnergy()}</b></div><div>${ic("tug")}Birlik sınırı <b>${g.heroCap()}</b></div><div>${ic("j_caravan")}Yük <b>${g.carryCap()}</b></div><div>${ic("crown")}Şöhret <b>${s.renown}</b></div></div>
-        <h3>Beceriler</h3>` +
+        `<h3>${t("Savaş")}</h3><div class="stats"><div>${ic("swords")}${t("Saldırı")} <b>${g.heroAtk().toFixed(1)}</b></div><div>${ic("shield")}${t("Savunma")} <b>${g.heroDef().toFixed(1)}</b></div><div>${t("Can")} <b>${Math.floor(h.hp)}/${g.maxHp()}</b></div><div>${t("Enerji")} <b>${Math.floor(h.energy)}/${g.maxEnergy()}</b></div><div>${ic("tug")}${t("Birlik sınırı")} <b>${g.heroCap()}</b></div><div>${ic("j_caravan")}${t("Yük")} <b>${g.carryCap()}</b></div><div>${ic("crown")}${t("Şöhret")} <b>${s.renown}</b></div></div>
+        <h3>${t("Beceriler")}</h3>` +
         SKILL_KEYS.map((k) => {
           const xp = h.skills[k];
           const lv = skillLv(xp);
-          return `<div class="srow">${ic(SKILL_INFO[k].icon, "gimg")}<div class="bi2"><b>${SKILL_INFO[k].name} <em>Sv ${lv}</em></b>${bar(xp - 20 * lv * lv, skillNext(lv) - 20 * lv * lv, "", `${xp}/${skillNext(lv)}`)}<small>${SKILL_INFO[k].desc}</small></div></div>`;
+          return `<div class="srow">${ic(SKILL_INFO[k].icon, "gimg")}<div class="bi2"><b>${SKILL_INFO[k].name} <em>${t("Sv")} ${lv}</em></b>${bar(xp - 20 * lv * lv, skillNext(lv) - 20 * lv * lv, "", `${xp}/${skillNext(lv)}`)}<small>${SKILL_INFO[k].desc}</small></div></div>`;
         }).join("") +
         (s.free ? this.repHtml() : "") +
         this.chronHtml() +
         (g.seraiCount()
-          ? `<h3>${ic("map/serai")} Kervansarayların · dakikada ${g.seraiIncome().toFixed(1)} altın</h3>` +
+          ? `<h3>${ic("map/serai")} ${t("Kervansarayların · dakikada {n} altın", { n: g.seraiIncome().toFixed(1) })}</h3>` +
             Object.entries(s.serais)
-              .map(([id, sr]) => `<div class="qrow">${CITY_NAME[id]} <em>Sv ${sr.lv}</em><span class="cheap">kasa ${Math.floor(sr.coffer)}/${Math.round(g.seraiCap(id))}</span></div>`)
+              .map(([id, sr]) => `<div class="qrow">${CITY_NAME[id]} <em>${t("Sv")} ${sr.lv}</em><span class="cheap">${t("kasa")} ${Math.floor(sr.coffer)}/${Math.round(g.seraiCap(id))}</span></div>`)
               .join("")
           : "") +
-        `<button class="btn sm red reset" data-a="${this.act(() => confirm("Tüm ilerlemen silinip yeni bir oyun başlayacak. Emin misin?") && g.resetGame())}">Yeni oyun başlat</button>`;
+        `<button class="btn sm red reset" data-a="${this.act(() => confirm(t("Tüm ilerlemen silinip yeni bir oyun başlayacak. Emin misin?")) && g.resetGame())}">${t("Yeni oyun başlat")}</button>`;
     } else if (this.tab === "yetenek") {
       const spentAll = Object.values(h.tal).reduce((a, b) => a + b, 0);
       body =
-        `<p class="dim">Her seviyede 1 yetenek puanı kazanırsın. Bir dalın alt sırasını açmak için o dala sıra başına ${ROW_NEED} puan harcamalısın. Kendi yolunu seç: üç dalı birden bitiremezsin.</p>
-        <div class="stats"><div>${ic("scroll")}Yetenek puanı: <b>${h.tpts}</b></div>${spentAll ? `<button class="btn sm ${s.res.gold < g.respecCost() ? "off" : ""}" data-a="${this.act(() => g.respecTalents())}">Sıfırla ${ic("coins")}${g.respecCost()}</button>` : ""}</div><div class="tree">` +
+        `<p class="dim">${t("Her seviyede 1 yetenek puanı kazanırsın. Bir dalın alt sırasını açmak için o dala sıra başına {n} puan harcamalısın. Kendi yolunu seç: üç dalı birden bitiremezsin.", { n: ROW_NEED })}</p>
+        <div class="stats"><div>${ic("scroll")}${t("Yetenek puanı")}: <b>${h.tpts}</b></div>${spentAll ? `<button class="btn sm ${s.res.gold < g.respecCost() ? "off" : ""}" data-a="${this.act(() => g.respecTalents())}">${t("Sıfırla")} ${ic("coins")}${g.respecCost()}</button>` : ""}</div><div class="tree">` +
         BRANCH_KEYS.map((b) => {
           const B = BRANCHES[b];
           const spent = branchSpent(h.tal, b);
-          return `<div class="tb" style="--bc:${B.color}"><div class="tbh">${ic(B.icon)}<b>${B.name}</b><small>${spent} puan</small></div>${[0, 1, 2, 3, 4]
+          return `<div class="tb" style="--bc:${B.color}"><div class="tbh">${ic(B.icon)}<b>${B.name}</b><small>${spent} ${t("puan")}</small></div>${[0, 1, 2, 3, 4]
             .map((row) => {
               const open = spent >= row * ROW_NEED;
               return `<div class="trow ${open ? "" : "shut"}">${TALENTS.filter((t) => t.branch === b && t.row === row)
@@ -2052,13 +2052,13 @@ export class Hud {
         `</div>`;
     } else if (this.tab === "beceri") {
       const cl = g.cls();
-      body = `<p class="dim">${cl.name} becerileri savaşta kendiliğinden devreye girer. 3. seviyeden itibaren her seviyede 1 beceri puanı kazanırsın. Bir beceri en fazla ${SKILL_MAX}. seviyeye (Usta) çıkar.</p>
-        <div class="stats"><div>${ic("scroll")}Beceri puanı: <b>${h.spts}</b></div></div>` +
+      body = `<p class="dim">${t("{c} becerileri savaşta kendiliğinden devreye girer. 3. seviyeden itibaren her seviyede 1 beceri puanı kazanırsın. Bir beceri en fazla {n}. seviyeye (Usta) çıkar.", { c: cl.name, n: SKILL_MAX })}</p>
+        <div class="stats"><div>${ic("scroll")}${t("Beceri puanı")}: <b>${h.spts}</b></div></div>` +
         g.classSkills().map((sk) => {
           const lv = g.skillLvOf(sk.id);
           const why = g.learnReason(sk);
-          const cur = lv > 0 ? sk.text(skillPow(sk, lv)) : `Açılınca: ${sk.text(skillPow(sk, 1))}`;
-          const next = lv > 0 && lv < SKILL_MAX ? `<small class="dim">Sonraki seviye: ${sk.text(skillPow(sk, lv + 1))}</small>` : "";
+          const cur = lv > 0 ? sk.text(skillPow(sk, lv)) : `${t("Açılınca")}: ${sk.text(skillPow(sk, 1))}`;
+          const next = lv > 0 && lv < SKILL_MAX ? `<small class="dim">${t("Sonraki seviye")}: ${sk.text(skillPow(sk, lv + 1))}</small>` : "";
           return `<div class="brow skill ${lv ? "" : "locked"}">${ic(sk.icon, "bimg")}<div class="bi2"><b>${sk.name} <em>${skillRank(lv)}</em></b><small>${cur}</small>${next}${why && why !== "Beceri puanın yok" ? `<small class="why">${why}</small>` : ""}</div><button class="btn sm plus ${why ? "off" : ""}" data-a="${this.act(() => g.learn(sk.id))}">+</button></div>`;
         }).join("");
     } else if (this.tab === "ayar") {
@@ -2075,30 +2075,30 @@ export class Hud {
       const inCity = g.nearCity() >= 0;
       body = `<div class="slots">` + SLOTS.map((sl) => {
         const it = h.equip[sl];
-        return `<div class="slot ${it ? "r" + it.rar : ""} ${it?.set || it?.uq ? "leg" : ""}" ${it?.set ? `style="--sc:${SETS[it.set].color}"` : ""} ${it ? `data-a="${this.act(() => g.unequip(sl))}" title="Çıkar"` : ""}>${it ? ic(it.icon, "simg2") : `<span class="empty">${SLOT_NAME[sl]}</span>`}<small>${it ? it.name : "Boş"}</small></div>`;
-      }).join("") + `</div><p class="dim">Kuşanılmış bir eşyaya dokunarak çıkarabilirsin. Eşyaları şehirlerde satabilirsin.</p>` + this.setsHtml() +
+        return `<div class="slot ${it ? "r" + it.rar : ""} ${it?.set || it?.uq ? "leg" : ""}" ${it?.set ? `style="--sc:${SETS[it.set].color}"` : ""} ${it ? `data-a="${this.act(() => g.unequip(sl))}" title="${t("Çıkar")}"` : ""}>${it ? ic(it.icon, "simg2") : `<span class="empty">${SLOT_NAME[sl]}</span>`}<small>${it ? it.name : t("Boş")}</small></div>`;
+      }).join("") + `</div><p class="dim">${t("Kuşanılmış bir eşyaya dokunarak çıkarabilirsin. Eşyaları şehirlerde satabilirsin.")}</p>` + this.setsHtml() +
         (CONSUMABLES.some((c) => s.cons[c.id]) || Object.keys(s.buffs).length
-          ? `<h3>${ic("healer")} Çanta</h3>` +
-            (Object.keys(s.buffs).length ? `<div class="odds good">Etkin: ${Object.entries(s.buffs).map(([k, n]) => `${CONS_BY_ID[k]?.name ?? (k === "surek" ? t("Sürek avı talimi") : k === "yug" ? t("Yuğ") : k)} (${n} savaş)`).join(" · ")}</div>` : "") +
-            CONSUMABLES.filter((c) => s.cons[c.id]).map((c) => `<div class="grow">${ic(c.icon, "gimg")}<div class="bi2"><b>${c.name} <em>×${s.cons[c.id]}</em></b><small>${c.desc}</small></div><button class="btn sm go" data-a="${this.act(() => g.useCons(c.id))}">Kullan</button></div>`).join("")
+          ? `<h3>${ic("healer")} ${t("Çanta")}</h3>` +
+            (Object.keys(s.buffs).length ? `<div class="odds good">${t("Etkin")}: ${Object.entries(s.buffs).map(([k, n]) => `${CONS_BY_ID[k]?.name ?? (k === "surek" ? t("Sürek avı talimi") : k === "yug" ? t("Yuğ") : k)} (${n} ${t("savaş")})`).join(" · ")}</div>` : "") +
+            CONSUMABLES.filter((c) => s.cons[c.id]).map((c) => `<div class="grow">${ic(c.icon, "gimg")}<div class="bi2"><b>${c.name} <em>×${s.cons[c.id]}</em></b><small>${c.desc}</small></div><button class="btn sm go" data-a="${this.act(() => g.useCons(c.id))}">${t("Kullan")}</button></div>`).join("")
           : "") +
-        `<h3>${ic("schest")} Heybe</h3>` +
+        `<h3>${ic("schest")} ${t("Heybe")}</h3>` +
         (h.bag.map((it) => {
           const cur = h.equip[it.slot];
           const better = !cur || it.atk + it.def + it.hp / 3 + it.spd * 50 + it.lid + it.kar > cur.atk + cur.def + cur.hp / 3 + cur.spd * 50 + cur.lid + cur.kar;
           const ok = !g.canUse(it);
-          return this.itemRow(it, `<div class="col2">${ok && better ? `<em class="cheap">▲</em>` : ""}<button class="btn sm ${ok ? "" : "off"}" data-a="${this.act(() => g.equip(it.id))}">Kuşan</button>${inCity ? `<button class="btn sm" data-a="${this.act(() => g.sellItem(it.id))}">${g.itemSellPrice(it)}</button>` : ""}</div>`);
-        }).join("") || `<p class="dim">Heyben boş. Haramiler, kamplar ve harabeler eşya düşürür.</p>`) +
-        `<h3>${ic("j_caravan")} Yük (${g.cargoUsed()}/${g.carryCap()})</h3>` +
-        (GOOD_KEYS.filter((k) => (h.cargo[k] ?? 0) > 0).map((k) => `<div class="qrow">${ic(GOODS[k].icon)} ${GOODS[k].name}<span>${h.cargo[k]} adet · ort. ${Math.round((h.paid[k] ?? 0) / (h.cargo[k] ?? 1))} altın</span></div>`).join("") || `<p class="dim">Yükün boş.</p>`) +
+          return this.itemRow(it, `<div class="col2">${ok && better ? `<em class="cheap">▲</em>` : ""}<button class="btn sm ${ok ? "" : "off"}" data-a="${this.act(() => g.equip(it.id))}">${t("Kuşan")}</button>${inCity ? `<button class="btn sm" data-a="${this.act(() => g.sellItem(it.id))}">${g.itemSellPrice(it)}</button>` : ""}</div>`);
+        }).join("") || `<p class="dim">${t("Heyben boş. Haramiler, kamplar ve harabeler eşya düşürür.")}</p>`) +
+        `<h3>${ic("j_caravan")} ${t("Yük")} (${g.cargoUsed()}/${g.carryCap()})</h3>` +
+        (GOOD_KEYS.filter((k) => (h.cargo[k] ?? 0) > 0).map((k) => `<div class="qrow">${ic(GOODS[k].icon)} ${GOODS[k].name}<span>${t("{n} adet · ort. {p} altın", { n: h.cargo[k] ?? 0, p: Math.round((h.paid[k] ?? 0) / (h.cargo[k] ?? 1)) })}</span></div>`).join("") || `<p class="dim">${t("Yükün boş.")}</p>`) +
         (s.free ? this.codexHtml() : "");
     } else {
-      body = `<div class="stats"><div>${ic("tug")}Birlik: <b>${armySize(h.army)}/${g.heroCap()}</b></div><div>${ic("coins")}Ücret: <b>${g.wagePerMin().toFixed(1)}/dk</b></div><div>${ic("shield")}Toplam güç: <b>${Math.round(g.heroPower())}</b></div></div>
+      body = `<div class="stats"><div>${ic("tug")}${t("Birlik")}: <b>${armySize(h.army)}/${g.heroCap()}</b></div><div>${ic("coins")}${t("Ücret")}: <b>${g.wagePerMin().toFixed(1)}/${t("dk")}</b></div><div>${ic("shield")}${t("Toplam güç")}: <b>${Math.round(g.heroPower())}</b></div></div>
         ${armyHtml(h.army)}
         ${this.vetsHtml()}
         ${s.beylik ? this.otagHtml() : ""}
         ${s.free ? this.birdHtml() : ""}
-        <h3>${ic("tug")} Yoldaşlar (${s.comps.length})</h3>${s.comps.map((id) => {
+        <h3>${ic("tug")} ${t("Yoldaşlar")} (${s.comps.length})</h3>${s.comps.map((id) => {
           const cp = COMP_BY_ID[id as CompId];
           if (!cp) return "";
           const bv = g.bond(cp.id), tier = bondTier(bv), en = lang() === "en";
@@ -2107,12 +2107,12 @@ export class Hud {
             : s.cq?.id === cp.id ? `<small class="cheap">${q.title}: ${CITY_NAME[q.steps[s.cq.step]?.city ?? q.steps[0].city]}</small>${g.cqTarget() ? this.walkBtn(g.cqTarget()!, t("Yola çık")).replace("btn go", "btn sm go cqgo") : ""}`
             : q ? `<small class="dim">${q.title} · ${t("bağ")} ${BOND_QUEST}+</small>` : "";
           return `<div class="comp on"><img src="${assetUrl(cp.icon)}" alt=""><div class="bi2"><b>${cp.name} <em>${cp.role}</em></b><small class="cheap">${cp.perk}</small>${bar(Math.max(0, bv + 100), 200, `bond ${tier.cls}`, `${en ? tier.en : tier.name} ${Math.round(bv)}`)}<small class="dim">${t("Sever")}: ${(en ? BOND_LIKES_EN : BOND_LIKES)[cp.id]}</small>${qs}</div></div>`;
-        }).join("") || `<p class="dim">Henüz yoldaşın yok. Destan seni yeni dostlarla buluşturacak; bazı şehirlerin hanlarında da yolcular bekler (en fazla ${COMP_MAX} paralı yoldaş).</p>`}
-        <p class="dim">${s.free ? "Köylerden gönüllü topla ya da şehir hanlarından paralı asker tut. Askerlerin ücretini altınla ödersin; altının biterse terk ederler. Liderlik birlik sınırını ve askerlerin gücünü artırır." : "Henüz bir kölesin. Hürriyetini kazanınca birlik kurabilirsin."}</p>
-        <h3>Toplam</h3><div class="stats"><div>${ic("j_bandit")}Yenilen düşman: <b>${s.kills}</b></div><div>${ic("quest")}Görev: <b>${s.quest}/${g.QUESTS.length}</b></div><div>Ticaret kârı: <b>${s.c.profit}</b></div></div>`;
+        }).join("") || `<p class="dim">${t("Henüz yoldaşın yok. Destan seni yeni dostlarla buluşturacak; bazı şehirlerin hanlarında da yolcular bekler (en fazla {n} paralı yoldaş).", { n: COMP_MAX })}</p>`}
+        <p class="dim">${s.free ? t("Köylerden gönüllü topla ya da şehir hanlarından paralı asker tut. Askerlerin ücretini altınla ödersin; altının biterse terk ederler. Liderlik birlik sınırını ve askerlerin gücünü artırır.") : t("Henüz bir kölesin. Hürriyetini kazanınca birlik kurabilirsin.")}</p>
+        <h3>${t("Toplam")}</h3><div class="stats"><div>${ic("j_bandit")}${t("Yenilen düşman")}: <b>${s.kills}</b></div><div>${ic("quest")}${t("Görev")}: <b>${s.quest}/${g.QUESTS.length}</b></div><div>${t("Ticaret kârı")}: <b>${s.c.profit}</b></div></div>`;
     }
     const tl = s.title ? titleOf(s.title) : null;
-    return this.frame(h.name, s.free ? `Seviye ${h.lv} · ${s.act3.ending ? `<b class="ttl">${endingOf(s.act3.ending)!.name}</b>${tl ? ` · ${tl.name}` : ""}` : s.kagan ? `<b class="ttl">Kağan</b>${tl ? ` · ${tl.name}` : ""}` : tl ? `<b class="ttl">${tl.name}</b>` : s.beylik ? "Bey" : "Hür yiğit"}` : `Seviye ${h.lv} · Köle`, assetUrl(g.face()), tabs + body);
+    return this.frame(h.name, s.free ? `${t("Seviye")} ${h.lv} · ${s.act3.ending ? `<b class="ttl">${endingOf(s.act3.ending)!.name}</b>${tl ? ` · ${tl.name}` : ""}` : s.kagan ? `<b class="ttl">${t("Kağan")}</b>${tl ? ` · ${tl.name}` : ""}` : tl ? `<b class="ttl">${tl.name}</b>` : s.beylik ? t("Bey") : t("Hür yiğit")}` : `${t("Seviye")} ${h.lv} · ${t("Köle")}`, assetUrl(g.face()), tabs + body);
   }
 
   showBattle(title: string, before: Army, enemy: Army, sim: Sim, hero: { hpBefore: number; maxHp: number }, boss: Boss | null, foe: string, auto: boolean, apply: (res: BattleResult) => { xp: number; lvUp: boolean; note: string }, onClose: () => void): void {
