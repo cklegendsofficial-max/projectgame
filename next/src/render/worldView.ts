@@ -548,6 +548,66 @@ export class WorldView {
     return new Graphics().circle(0, 0, r).fill({ color: 0x1a0f06, alpha: 0.9 }).circle(0, 0, r).stroke({ color, width: 4 });
   }
 
+  private mongolM: Container | null = null;
+  private mongolG = new Graphics();
+  private burnM = new Map<string, Sprite>();
+
+  /** Moğol tümeni: noyan portresi, çevresinde dönen atlı sürüsü; yanan şehirler kararır ve alev alır. */
+  private drawMongol(game: Game, inv: number): void {
+    const p = game.mongolPos();
+    const g = this.mongolG;
+    g.clear();
+    if (p) {
+      if (!this.mongolM) {
+        this.mongolM = this.portrait("heroes/boss_hakan", 22, 0xc0392b);
+        const t = new Text({ text: "Moğol Tümeni", style: { ...LABEL_STYLE, fontSize: 14, fill: "#ffb4a0" } });
+        t.anchor.set(0.5, 0);
+        t.position.set(0, 26);
+        t.resolution = 2;
+        this.mongolM.addChild(t);
+        this.units.addChild(g, this.mongolM);
+      }
+      this.mongolM.visible = true;
+      this.mongolM.position.set(p.x, p.y);
+      this.mongolM.scale.set(inv * 1.1);
+      for (let i = 0; i < 70; i++) {
+        const a = i * 2.39996 + this.time * (i % 2 ? 0.1 : -0.07);
+        const r = 30 + Math.sqrt(i / 70) * 62 + Math.sin(this.time * 2 + i) * 3;
+        const x = p.x + Math.cos(a) * r * 1.4;
+        const y = p.y + Math.sin(a) * r * 0.7 - Math.abs(Math.sin(this.time * 8 + i)) * 1.5;
+        g.ellipse(x, y, 3.4, 1.8).fill({ color: 0x2a1a12, alpha: 0.85 });
+        g.circle(x + (i % 2 ? 1.6 : -1.6), y - 2.2, 1.1).fill({ color: 0x3a2418 });
+      }
+      for (let i = 0; i < 8; i++) {
+        const a = this.time * 0.5 + i * 0.8;
+        g.circle(p.x - 90 + Math.cos(a) * 30 - ((this.time * 20 + i * 15) % 60), p.y + 10 + Math.sin(a * 1.3) * 14, 14 + (i % 3) * 6).fill({ color: 0xc8a878, alpha: 0.12 });
+      }
+    } else if (this.mongolM) this.mongolM.visible = false;
+    const fallen = game.s.mongol?.fallen ?? [];
+    CITIES.forEach((c, i) => {
+      const burning = fallen.some((f) => f.id === c.id);
+      const m = this.cityM[i];
+      if (m) m.sp.tint = burning ? 0x8a6656 : 0xffffff;
+      let f = this.burnM.get(c.id);
+      if (burning && !f) {
+        f = new Sprite(this.glow);
+        f.anchor.set(0.5);
+        f.tint = 0xff5a1a;
+        f.blendMode = "add";
+        this.units.addChildAt(f, 0);
+        this.burnM.set(c.id, f);
+      }
+      if (f) {
+        f.visible = burning;
+        if (burning) {
+          f.position.set(c.x, c.y - 20);
+          f.width = f.height = 200 + Math.sin(this.time * 7 + i) * 18 + Math.sin(this.time * 17) * 8;
+          f.alpha = 0.55;
+        }
+      }
+    });
+  }
+
   private portrait(key: string, r: number, color: number): Container {
     const c = new Container();
     c.addChild(this.ring(color, r + 3));
@@ -737,6 +797,7 @@ export class WorldView {
     this.trail.push(h.x, h.y);
     if (this.trail.length > 400) this.trail.splice(0, this.trail.length - 400);
     this.drawBird(game, inv);
+    this.drawMongol(game, inv);
     s.comps.forEach((id, i) => {
       let c = this.compM.get(id);
       if (!c) {

@@ -33,6 +33,7 @@ import { LANGS, lang, t, t as tr, type Lang } from "../i18n";
 import { cloudPush, cloudReady, onDeck, steam } from "../platform";
 import { WEEK_TIERS, weekEnd, weekNeed, weekReward, weekTheme } from "../game/weekly";
 import { loadedMods, modBridge, removeMod, storeMod, storedMods, toggleMod } from "../mods";
+import { ROUTE as MONGOL_ROUTE } from "../game/mongol";
 import { KIP_FOOD, KIP_GIFT, KIP_GIFT_REP, KIP_HIRE_GAP, KIP_HIRE_N, KIP_MIN_LV, KIP_STEPS, STONES, kipBoss, kipFortArmy, kipHireCost } from "../game/kipchak";
 
 const MOD_LABEL: Record<string, string> = { atk: "saldırı", army: "ordu gücü", heal: "iyileşme", xp: "tecrübe", trade: "ticaret", speed: "hız", sight: "görüş" };
@@ -102,6 +103,7 @@ export class Hud {
   private questEl!: HTMLElement;
   private sagaEl!: HTMLElement;
   private taskEl!: HTMLElement;
+  private mogEl!: HTMLElement;
   private actEl!: HTMLElement;
   private panel!: HTMLElement;
   private toasts!: HTMLElement;
@@ -169,7 +171,7 @@ export class Hud {
   constructor(private g: Game) {
     this.root.innerHTML = `
       <div class="top"></div>
-      <div class="track"><div class="quest"></div><div class="quest saga hidden"></div><div class="quest task hidden"></div><div class="quest sq hidden"></div></div>
+      <div class="track"><div class="quest"></div><div class="quest saga hidden"></div><div class="quest task hidden"></div><div class="quest sq hidden"></div><div class="quest mog hidden"></div></div>
       <div class="toasts"></div>
       <div class="actbar hidden"></div>
       <div class="bottom">
@@ -189,6 +191,11 @@ export class Hud {
     this.sagaEl = this.root.querySelector(".saga")!;
     this.taskEl = this.root.querySelector(".task")!;
     this.sideEl = this.root.querySelector(".quest.sq")!;
+    this.mogEl = this.root.querySelector(".quest.mog")!;
+    this.mogEl.addEventListener("click", () => {
+      const m = g.s.mongol;
+      if (m?.stage === 2) g.mongolMenu();
+    });
     this.sideEl.addEventListener("click", () => {
       const q = this.topSide();
       const p = q && g.sideGoto(q);
@@ -1109,6 +1116,7 @@ export class Hud {
 
   openPlace(t: Target): void {
     const g = this.g;
+    if (t.kind === "mongol") return g.mongolMenu();
     if (t.kind === "capital" || t.kind === "city") {
       const id = t.kind === "capital" ? "capital" : "city" + t.i;
       const prev = this.place && "i" in this.place ? "city" + this.place.i : this.place?.kind;
@@ -2491,6 +2499,16 @@ export class Hud {
     if (r) this.setHtml(this.taskEl, `${ic("j_bandit", "qi")}<div><small>Baskın · ${dur(r.until - g.now)}</small><b>${s.villages[r.v].name} yağmalanıyor!</b></div>`);
     else if (ct) this.setHtml(this.taskEl, `${ic("j_caravan", "qi")}<div><small>Kervan sözleşmesi · ${dur(ct.until - g.now)}</small><b>${ct.cargo} → ${CITY_NAME[ct.to]}</b></div>`);
     else if (vy) this.setHtml(this.taskEl, `${ic(GOODS[vy.good].icon, "qi")}<div><small>⚓ Denizde · %${Math.floor(Math.min(1, (s.time - vy.at) / vy.dur) * 100)}${vy.escort ? " · muhafızlı" : ""}</small><b>${vy.qty} ${GOODS[vy.good].name} → ${CITY_NAME[vy.to]}</b></div>`);
+    const mg = s.mongol;
+    const mgOn = !!mg && (mg.stage === 1 || mg.stage === 2);
+    this.mogEl.classList.toggle("hidden", !mgOn);
+    if (mg && mgOn) {
+      const left = Math.ceil(g.mongolDaysLeft());
+      this.mogEl.classList.toggle("alert", mg.stage === 2 && left <= 2);
+      this.setHtml(this.mogEl, mg.stage === 1
+        ? `${ic("scroll", "qi")}<div><small>${t("Doğudan haberler")}</small><b>${t("Kara bulut yaklaşıyor")} · ${left} ${t("gün")}</b></div>`
+        : `${ic("heroes/boss_hakan", "qi")}<div><small>${t("Moğol istilası")} · ${"◆".repeat(mg.str)}${mg.pact === "join" ? ` · ${t("müttefik")}` : ""}</small><b>${CITY_NAME[MONGOL_ROUTE[mg.next]]} · ${left} ${t("gün")}</b></div>`);
+    }
     const bld = g.building();
     this.root.querySelector('[data-b="capital"] span')!.textContent = bld ? `⏱ ${dur(s.buildings[bld].until - g.now)}` : t("Semerkant");
     const hb = this.root.querySelector('[data-b="hero"]')!;

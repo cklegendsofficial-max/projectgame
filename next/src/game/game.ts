@@ -44,6 +44,7 @@ import { BOND_FX, BOND_LEAVE, BOND_QUEST, BOND_START, COMP_QUESTS, SWORN_MULT, t
 import { lang, t as tr } from "../i18n";
 import { WEEK_TIERS, weekBoard, weekFrac, weekId, weekNeed, weekRank, weekReward, weekScore, weekTheme, type BoardRow, type WeekState } from "./weekly";
 import { steamStats } from "../platform";
+import { FALL_PRICE, FALL_TEXT, LEG_DAYS, MONGOL_DAY, MONGOL_LV, RECOVER_DAYS, ROUTE, RUMORS, RUMOR_LEAD, STR_MAX, WIN_DELAY, joinLoot, mongolArmy, mongolBoss, newMongol, tributeCost, type MongolState } from "./mongol";
 import { KIP_ALLY_FX, KIP_ALLY_MODS, KIP_FOOD, KIP_FORT_FX, KIP_GIFT, KIP_GIFT_REP, KIP_HIRE_GAP, KIP_HIRE_N, KIP_HIRE_REP, KIP_RAW, KIP_SELL_MULT, KIP_SELL_REP, KIP_STEPS, KIP_STONES_MODS, STONES, STONE_FX, inKipchak, kipBoss, kipFortArmy, kipHireCost, newKip, stoneXp, type KipPoi, type KipState } from "./kipchak";
 import { SEASONS, SEASON_DAYS, seasonOf, type Season, type SeasonId } from "./seasons";
 import { FACTIONS, FACTION_KEYS, HOSTILE, REP_RANKS, RANK_PERKS, factionOf, repRank, type FactionId } from "./factions";
@@ -60,6 +61,7 @@ export type Target =
   | { kind: "otag" }
   | { kind: "boy" }
   | { kind: "kip"; i: number }
+  | { kind: "mongol" }
   | { kind: "point"; x: number; y: number };
 
 export interface Quest {
@@ -1230,6 +1232,7 @@ export class Game {
     this.cqTick(dt);
     this.myCvTick(dt);
     this.kipTick(dt);
+    this.mongolTick(dt);
     this.storyTick();
     this.worldEvents(dt, now);
     this.checkContract();
@@ -1542,7 +1545,7 @@ export class Game {
     const ci = CITIES.findIndex((c) => c.id === city);
     const day = this.dayOf().day;
     const wave = 1 + 0.12 * Math.sin(day * 1.7 + ci * 2.3 + GOOD_KEYS.indexOf(g) * 1.1);
-    return GOODS[g].base * goodMult(city, g) * wave * (this.sea().goods[g] ?? 1) * this.eventMult(city, g) * (1 + 0.6 * (this.market(city)[g] ?? 0));
+    return GOODS[g].base * goodMult(city, g) * wave * (this.sea().goods[g] ?? 1) * this.eventMult(city, g) * (1 + 0.6 * (this.market(city)[g] ?? 0)) * (this.sacked(city) ? FALL_PRICE : 1);
   }
 
   buyFactor(): number {
@@ -2282,6 +2285,8 @@ export class Game {
         return s.boy?.at ?? null;
       case "kip":
         return this.kipPois()[t.i] ?? null;
+      case "mongol":
+        return this.mongolPos();
       case "bandit":
         return s.bandits.find((b) => b.id === t.i) ?? null;
       case "caravan":
@@ -2364,6 +2369,8 @@ export class Game {
     if (s.otag) test({ kind: "otag" }, s.otag.x, s.otag.y, 1.8);
     if (s.boy?.at) test({ kind: "boy" }, s.boy.at.x, s.boy.at.y, 2);
     if (s.free) this.kipPois().forEach((p, i) => test({ kind: "kip", i }, p.x, p.y, p.kind === "stone" ? 1.3 : 2));
+    const mp = this.mongolPos();
+    if (mp) test({ kind: "mongol" }, mp.x, mp.y, 2.4);
     return best;
   }
 
@@ -4324,6 +4331,255 @@ export class Game {
     audio.play("coin");
     this.hud.toast(`${tr("Haftalık ödül")}: +${r.gold} ${tr("altın")}, +${r.renown} ${tr("şöhret")}${r.parsomen ? `, +${r.parsomen} ${tr("Parşömen")}` : ""}`, "good");
     return true;
+  }
+
+  mongol(): MongolState {
+    return (this.s.mongol ??= newMongol());
+  }
+
+  sacked(city: string): boolean {
+    return !!this.s.mongol?.fallen.some((f) => f.id === city);
+  }
+
+  /** Tümenin haritadaki yeri: önceki durağından sıradaki şehre doğru yürür. */
+  mongolPos(): { x: number; y: number } | null {
+    const m = this.s.mongol;
+    if (!m || m.stage !== 2) return null;
+    const to = this.cityPos(ROUTE[m.next]);
+    const from = m.next === 0 ? { x: W - 80, y: to.y - 140 } : this.cityPos(ROUTE[m.next - 1]);
+    const { day, t } = this.dayOf();
+    const k = Math.max(0, Math.min(1, (day + t - m.left) / Math.max(1, m.due - m.left)));
+    return { x: from.x + (to.x - from.x) * k, y: from.y + (to.y - from.y) * k + 95 };
+  }
+
+  mongolDaysLeft(): number {
+    const m = this.s.mongol;
+    if (!m) return 0;
+    const { day, t } = this.dayOf();
+    return Math.max(0, m.due - day - t);
+  }
+
+  private mongT = 2;
+  private mongBusy = false;
+
+  private mongolTick(dt: number): void {
+    this.mongT -= dt;
+    if (this.mongT > 0 || this.battleLock || this.mongBusy) return;
+    this.mongT = 2;
+    const s = this.s;
+    if (!s.free) return;
+    const m = this.mongol();
+    const day = this.dayOf().day;
+    if (m.fallen.length)
+      m.fallen = m.fallen.filter((f) => {
+        if (day - f.day < RECOVER_DAYS) return true;
+        this.hud.toast(`${CITY_NAME[f.id]} küllerinden doğuyor; çarşı yeniden açıldı.`, "good");
+        return false;
+      });
+    if (m.stage === 0) {
+      if (day < MONGOL_DAY - RUMOR_LEAD || s.hero.lv < MONGOL_LV - 2) return;
+      m.stage = 1;
+      m.due = day + RUMOR_LEAD;
+      this.chron("Doğudan, Tanrı Dağları'nın ardından kara haberler gelmeye başladı.");
+      this.hud.story("Doğudan Haberler", "icons/scroll", `${RUMORS.map((r) => `<i>"${r}"</i>`).join("<br><br>")}<br><br><b class="neg">Bozkırın doğusunda bir fırtına toplanıyor.</b> Ordunu güçlendir, beylerle bağ kur.`, "Kulak kabart");
+      saveGame(s);
+      return;
+    }
+    if (m.stage === 1) {
+      if (day < m.due) return;
+      m.stage = 2;
+      m.next = 0;
+      m.left = day;
+      m.due = day + LEG_DAYS;
+      this.chron("Moğol tümenleri Tanrı Dağları'nı aştı. Kara bulut batıya yürüyor.");
+      audio.play("story");
+      this.hud.choice("Kara Bulut", "heroes/boss_hakan", `Ufuk tozla kapandı. Cengiz'in noyanları <b>${CITY_NAME[ROUTE[0]]}</b> üzerine yürüyor; ardından Semerkant, Buhara ve bütün İpek Yolu gelecek.<br><br>Önünde üç yol var: <b>kılıç</b> (tümeni üç kez yenersen dalga kırılır), <b>haraç</b> (bir şehri altınla kurtarırsın) ya da <b>boyun eğmek</b> (yağmadan pay alırsın, ama töre seni unutmaz).<br><br><small class="dim">Tümen her ${LEG_DAYS} günde bir şehre varır. Haritada izleyebilir, takip kartından emir verebilirsin.</small>`, [
+        { label: "Kılıcımı kuşanırım", cls: "red", fn: () => this.chron(`${s.hero.name}, Moğol'a karşı kılıç kuşandı.`) },
+        { label: "Seçenekleri gör", cls: "go", fn: () => this.mongolMenu() },
+      ]);
+      saveGame(s);
+      return;
+    }
+    if (m.stage !== 2) return;
+    if (day >= m.due) this.mongolArrive();
+    else if (m.due - day <= 2 && m.askDay !== m.next) {
+      m.askDay = m.next;
+      this.hud.toast(`Moğol öncüleri ${CITY_NAME[ROUTE[m.next]]} kapılarına iki gün uzaklıkta!`, "bad");
+    }
+  }
+
+  mongolNear(): boolean {
+    const p = this.mongolPos();
+    return !!p && Math.hypot(p.x - this.s.hero.x, p.y - this.s.hero.y) < 150;
+  }
+
+  mongolMenu(): void {
+    const s = this.s;
+    const m = this.mongol();
+    if (m.stage !== 2) return;
+    const id = ROUTE[m.next];
+    const lv = s.hero.lv;
+    const cost = tributeCost(m.next, lv);
+    const pct = Math.round(this.odds(mongolArmy(lv, m.str), 0.05, mongolBoss(lv, m.str)) * 100);
+    const opts: { label: string; cls: string; fn: () => void }[] = [];
+    if (this.mongolNear()) opts.push({ label: m.pact === "join" ? "İhanet et: arkadan vur" : `Tümene saldır (%${pct})`, cls: "red", fn: () => this.mongolAttack() });
+    else opts.push({ label: "Tümene yürü", cls: "go", fn: () => this.goTo({ kind: "mongol" }) });
+    if (m.pact === "war" && m.spared !== id) opts.push({ label: `Haraç: ${CITY_NAME[id]} bağışlansın (${cost} altın)`, cls: s.res.gold >= cost ? "" : "off", fn: () => this.mongolTribute() });
+    if (m.pact === "war") opts.push({ label: "Moğol'a boyun eğ", cls: "", fn: () => this.mongolJoin() });
+    opts.push({ label: "Kapat", cls: "", fn: () => {} });
+    const fallen = m.fallen.map((f) => CITY_NAME[f.id]).join(", ");
+    this.hud.choice("Moğol Tümeni", "heroes/boss_hakan", `<b>${mongolBoss(lv, m.str).name}</b> komutasındaki tümen <b>${CITY_NAME[id]}</b> üzerine yürüyor: <b>${Math.ceil(this.mongolDaysLeft())} gün</b>.<br>Tümenin gücü: <b>${"◆".repeat(m.str)}${"◇".repeat(STR_MAX - m.str)}</b> · zafer şansın <b>%${pct}</b>${m.spared ? `<br>Haraç ödendi: <b class="cheap">${CITY_NAME[m.spared]}</b> bağışlanacak.` : ""}${fallen ? `<br>Yanan şehirler: <b class="neg">${fallen}</b>` : ""}<br><br>${m.pact === "join" ? `Moğol'a boyun eğdin. Yağmadan payın: <b>${m.loot}</b> altın.` : "Tümen bir şehre vardığında yakınındaysan şehri savunabilirsin; surlar sana güç verir."}`, opts);
+  }
+
+  mongolTribute(): void {
+    const s = this.s;
+    const m = this.mongol();
+    const id = ROUTE[m.next];
+    const cost = tributeCost(m.next, s.hero.lv);
+    if (s.res.gold < cost) return this.hud.toast("Haraç için altının yetmiyor", "bad");
+    s.res.gold -= cost;
+    m.spared = id;
+    this.addKut(-2, "Moğol'a haraç verdin");
+    this.chron(`${s.hero.name}, ${CITY_NAME[id]} bağışlansın diye noyana ${cost} altın haraç gönderdi.`);
+    this.hud.toast(`Elçi döndü: ${CITY_NAME[id]} bu sefer bağışlanacak.`, "good");
+    saveGame(s);
+  }
+
+  mongolJoin(): void {
+    const s = this.s;
+    const m = this.mongol();
+    this.hud.choice("Boyun Eğmek", "heroes/boss_hakan", `Noyan sana bir tuğ ve altın kemer uzatıyor: "Gök Tanrı yeryüzünü Han'a verdi. Bize katılan yaşar, direnen ölür."<br><br>Katılırsan senin şehirlerin bağışlanır ve her yağmadan <b>${joinLoot(s.hero.lv)}</b> altın pay alırsın. Ama kutun ağır yara alır, halk seni hain bilir.`, [
+      {
+        label: "Tuğu al",
+        cls: "red",
+        fn: () => {
+          m.pact = "join";
+          this.addKut(-20, "Moğol'a boyun eğdin");
+          this.chron(`${s.hero.name} Moğol'a boyun eğdi ve noyanın tuğunu aldı.`);
+          this.hud.toast("Artık Moğol tümeniyle birliktesin.", "bad");
+          saveGame(s);
+        },
+      },
+      { label: "Reddet", cls: "go", fn: () => {} },
+    ]);
+  }
+
+  private mongolWin(m: MongolState): string {
+    const s = this.s;
+    m.wins++;
+    m.str--;
+    s.renown += 40;
+    s.hero.xp += 300 + s.hero.lv * 20;
+    this.addKut(4, "Moğol'u durdurdun");
+    if (m.str > 0) {
+      m.due += WIN_DELAY;
+      this.chron(`${s.hero.name}, Moğol tümenini ${CITY_NAME[ROUTE[m.next]]} önünde geri püskürttü.`);
+      return `Tümen dağılıp geri çekildi! ${CITY_NAME[ROUTE[m.next]]} için <b>${WIN_DELAY} gün</b> kazandın. Tümenin gücü kırılıyor (${m.str}/${STR_MAX}). +40 şöhret`;
+    }
+    m.stage = 3;
+    s.res.gold += 3000;
+    s.renown += 150;
+    this.addKut(15, "Moğol dalgasını kırdın");
+    this.chron(`${s.hero.name} Moğol dalgasını kırdı. Noyanlar doğuya döndü; İpek Yolu kurtuldu.`);
+    setTimeout(() => this.hud.story("Dalga Kırıldı", "icons/trophy", `Üçüncü yenilgiden sonra noyanlar atlarını doğuya çevirdi. Ozanlar yüz yıl boyunca bu savaşı anlatacak: <b>Kara Bulut'u durduran yiğit</b>.<br><br><b class="cheap">+3000 altın · +150 şöhret · +15 kut</b>`, "Destan yazıldı"), 600);
+    return "Moğol tümeni bozguna uğradı!";
+  }
+
+  mongolAttack(): void {
+    const s = this.s;
+    const m = this.mongol();
+    if (m.stage !== 2) return;
+    const lv = s.hero.lv;
+    const betray = m.pact === "join";
+    if (betray) {
+      m.pact = "war";
+      this.chron(`${s.hero.name} Moğol'a verdiği sözü bozdu ve tümene arkadan vurdu.`);
+    }
+    this.battle(`Moğol Tümeni`, mongolArmy(lv, m.str), betray ? -0.1 : 0.05, (win) => (win ? this.mongolWin(m) : "Moğol okları gökyüzünü kararttı. Geri çekilmek zorunda kaldın."), mongolBoss(lv, m.str), "Moğol Tümeni");
+  }
+
+  private mongolAdvance(m: MongolState): void {
+    const day = this.dayOf().day;
+    m.next++;
+    if (m.next >= ROUTE.length) {
+      m.stage = 4;
+      this.chron("Moğol tümeni batının denizine ulaştı ve doğuya döndü. Ardında küller kaldı.");
+      this.hud.story("Kara Bulut Dağıldı", "map/ruins", "Tümen batı denizine varınca atlarını doğuya çevirdi. Yollar yeniden açılıyor, ama yanan şehirlerin yarası kolay kapanmayacak.", "Devam");
+      return;
+    }
+    m.left = day;
+    m.due = day + LEG_DAYS;
+  }
+
+  private mongolArrive(): void {
+    const s = this.s;
+    const m = this.mongol();
+    const id = ROUTE[m.next];
+    const c = this.cityPos(id);
+    const lv = s.hero.lv;
+    const near = Math.hypot(c.x - s.hero.x, c.y - s.hero.y) < 280;
+    const mine = !!s.owned[id] || (id === CAPITAL.id && s.beylik);
+    if (m.pact === "war" && m.spared !== id && (near || mine)) {
+      this.mongBusy = true;
+      this.hud.toast(`Moğollar ${CITY_NAME[id]} surlarına dayandı!`, "bad");
+      this.battle(`${CITY_NAME[id]} Savunması`, mongolArmy(lv, m.str), -0.08, (win) => {
+        this.mongBusy = false;
+        if (win) {
+          const txt = this.mongolWin(m);
+          if (m.stage === 2) this.mongolAdvance(m);
+          return `${CITY_NAME[id]} surları dayandı! ${txt}`;
+        }
+        this.mongolFall(id);
+        return `${CITY_NAME[id]} düştü.`;
+      }, mongolBoss(lv, m.str), "Moğol Tümeni");
+      return;
+    }
+    this.mongolFall(id);
+  }
+
+  private mongolFall(id: string): void {
+    const s = this.s;
+    const m = this.mongol();
+    const name = CITY_NAME[id];
+    const mine = !!s.owned[id] || (id === CAPITAL.id && s.beylik);
+    if (m.spared === id || (m.pact === "join" && mine)) {
+      m.spared = null;
+      this.chron(`${name} kapılarını açtı; Moğol tümeni şehre dokunmadan geçti.`);
+      this.hud.toast(`${name} bağışlandı. Tümen batıya yürüyor.`, "good");
+      this.mongolAdvance(m);
+      saveGame(s);
+      return;
+    }
+    m.fallen.push({ id, day: this.dayOf().day });
+    const sr = s.serais[id];
+    if (sr) {
+      sr.coffer = 0;
+      sr.lv = Math.max(1, sr.lv - 1);
+    }
+    let extra = "";
+    if (m.pact === "join") {
+      const g = joinLoot(s.hero.lv);
+      s.res.gold += g;
+      m.loot += g;
+      this.addKut(-3, "yağmaya ortak oldun");
+      extra = `<br><br>Yağmadan payın: <b class="cheap">+${g} altın</b>. Kutun kararıyor.`;
+    } else if (mine) {
+      if (id === CAPITAL.id) {
+        const lost = Math.round(s.res.gold * 0.25);
+        s.res.gold -= lost;
+        this.addKut(-8, "başkentin yağmalandı");
+        extra = `<br><br><b class="neg">Hazinenin dörtte biri (${lost} altın) yağmalandı.</b>`;
+      } else {
+        delete s.owned[id];
+        this.addKut(-5, `${name} elinden çıktı`);
+        extra = `<br><br><b class="neg">${name} artık senin değil.</b>`;
+      }
+    }
+    this.chron(`${name} Moğol tümenine düştü ve yağmalandı.`);
+    audio.play("lose");
+    this.hud.story(`${name} Düştü`, "cities/" + id, `${FALL_TEXT[m.next % FALL_TEXT.length]}<br><br>Çarşı ${RECOVER_DAYS} gün boyunca harabe: fiyatlar <b class="neg">%${Math.round((FALL_PRICE - 1) * 100)} pahalı</b>, kervansaray kasası yağmalandı.${extra}`, "Devam");
+    this.mongolAdvance(m);
+    saveGame(s);
   }
 
   private kipCache: KipPoi[] | null = null;
