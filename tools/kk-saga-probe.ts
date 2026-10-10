@@ -103,6 +103,10 @@ check(price > 1, `salgın fiyatı artırıyor (${price.toFixed(2)})`);
 
 // rüya
 await ev(`g.hud.close(); g.wd().dreamDay = -99; g.battleLock = false; ${rnd(0.05, "g.dreamCheck();")}`);
+await shot("05a-dream-note");
+check((await page.locator(".notes .note").count()) > 0, "rüya kartı göründü");
+await page.locator(".notes .note").last().click();
+await page.waitForTimeout(300);
 await shot("05-dream");
 const om = await ev<number>(`return g.wd().omens.length;`);
 check(om >= 0 && (await page.locator(".battle .bbox.choice").count()) > 0, "rüya göründü");
@@ -116,6 +120,8 @@ await dismiss();
 
 // büyük toy
 const td = await ev<number>(`g.hud.close(); const w = g.wd(); w.toyYear = 0; w.toy = null; const d = 6 + 16 * Math.floor(g.dayOf().day / 16); g.toyDaily(d); return d;`);
+await page.locator(".notes .note").last().click();
+await page.waitForTimeout(300);
 await shot("07-toy");
 await dismiss();
 check(await ev<boolean>(`return !!g.wd().toy;`), "büyük toy kuruldu");
@@ -127,6 +133,8 @@ check(await ev<boolean>(`return !g.wd().toy && g.wd().champs.length === 1 && g.w
 
 // lonca
 await ev(`g.hud.close(); g.s.c.profit = 7000; g.wd().orderDay = -99; g.guildDaily(g.dayOf().day);`);
+await page.locator(".notes .note").last().click();
+await page.waitForTimeout(300);
 await shot("09-guild");
 await dismiss();
 check((await ev<number>(`return g.wd().guild;`)) === 2, "lonca rütbesi Usta");

@@ -189,6 +189,7 @@ export class Hud {
       <div class="top"></div>
       <div class="track"><div class="quest"></div><div class="quest saga hidden"></div><div class="quest task hidden"></div><div class="quest sq hidden"></div><div class="quest mog hidden"></div><button class="qmore hidden"></button></div>
       <div class="toasts"></div>
+      <div class="notes"></div>
       <div class="actbar hidden"></div>
       <div class="bottom">
         <button data-b="capital"><img class="bi" src="${assetUrl("cities/samarkand")}" alt=""><span>${t("Semerkant")}</span></button>
@@ -906,9 +907,15 @@ export class Hud {
     if (ui) {
       if (b === "b" || (b === "start" && this.place?.kind === "hero")) this.close();
       else if (b === "lb" || b === "rb") {
-        const tabs = [...this.panel.querySelectorAll<HTMLElement>(".tabs .tab")];
-        const i = tabs.findIndex((x) => x.classList.contains("on"));
-        if (tabs.length) tabs[(i + (b === "rb" ? 1 : tabs.length - 1)) % tabs.length].click();
+        const d = b === "rb" ? 1 : -1;
+        const sub = [...this.panel.querySelectorAll<HTMLElement>(".tabs.sub .tab")];
+        const si = sub.findIndex((x) => x.classList.contains("on"));
+        if (sub.length && sub[si + d]) sub[si + d].click();
+        else {
+          const tabs = [...this.panel.querySelectorAll<HTMLElement>(".tabs:not(.sub) .tab")];
+          const i = tabs.findIndex((x) => x.classList.contains("on"));
+          if (tabs.length) tabs[(i + d + tabs.length) % tabs.length].click();
+        }
       }
       return;
     }
@@ -1085,17 +1092,67 @@ export class Hud {
     this.g.cam.flyTo(c.x, c.y, 0.62);
   }
 
+  private toastQ: { el: HTMLElement; ms: number }[] = [];
+
+  notice(icon: string, title: string, sub: string, open: () => void, ttl = 0, alive?: () => boolean): void {
+    const box = this.root.querySelector(".notes")!;
+    const el = document.createElement("button");
+    el.className = "note";
+    el.innerHTML = `${ic(icon, "ni")}<span><b>${title}</b><small>${sub}</small></span>${ttl ? `<i class="nt" style="animation-duration:${ttl}ms"></i>` : ""}`;
+    let gone = false;
+    const drop = () => {
+      if (gone) return;
+      gone = true;
+      el.classList.add("out");
+      setTimeout(() => el.remove(), 350);
+    };
+    el.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (gone) return;
+      drop();
+      audio.play("click");
+      open();
+    });
+    box.appendChild(el);
+    audio.play("quest");
+    while (box.children.length > 4) box.firstElementChild!.remove();
+    if (ttl) setTimeout(drop, ttl);
+    if (alive) {
+      const iv = setInterval(() => {
+        if (gone || !el.isConnected) return clearInterval(iv);
+        if (!alive()) {
+          clearInterval(iv);
+          drop();
+        }
+      }, 1000);
+    }
+  }
+
   toast(text: string, kind: "good" | "bad" | "info" = "info"): void {
-    if ([...this.toasts.children].some((c) => c.textContent === text)) return;
+    if ([...this.toasts.children, ...this.toastQ.map((q) => q.el)].some((c) => c.textContent === text)) return;
     if (kind === "bad") audio.play("bad");
     else if (kind === "good" && /altın|\+/.test(text)) audio.play("coin");
     const el = document.createElement("div");
     el.className = "toast " + kind;
     el.textContent = text;
+    this.pushToast(el, 2800);
+  }
+
+  private pushToast(el: HTMLElement, ms: number, first = false): void {
+    if (this.toasts.children.length >= (this.narrow.matches ? 2 : 3)) {
+      if (first) this.toastQ.unshift({ el, ms });
+      else this.toastQ.push({ el, ms });
+      if (this.toastQ.length > 8) this.toastQ.splice(this.toastQ.findIndex((q) => !q.el.classList.contains("qdone")) >>> 0, 1);
+      return;
+    }
     this.toasts.appendChild(el);
-    while (this.toasts.children.length > (this.narrow.matches ? 2 : 3)) this.toasts.firstElementChild!.remove();
-    setTimeout(() => el.classList.add("out"), 2800);
-    setTimeout(() => el.remove(), 3300);
+    const fast = this.toastQ.length > 2 ? 0.6 : 1;
+    setTimeout(() => el.classList.add("out"), ms * fast);
+    setTimeout(() => {
+      el.remove();
+      const n = this.toastQ.shift();
+      if (n) this.pushToast(n.el, n.ms, true);
+    }, ms * fast + 450);
   }
 
   private storyQ: (() => void)[] = [];
@@ -1245,13 +1302,10 @@ export class Hud {
 
   questDone(q: Quest, label = "Görev tamamlandı"): void {
     audio.play("quest");
-    this.root.querySelectorAll(".qdone").forEach((x) => x.remove());
     const el = document.createElement("div");
     el.className = "qdone";
     el.innerHTML = `${ic(label === "Görev tamamlandı" ? "quest" : "trophy", "qi")}<div><small>${label}</small><b>${q.title}</b><span>${costHtml(q.reward, this.g)}</span></div>`;
-    this.root.appendChild(el);
-    setTimeout(() => el.classList.add("out"), 3200);
-    setTimeout(() => el.remove(), 3800);
+    this.pushToast(el, 3200, true);
   }
 
   close(): void {
@@ -1334,33 +1388,36 @@ export class Hud {
     const s = g.s;
     const w = g.wd();
     const out: string[] = [];
+    const card = (icon: string, title: string, tag: string, body: string, cls = "") => `<div class="scard ${cls}">${ic(icon, "sci")}<div class="scb"><div class="sch"><b>${title}</b>${tag ? `<em>${tag}</em>` : ""}</div>${body}</div></div>`;
     const toy = w.toy;
     if (toy) {
       const me = g.toyTotal();
       const rows = [...toy.foes, { name: s.hero.name, pts: me, me: true }].sort((a, b) => b.pts - a.pts);
-      out.push(`<h3>${ic("trophy")} ${t("Büyük Toy")} · ${t("son gün {d}", { d: toy.to })}</h3>
-        <p class="dim">${t("Okçuluk")} <b>${toy.pts.ok}</b> · ${t("Güreş")} <b>${toy.pts.gur}</b> · ${t("Kökbörü")} <b>${toy.pts.kb}</b></p>
-        <p>${rows.map((r, i) => `${i + 1}. ${"me" in r ? `<b class="cheap">${r.name}</b>` : r.name} <b>${r.pts}</b>`).join(" · ")}</p>
-        <div class="row"><button class="btn sm go" data-a="${this.act(() => this.openArchery())}">${t("Okçuluk")}</button><button class="btn sm go" data-a="${this.act(() => this.openMini("wr"))}">${t("Güreş")}</button><button class="btn sm go" data-a="${this.act(() => this.openMini("kb"))}">${t("Kökbörü")}</button></div>`);
+      const rank = rows.findIndex((r) => "me" in r) + 1;
+      const lead = rows[0];
+      out.push(card("trophy", t("Büyük Toy"), t("son gün {d}", { d: toy.to }), `
+        <div class="scs"><span>${ic("u_archer")}<b>${toy.pts.ok}</b></span><span>${ic("swords")}<b>${toy.pts.gur}</b></span><span>${ic("u_cavalry")}<b>${toy.pts.kb}</b></span><span class="${rank === 1 ? "cheap" : "dim"}">${rank}/${rows.length}. · ${rank === 1 ? t("lider sensin") : `${lead.name} ${lead.pts}`}</span></div>
+        ${bar(me, Math.max(1, lead.pts), "", `${me} / ${lead.pts}`)}
+        <div class="row"><button class="btn sm go" data-a="${this.act(() => this.openArchery())}">${t("Okçuluk")}</button><button class="btn sm go" data-a="${this.act(() => this.openMini("wr"))}">${t("Güreş")}</button><button class="btn sm go" data-a="${this.act(() => this.openMini("kb"))}">${t("Kökbörü")}</button></div>`, "gold"));
     }
     if (w.captives.length) {
-      out.push(`<h3>${ic("j_bandit")} ${t("Esirler")} ${w.captives.length}/${CAPTIVE_MAX}</h3>` + w.captives.map((c) => {
+      out.push(card("j_bandit", t("Esirler"), `${w.captives.length}/${CAPTIVE_MAX}`, w.captives.map((c) => {
         const rec = c.kind === "bey" ? t("Biat ettir") : c.kind === "harami" ? t("Saflarına kat") : "";
-        return `<div class="qrow">${ic(c.kind === "harami" ? "j_bandit" : c.kind === "bey" ? "lord_bey" : "seal")} <b>${c.name}</b><span>${t("fidye")} ${c.value}</span></div>
+        return `<div class="scap">${ic(c.kind === "harami" ? "j_bandit" : c.kind === "bey" ? "lord_bey" : "seal")}<b>${c.name}</b><span class="cheap">${ic("coins")}${c.value}</span></div>
           <div class="row"><button class="btn sm go" data-a="${this.act(() => g.captiveAct(c.id, "ransom"))}">${t("Fidye al")}</button><button class="btn sm" data-a="${this.act(() => g.captiveAct(c.id, "free"))}">${t("Serbest bırak")}</button>${rec ? `<button class="btn sm" data-a="${this.act(() => g.captiveAct(c.id, "recruit"))}">${rec}</button>` : ""}<button class="btn sm bad" data-a="${this.act(() => g.captiveAct(c.id, "sell"))}">${t("Esir pazarına sat")}</button></div>`;
-      }).join(""));
+      }).join("")));
     }
-    const sick = Object.entries(w.plague).filter(([, p]) => p > 0);
-    if (sick.length) out.push(`<p class="dear">${ic("healer")} ${t("Salgın")}: ${sick.map(([c, p]) => `${CITY_NAME[c]} <b>${"●".repeat(Math.ceil(p))}</b>${w.quarantine[c] ? ` (${t("karantina")})` : ""}`).join(" · ")}</p>`);
+    const sick = Object.entries(w.plague).filter(([, p]) => p > 0).sort((a, b) => b[1] - a[1]);
+    if (sick.length) out.push(card("healer", t("Salgın"), `${sick.length} ${t("şehir")}`, `<div class="chips">${sick.map(([c, p]) => `<span class="chip ${p >= 3 ? "bad" : ""}">${CITY_NAME[c]} <b>${"●".repeat(Math.ceil(p))}</b>${w.quarantine[c] ? " 🔒" : ""}</span>`).join("")}</div>`, "red"));
     const G = GUILD[w.guild];
     const nx = GUILD[w.guild + 1];
-    out.push(`<p>${ic("merchant")} ${t("Lonca")}: <b>${t(G.name)}</b>${nx ? ` · ${t("sonraki")}: ${t(nx.name)} (${Math.floor(s.c.profit)}/${nx.need} ${t("kâr")})` : ""}</p>`);
-    if (w.order) out.push(`<p class="dim">${t("Lonca siparişi: {n} {g} → {c}, {d}. güne kadar · {p} altın", { n: w.order.n, g: GOODS[w.order.good as keyof typeof GOODS].name, c: CITY_NAME[w.order.city], d: w.order.until, p: w.order.gold })}</p>`);
-    if (w.hoard) out.push(`<p class="cheap">${ic("parsomen")} ${t("Define haritası: {w}. Haritada kırmızı çarpı.", { w: w.hoard.near })} <button class="btn sm" data-a="${this.act(() => { this.close(); g.cam.flyTo(w.hoard!.x, w.hoard!.y, 0.8); })}">${t("Göster")}</button></p>`);
-    else if (w.mapBits) out.push(`<p class="dim">${ic("parsomen")} ${t("Harita parçaları: {n}/3", { n: w.mapBits })}</p>`);
+    const ord = w.order;
+    out.push(card("merchant", `${t("Lonca")}: ${t(G.name)}`, G.cut ? `-%${Math.round(G.cut * 100)}` : "", `${nx ? bar(s.c.profit, nx.need, "", `${t(nx.name)} · ${Math.floor(s.c.profit)}/${nx.need} ${t("kâr")}`) : ""}${ord ? `<div class="scap">${ic(GOODS[ord.good as keyof typeof GOODS].icon)}<b>${ord.n} ${GOODS[ord.good as keyof typeof GOODS].name} → ${CITY_NAME[ord.city]}</b><span class="cheap">${ic("coins")}${ord.gold}</span></div><small class="dim">${t("{d}. güne kadar", { d: ord.until })}</small>` : ""}`));
+    if (w.hoard) out.push(card("parsomen", t("Define haritası"), "", `<small>${t("Define haritası: {w}. Haritada kırmızı çarpı.", { w: w.hoard.near })}</small><div class="row"><button class="btn sm go" data-a="${this.act(() => { this.close(); g.cam.flyTo(w.hoard!.x, w.hoard!.y, 0.8); })}">${t("Göster")}</button></div>`, "gold"));
+    else if (w.mapBits) out.push(card("parsomen", t("Harita parçaları"), `${w.mapBits}/3`, `<div class="pips">${[0, 1, 2].map((i) => `<i class="${i < w.mapBits ? "on" : ""}"></i>`).join("")}</div>`));
     const told = w.omens.filter((o) => o.told);
-    if (told.length) out.push(`<p class="dim">${ic("ruh")} ${t("Kam'ın kehanetleri: {n} rüya gerçekleşmeyi bekliyor.", { n: told.length })}</p>`);
-    return out.join("");
+    if (told.length) out.push(card("ruh", t("Kehanetler"), `${told.length}`, `<small class="dim">${t("Kam'ın kehanetleri: {n} rüya gerçekleşmeyi bekliyor.", { n: told.length })}</small>`, "violet"));
+    return out.length ? `<div class="scards">${out.join("")}</div>` : "";
   }
 
   private cityExtraHtml(city: string, near: boolean): string {
@@ -1404,6 +1461,25 @@ export class Hud {
       this.tab = id;
       if (!seen.includes(id)) seen.push(id);
     })}">${t(n)}</button>`).join("")}</div>`;
+  }
+
+  private subTab: Record<string, string> = {};
+
+  private groupTabs(list: [string, string][], groups: [string, string, string[]][]): string {
+    if (!list.some(([id]) => id === this.tab)) this.tab = list[0][0];
+    const live = groups.map(([gid, name, ids]) => [gid, name, list.filter(([id]) => ids.includes(id))] as const).filter(([, , l]) => l.length);
+    const cur = live.find(([, , l]) => l.some(([id]) => id === this.tab)) ?? live[0];
+    this.subTab[cur[0]] = this.tab;
+    const main = live
+      .map(([gid, name, l]) => {
+        const badge = gid !== cur[0] && l.some(([id, n]) => id !== "techizat" && /\(\d+\)|●/.test(n));
+        return `<button class="tab ${gid === cur[0] ? "on" : ""} ${badge ? "new" : ""}" data-a="${this.act(() => {
+          const want = this.subTab[gid];
+          this.tab = l.some(([id]) => id === want) ? want : l[0][0];
+        })}">${t(name)}</button>`;
+      })
+      .join("");
+    return `<div class="tabs main">${main}</div>${cur[2].length > 1 ? this.tabs([...cur[2]]).replace('class="tabs"', 'class="tabs sub"') : ""}`;
   }
 
   private walkBtn(t: Target, label: string): string {
@@ -2522,7 +2598,14 @@ export class Hud {
     const s = g.s;
     const h = s.hero;
     const need = xpNeed(h.lv);
-    const tabs = this.tabs([...(s.free ? ([["ufuk", "✦ " + t("Ufuk")]] as [string, string][]) : []), ["karakter", t("Karakter")], ["beceri", `${t("Beceriler")}${h.spts ? ` (${h.spts})` : ""}`], ...(h.lv >= 2 || h.tpts ? ([["yetenek", `${t("Yetenekler")}${h.tpts ? ` (${h.tpts})` : ""}`]] as [string, string][]) : []), ["techizat", `${t("Teçhizat")}${h.bag.length ? ` (${h.bag.length})` : ""}`], ["ordu", t("Birlik")], ...(s.free ? ([["unvan", `${t("Hedefler")}${g.dailyClaimable() ? " ●" : ""}`]] as [string, string][]) : []), ...(s.free && (h.lv >= 4 || g.seraiCount() > 0 || s.beylik) ? ([["kervan", t("Kervanlar")]] as [string, string][]) : []), ...(s.free && (h.lv >= 5 || s.beylik) ? ([["divan", t("Divan")]] as [string, string][]) : []), ["bitig", "Bitig"], ["ayar", "⚙"]]);
+    const tabs = this.groupTabs([...(s.free ? ([["ufuk", "✦ " + t("Ufuk")]] as [string, string][]) : []), ["karakter", t("Karakter")], ["beceri", `${t("Beceriler")}${h.spts ? ` (${h.spts})` : ""}`], ...(h.lv >= 2 || h.tpts ? ([["yetenek", `${t("Yetenekler")}${h.tpts ? ` (${h.tpts})` : ""}`]] as [string, string][]) : []), ["techizat", `${t("Teçhizat")}${h.bag.length ? ` (${h.bag.length})` : ""}`], ["ordu", t("Birlik")], ...(s.free ? ([["unvan", `${t("Hedefler")}${g.dailyClaimable() ? " ●" : ""}`]] as [string, string][]) : []), ...(s.free && (h.lv >= 4 || g.seraiCount() > 0 || s.beylik) ? ([["kervan", t("Kervanlar")]] as [string, string][]) : []), ...(s.free && (h.lv >= 5 || s.beylik) ? ([["divan", t("Divan")]] as [string, string][]) : []), ["bitig", "Bitig"], ["ayar", "⚙"]], [
+      ["ufuk", "✦ " + t("Ufuk"), ["ufuk"]],
+      ["kahraman", t("Kahraman"), ["karakter", "beceri", "yetenek"]],
+      ["techizat", t("Teçhizat"), ["techizat"]],
+      ["ordu", t("Ordu"), ["ordu", "kervan", "divan"]],
+      ["kayit", `${t("Kayıtlar")}${g.dailyClaimable() ? " ●" : ""}`, ["unvan", "bitig"]],
+      ["ayar", "⚙", ["ayar"]],
+    ]);
     let body = "";
     if (this.tab === "ufuk") {
       body = this.ufukHtml();
@@ -2649,7 +2732,7 @@ export class Hud {
     const n0a = armySize(before);
     const n0b = armySize(enemy);
     const face = this.g.face();
-    el.innerHTML = `<div class="bbox">
+    el.innerHTML = `<div class="bbox war${boss ? " epic" : ""}">
       <h2>${ic("swords")} ${title}</h2>
       <div class="sides">
         <div class="side me">${ic(face, "bp")}<b>${this.g.s.hero.name}</b><div class="bar hero"><i></i><span></span></div>${n0a ? `<div class="bar hp"><i></i></div>` : ""}<div class="arm"></div></div>
@@ -2733,6 +2816,7 @@ export class Hud {
         return;
       }
       el.querySelector(".orders")!.remove();
+      box.classList.add("over");
       const res = sim.finish();
       const { xp, lvUp, note: extra } = apply(res);
       const last = res.rounds[res.rounds.length - 1];
@@ -2751,6 +2835,7 @@ export class Hud {
         <div class="stats"><div>Kayıpların: <b>${armySize(res.lostA)}</b></div><div>Düşman kaybı: <b>${armySize(res.lostB)}</b></div><div>${ic("scroll")}+${xp} TP${lvUp ? " · <b class='gold'>SEVİYE ATLADIN!</b>" : ""}</div></div>
         ${extra ? `<p class="loot">${extra}</p>` : ""}
         <button class="btn go big">Devam</button>`;
+      setTimeout(() => box.scrollTo({ top: box.scrollHeight, behavior: "smooth" }), 650);
       el.querySelector(".result .btn")!.addEventListener("click", () => {
         el.remove();
         this.battleOpen = false;

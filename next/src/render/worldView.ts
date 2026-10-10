@@ -186,6 +186,12 @@ export class WorldView {
   private heroCount!: Text;
   private heroFlag!: Sprite;
   private heroTamga!: Sprite;
+  private heroHorse!: Sprite;
+  private horseKey = "";
+  private face = 1;
+  private dustG = new Graphics();
+  private dust: { x: number; y: number; t: number }[] = [];
+  private dustAcc = 0;
   private tamgaKey = "";
   private heroBars!: Graphics;
   private bandits = new Map<number, Container>();
@@ -875,9 +881,14 @@ export class WorldView {
     this.heroTamga = new Sprite();
     this.heroTamga.anchor.set(0.5);
     this.heroTamga.position.set(22, -50);
-    c.addChild(sh, flag, this.heroTamga, p, this.heroCount, this.heroBars);
+    this.heroHorse = new Sprite();
+    this.heroHorse.anchor.set(0.5, 0.8);
+    this.heroHorse.position.set(-4, 30);
+    this.heroHorse.visible = false;
+    c.addChild(sh, this.heroHorse, flag, this.heroTamga, p, this.heroCount, this.heroBars);
     this.heroFlag = flag;
     this.hero = c;
+    this.units.addChild(this.dustG);
     this.units.addChild(this.troops);
     this.units.addChild(c);
   }
@@ -1012,6 +1023,32 @@ export class WorldView {
     this.syncTamga(s.free ? s.tamga : undefined);
     const inv = Math.min(2.2, Math.max(0.7, 0.75 / cam.zoom));
     this.hero.scale.set(inv);
+    const lx = this.trail[this.trail.length - 2];
+    if (lx !== undefined && Math.abs(h.x - lx) > 0.05) this.face = h.x > lx ? 1 : -1;
+    const hk = s.free ? h.equip.at?.icon ?? "" : "";
+    if (hk !== this.horseKey) {
+      this.horseKey = hk;
+      this.heroHorse.visible = !!hk;
+      if (hk) this.heroHorse.texture = this.t(hk);
+    }
+    if (hk) {
+      const tw = Math.max(1, this.heroHorse.texture.width);
+      this.heroHorse.scale.set((62 / tw) * this.face, 62 / tw);
+      this.heroHorse.rotation = moving ? Math.sin(this.time * 9) * 0.05 : 0;
+    }
+    this.dustAcc += moving && s.free ? dt : 0;
+    while (this.dustAcc > 0.07) {
+      this.dustAcc -= 0.07;
+      this.dust.push({ x: h.x - this.face * 12 * inv + (Math.random() - 0.5) * 10 * inv, y: h.y + 24 * inv, t: 0 });
+    }
+    this.dustG.clear();
+    for (const d of this.dust) {
+      d.t += dt;
+      const k = d.t / 0.9;
+      if (k >= 1) continue;
+      this.dustG.circle(d.x - this.face * k * 10 * inv, d.y - k * 8 * inv, (4 + k * 9) * inv).fill({ color: 0xd8c08a, alpha: 0.38 * (1 - k) });
+    }
+    this.dust = this.dust.filter((d) => d.t < 0.9);
     this.trail.push(h.x, h.y);
     if (this.trail.length > 400) this.trail.splice(0, this.trail.length - 400);
     this.drawBird(game, inv);
@@ -1193,6 +1230,33 @@ export class WorldView {
       const ex = c.getChildByLabel("ex")!;
       ex.visible = b.chase;
       ex.y = -20 - Math.abs(Math.sin(this.time * 6)) * 4;
+    }
+    if (cam.zoom < 0.55) {
+      const cell = 120 / cam.zoom;
+      const groups = new Map<string, { lead: Container; n: number; total: number; best: number }>();
+      for (const b of s.bandits) {
+        const c = this.bandits.get(b.id)!;
+        if (!c.visible || b.nem || b.posse || b.chase) continue;
+        const key = `${Math.floor(b.x / cell)},${Math.floor(b.y / cell)}`;
+        const size = armySize(b.army);
+        const gr = groups.get(key);
+        if (!gr) {
+          groups.set(key, { lead: c, n: 1, total: size, best: size });
+          continue;
+        }
+        gr.n++;
+        gr.total += size;
+        if (size > gr.best) {
+          gr.lead.visible = false;
+          gr.lead = c;
+          gr.best = size;
+        } else c.visible = false;
+      }
+      for (const gr of groups.values())
+        if (gr.n > 1) {
+          (gr.lead.getChildByLabel("count") as Text).text = `${gr.n}× · ${gr.total}`;
+          gr.lead.scale.set(inv * 1.15);
+        }
     }
     for (const [id, c] of this.bandits) if (!live.has(id)) {
       c.destroy({ children: true });

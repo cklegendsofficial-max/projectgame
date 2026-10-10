@@ -57,7 +57,7 @@ await ev(`g.s.hero.army = { spear: 120, archer: 60, horse: 40 }; g.s.hero.hp = g
 for (let r = 0; r < 6; r++) {
   const alive = await ev<boolean>(`return g.s.nemeses[0].alive;`);
   if (!alive) break;
-  await ev(`const n = g.s.nemeses[0]; let b = g.nemesisOut(n); if (!b) { ${spawn.replace("return b.id;", "")} b = g.nemesisOut(n); } g["engageBandit"](b, false);`);
+  await ev(`const n = g.s.nemeses[0]; let b = g.nemesisOut(n); if (!b) { { ${spawn.replace("return b.id;", "")} } b = g.nemesisOut(n); } g["engageBandit"](b, false);`);
   await page.waitForTimeout(300);
   if (r === 0) await shot("03-fight", 200);
   await settle();

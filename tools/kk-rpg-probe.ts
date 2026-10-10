@@ -94,6 +94,7 @@ for (let k = 0; k < 8 && (await page.locator(".battle .bbox .btn.go").count()); 
 }
 await page.locator(".tab", { hasText: "Teçhizat" }).click();
 await shot(page, "16-gear", 400);
+await page.locator(".tabs.main .tab", { hasText: "Kahraman" }).click();
 await page.locator(".tab", { hasText: "Beceriler" }).click();
 await ev(`g.learn(g.classSkills()[0].id); g.learn(g.classSkills()[0].id); g.learn(g.classSkills()[1].id);`);
 await shot(page, "17-skills", 400);

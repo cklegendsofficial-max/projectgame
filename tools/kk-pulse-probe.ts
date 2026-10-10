@@ -50,6 +50,8 @@ await ev(`g.s.beylik = true; g.s.renown = 300; g.s.res.gold = 5000; g.s.res.food
 
 // savaÅŸ
 await ev(`g.warStart("karahan", "gazne");`);
+await page.locator(".notes .note").last().click();
+await page.waitForTimeout(300);
 await shot("01-war");
 await page.locator(".battle .bbox.choice .btn").first().click();
 check(await ev<boolean>(`return g.wd().wars[0]?.side === "karahan";`), "savaÅŸa katÄ±lÄ±m");
@@ -124,6 +126,7 @@ await dismiss();
 
 // Ã§aÄŸ
 await ev(`g.s.kagan = true; g.eraDaily(g.dayOf().day);`);
+await page.locator(".notes .note").last().click().catch(() => {});
 await shot("07-era");
 check((await ev<string>(`return g.wd().era;`)) === "altin", "AltÄ±n Ã‡aÄŸ");
 await dismiss();
@@ -145,11 +148,13 @@ await dismiss();
 // hükümdarlar ve yıllık destan
 const r0 = await ev<string>(`return window.game.s.wd.rulers.karahan?.name ?? "";`);
 await ev(`g.hud.close(); const R = Math.random; Math.random = () => 0.01; try { g.successions(g.dayOf().day); } finally { Math.random = R; }`);
+await page.locator(".notes .note").last().click().catch(() => {});
 await shot("06d-ruler");
 const r1 = await ev<string>(`return g.wd().rulers.karahan?.name ?? "";`);
 check(r1 !== "" && r1 !== r0, `hükümdar değişti (${r1})`);
 await dismiss();
 await ev(`g.hud.close(); g.chron("Deneme olayı bir."); g.chron("Deneme olayı iki."); g.wd().year = 1; g.yearTale(${"40"});`);
+await page.locator(".notes .note").last().click().catch(() => {});
 await shot("06e-year");
 check((await ev<number>(`return g.wd().year;`)) === 3, "yıllık destan");
 await dismiss();

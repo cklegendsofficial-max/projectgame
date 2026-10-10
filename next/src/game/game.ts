@@ -4426,9 +4426,8 @@ export class Game {
       const T = RULER_TRAITS[trait];
       this.chron(`${old} öldü; ${FACTIONS[f].name} tahtına ${name} geçti (${T.name}).`);
       audio.play("story");
-      if (!this.battleLock && !this.hud.modal())
-        this.hud.story(tr("{f} tahtında yeni hükümdar", { f: FACTIONS[f].name }), `icons/${FACTIONS[f].icon}`, tr("{o} göçtü. Davullar dövüldü, hutbe yeni adla okundu: {n}.", { o: old, n: name }) + `<br><br><b>${tr(T.name)}</b> · ${tr(T.text)}<br><br><span class="dim">${tr("Yeni hükümdar seni eskisi kadar tanımıyor: itibarın biraz soğudu.")}</span>`, tr("Tahtı kutlu olsun"));
-      else this.hud.toast(tr("{f} tahtına {n} geçti.", { f: FACTIONS[f].name, n: name }), "info");
+      this.hud.notice(FACTIONS[f].icon, tr("{f} tahtında yeni hükümdar", { f: FACTIONS[f].name }), name, () =>
+        this.hud.story(tr("{f} tahtında yeni hükümdar", { f: FACTIONS[f].name }), `icons/${FACTIONS[f].icon}`, tr("{o} göçtü. Davullar dövüldü, hutbe yeni adla okundu: {n}.", { o: old, n: name }) + `<br><br><b>${tr(T.name)}</b> · ${tr(T.text)}<br><br><span class="dim">${tr("Yeni hükümdar seni eskisi kadar tanımıyor: itibarın biraz soğudu.")}</span>`, tr("Tahtı kutlu olsun")));
       return;
     }
   }
@@ -4442,10 +4441,11 @@ export class Game {
     const from = (w.year - 1) * YEAR_DAYS + 1;
     w.year = year;
     const lines = s.chron.filter((c) => c.d >= from && c.d < day).slice(-7).map((c) => `<li>${c.d}. ${tr("gün")} · ${c.t}</li>`).join("");
-    if (!lines || this.battleLock || this.hud.modal()) return;
+    if (!lines) return;
     const ren = 5 + Math.min(20, s.chron.filter((c) => c.d >= from).length);
     s.renown += ren;
-    this.hud.story(tr("{y}. Yılın Destanı", { y: year - 1 }), "icons/scroll", `${tr("Nevruz ateşinin başında ozan kopuzunu aldı ve geçen yılı anlattı:")}<ul class="runs">${lines}</ul><b class="cheap">+${ren} ${tr("şöhret")}</b> · ${tr("Çağ")}: <b>${tr(ERAS[w.era].name)}</b>`, tr("Yeni yıl kutlu olsun"));
+    this.hud.notice("scroll", tr("{y}. Yılın Destanı", { y: year - 1 }), `+${ren} ${tr("şöhret")}`, () =>
+      this.hud.story(tr("{y}. Yılın Destanı", { y: year - 1 }), "icons/scroll", `${tr("Nevruz ateşinin başında ozan kopuzunu aldı ve geçen yılı anlattı:")}<ul class="runs">${lines}</ul><b class="cheap">+${ren} ${tr("şöhret")}</b> · ${tr("Çağ")}: <b>${tr(ERAS[w.era].name)}</b>`, tr("Yeni yıl kutlu olsun")));
   }
 
   warStart(a: FactionId, b: FactionId, day = this.dayOf().day): void {
@@ -4456,15 +4456,15 @@ export class Game {
     this.chron(`${FACTIONS[a].name} ile ${FACTIONS[b].name} arasında savaş başladı. ${cause}`);
     audio.play("lose");
     const text = `${tr(cause)}<br><br>${tr("{a} ile {b} artık savaşta. Sınır kaleleri ve şehirler el değiştirebilir; savaşan devletlerin pazarlarında fiyatlar kıpırdanacak.", { a: FACTIONS[a].name, b: FACTIONS[b].name })}<br><br>${tr("Bir tarafa katılırsan, onların düşmanının kalelerini almak, kervanlarını vurmak cepheyi senin lehine çevirir. Savaş kazanılırsa hükümdar seni ödüllendirir.")}`;
-    if (this.battleLock || this.hud.modal()) {
-      this.hud.toast(tr("{a} ile {b} savaşa tutuştu!", { a: FACTIONS[a].name, b: FACTIONS[b].name }), "bad");
-      return;
-    }
-    this.hud.choice(tr("Savaş ilanı!"), "icons/swords", text, [
-      { label: tr("{f} safına katıl", { f: FACTIONS[a].name }), cls: "", fn: () => this.warJoin(war, a) },
-      { label: tr("{f} safına katıl", { f: FACTIONS[b].name }), cls: "", fn: () => this.warJoin(war, b) },
-      { label: tr("Tarafsız kal"), cls: "", fn: () => {} },
-    ]);
+    const live = () => this.wd().wars.includes(war) && !war.side;
+    this.hud.notice("swords", tr("Savaş ilanı!"), `${FACTIONS[a].name} ⚔ ${FACTIONS[b].name}`, () => {
+      if (!live()) return this.hud.toast(tr("Bu savaşta artık karar verilemez."), "info");
+      this.hud.choice(tr("Savaş ilanı!"), "icons/swords", text, [
+        { label: tr("{f} safına katıl", { f: FACTIONS[a].name }), cls: "", fn: () => live() && this.warJoin(war, a) },
+        { label: tr("{f} safına katıl", { f: FACTIONS[b].name }), cls: "", fn: () => live() && this.warJoin(war, b) },
+        { label: tr("Tarafsız kal"), cls: "", fn: () => {} },
+      ]);
+    }, 0, live);
   }
 
   warJoin(war: War, f: FactionId): void {
@@ -4712,8 +4712,7 @@ export class Game {
     const E = ERAS[next];
     this.chron(`${E.name} başladı.`);
     audio.play("story");
-    if (!this.battleLock && !this.hud.modal()) this.hud.story(tr("Yeni bir çağ: {e}", { e: tr(E.name) }), "icons/scroll", tr(E.text), tr("Çağın içine yürü"));
-    else this.hud.toast(tr("Yeni bir çağ: {e}", { e: tr(E.name) }), "info");
+    this.hud.notice("scroll", tr("Yeni bir çağ: {e}", { e: tr(E.name) }), tr("Dünya değişiyor"), () => this.hud.story(tr("Yeni bir çağ: {e}", { e: tr(E.name) }), "icons/scroll", tr(E.text), tr("Çağın içine yürü")));
   }
 
   private memoryDaily(day: number): void {
@@ -4741,7 +4740,7 @@ export class Game {
         this.addKut(2);
         gift = tr("yaraların sarıldı, kutun parladı");
       }
-      this.hud.story(tr("Unutulmayan iyilik"), "icons/scroll", tr("Bir yolcu yanına yaklaştı: \"Beni tanımadın mı? {d} — o gün yaptığını hiç unutmadık.\"", { d: d.what }) + `<br><br><b class="cheap">${gift}</b>`, tr("Yola devam"));
+      this.hud.notice("scroll", tr("Unutulmayan iyilik"), gift, () => this.hud.story(tr("Unutulmayan iyilik"), "icons/scroll", tr("Bir yolcu yanına yaklaştı: \"Beni tanımadın mı? {d} — o gün yaptığını hiç unutmadık.\"", { d: d.what }) + `<br><br><b class="cheap">${gift}</b>`, tr("Yola devam")));
       return;
     }
     const tier = Math.min(5, Math.max(1, Math.round(h.lv / 3)));
@@ -4797,7 +4796,7 @@ export class Game {
     this.addKut(f.kut);
     this.chron(`${f.name} kutlandı.`);
     audio.play("quest");
-    this.hud.story(tr(f.name), "icons/crown", `${tr(f.text)}<br><br><b class="cheap">+${f.gold} ${tr("altın")}, +${f.food} ${tr("yiyecek")}, ${tr("kut")} +${f.kut}</b>`, tr("Bayramın kutlu olsun"));
+    this.hud.notice("crown", tr(f.name), `+${f.gold} ${tr("altın")}`, () => this.hud.story(tr(f.name), "icons/crown", `${tr(f.text)}<br><br><b class="cheap">+${f.gold} ${tr("altın")}, +${f.food} ${tr("yiyecek")}, ${tr("kut")} +${f.kut}</b>`, tr("Bayramın kutlu olsun")));
   }
 
   private gameNevruz(): void {
@@ -8500,17 +8499,18 @@ export class Game {
       }
     }
     const offer = w.captives.filter((c) => c.kind !== "harami");
-    if (offer.length && Math.random() < 0.15 && !this.battleLock && !this.hud.modal()) {
+    if (offer.length && Math.random() < 0.15) {
       const c = oneOf(offer);
       const g = Math.round(c.value * 1.3);
-      this.hud.choice(tr("Fidye elçisi"), "icons/seal", tr("Bir elçi çadırının önünde diz çöktü: \"{n} için {g} altın getirdim. Efendim onu sağ salim geri istiyor.\"", { n: c.name, g }), [
+      this.hud.notice("seal", tr("Fidye elçisi"), `${c.name} · +${g} ${tr("altın")}`, () => this.hud.choice(tr("Fidye elçisi"), "icons/seal", tr("Bir elçi çadırının önünde diz çöktü: \"{n} için {g} altın getirdim. Efendim onu sağ salim geri istiyor.\"", { n: c.name, g }), [
         { label: tr("Kabul et · +{g} altın", { g }), cls: "go", fn: () => {
+          if (!w.captives.includes(c)) return this.hud.toast(tr("Esir artık elinde değil."), "bad");
           w.captives = w.captives.filter((x) => x !== c);
           this.gain({ gold: g });
           this.hud.toast(tr("{n} fidyesi alındı.", { n: c.name }), "good");
         } },
         { label: tr("Geri çevir"), cls: "", fn: () => {} },
-      ]);
+      ]), 90000, () => w.captives.includes(c));
     }
   }
 
@@ -8639,10 +8639,10 @@ export class Game {
     const D = DREAMS[kind];
     const plain = tr(D.plain, { a: o.a ? FACTIONS[o.a].name : "", b: o.b ? FACTIONS[o.b].name : "", c: o.city ? CITY_NAME[o.city] : "" });
     const cost = 30;
-    this.battleLock = true;
-    this.hud.choice(tr("Bir Rüya"), "icons/ruh", `<i>${tr(oneOf(D.text))}</i><br><br><span class="dim">${tr("Ter içinde uyandın. Rüya hâlâ gözlerinin önünde.")}</span>`, [
+    const text = tr(oneOf(D.text));
+    this.hud.notice("ruh", tr("Bir Rüya"), tr("Ter içinde uyandın..."), () => this.hud.choice(tr("Bir Rüya"), "icons/ruh", `<i>${text}</i><br><br><span class="dim">${tr("Ter içinde uyandın. Rüya hâlâ gözlerinin önünde.")}</span>`, [
       { label: tr("Kam'a yorumlat · {g} altın", { g: cost }), cls: s.res.gold >= cost ? "go" : "off", fn: () => {
-        this.battleLock = false;
+        if (!w.omens.includes(o)) return this.hud.toast(tr("Rüya çoktan gerçek oldu."), "info");
         if (!this.pay({ gold: cost })) return;
         o.told = true;
         if (kind === "hoard") {
@@ -8651,8 +8651,8 @@ export class Game {
         }
         this.hud.story(tr("Kam'ın Yorumu"), "icons/ruh", plain, tr("Anladım"));
       } },
-      { label: tr("Rüyayı unut"), cls: "", fn: () => { this.battleLock = false; } },
-    ]);
+      { label: tr("Rüyayı unut"), cls: "", fn: () => {} },
+    ]), 120000, () => w.omens.includes(o));
   }
 
   private omensDaily(day: number): void {
@@ -8695,7 +8695,7 @@ export class Game {
     for (const f of foes) f.pts = 20 + Math.round(Math.random() * 40);
     w.toy = { y: year, to: day + TOY_LEN - 1, pts: { ok: 0, gur: 0, kb: 0 }, foes };
     this.chron(`${year}. yılın Büyük Toyu kuruldu; beyler ve pehlivanlar meydana çıktı.`);
-    this.hud.story(tr("Büyük Toy Kuruldu"), "icons/trophy", `${tr("Davullar üç gün boyunca susmayacak! Okçuluk, kuşak güreşi ve kökbörüde en yüksek puanı toplayan Bozkır Pehlivanı ilan edilecek.")}<br><br>${tr("Rakipler")}: <b>${foes.map((f) => f.name).join(", ")}</b><br><br><span class="dim">${tr("Ufuk sekmesinden yarışlara katıl. Her dalda en iyi sonucun sayılır.")}</span>`, tr("Meydana!"));
+    this.hud.notice("trophy", tr("Büyük Toy Kuruldu"), tr("{n} gün sürecek", { n: TOY_LEN }), () => this.hud.story(tr("Büyük Toy Kuruldu"), "icons/trophy", `${tr("Davullar üç gün boyunca susmayacak! Okçuluk, kuşak güreşi ve kökbörüde en yüksek puanı toplayan Bozkır Pehlivanı ilan edilecek.")}<br><br>${tr("Rakipler")}: <b>${foes.map((f) => f.name).join(", ")}</b><br><br><span class="dim">${tr("Ufuk sekmesinden yarışlara katıl. Her dalda en iyi sonucun sayılır.")}</span>`, tr("Meydana!")));
   }
 
   toyScore(k: "ok" | "gur" | "kb", pts: number): void {
@@ -8755,7 +8755,7 @@ export class Game {
       audio.play("level");
       this.addKut(2);
       this.chron(`${s.hero.name} tüccar loncasında ${G.name} rütbesine yükseldi.`);
-      this.hud.story(tr("Lonca: {r}", { r: tr(G.name) }), "icons/merchant", tr(G.text), tr("Mührümü bas"));
+      this.hud.notice("merchant", tr("Lonca: {r}", { r: tr(G.name) }), tr("Yeni rütbe"), () => this.hud.story(tr("Lonca: {r}", { r: tr(G.name) }), "icons/merchant", tr(G.text), tr("Mührümü bas")));
     }
     if (w.order && day > w.order.until) {
       this.hud.toast(tr("Lonca siparişinin süresi doldu."), "bad");

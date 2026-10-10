@@ -1,6 +1,7 @@
 import { UNIT_KEYS, armySize, type Army, type Unit } from "../game/data";
 import type { Order } from "../game/battle";
 import { assetUrl } from "../render/worldView";
+import { t as tr } from "../i18n";
 
 interface Glyph {
   u: Unit;
@@ -35,6 +36,14 @@ interface Callout {
   color: string;
 }
 
+interface Float {
+  text: string;
+  x: number;
+  y: number;
+  t0: number;
+  color: string;
+}
+
 const BLOCK: Record<Unit, [number, number]> = { archer: [0.04, 0.15], horse: [0.16, 0.28], spear: [0.29, 0.4] };
 const ROWS = 6;
 const SIDE_COLOR = ["#f0c860", "#e0563f"];
@@ -58,6 +67,8 @@ export class BattleField {
   private arrows: Arrow[] = [];
   private puffs: Puff[] = [];
   private calls: Callout[] = [];
+  private floats: Float[] = [];
+  private cur: Army[];
   private t0 = 0;
   private dur = 1;
   private order: Order | undefined;
@@ -74,6 +85,9 @@ export class BattleField {
     this.ctx = cv.getContext("2d")!;
     this.heroImg = Object.assign(new Image(), { src: heroSrc });
     this.bossImg = bossSrc ? Object.assign(new Image(), { src: bossSrc }) : null;
+    this.cur = [{ ...a }, { ...b }];
+    if (bossSrc) this.calls.push({ text: "Destan savaşı!", t0: performance.now() + 150, color: "#d9a8ff" });
+    else if (armySize(a) + armySize(b) >= 80) this.calls.push({ text: "Meydan muharebesi!", t0: performance.now() + 150, color: "#ffe39a" });
     this.resize();
     [a, b].forEach((arm, s) => {
       const per = (this.per[s] = Math.max(1, Math.ceil(armySize(arm) / 36)));
@@ -132,6 +146,15 @@ export class BattleField {
     this.calls = this.calls.filter((c) => now - c.t0 < 1600);
     [a, b].forEach((arm, s) => {
       for (const u of UNIT_KEYS) {
+        const lost = this.cur[s][u] - arm[u];
+        if (lost > 0) {
+          const [x0, x1] = BLOCK[u];
+          const fx = (x0 + x1) / 2;
+          this.floats.push({ text: `-${lost}`, x: s ? 1 - fx : fx, y: 0.12 + Math.random() * 0.1, t0: now + dur * 0.45, color: s ? "#ffd56a" : "#ff8a6a" });
+        }
+      }
+      this.cur[s] = { ...arm };
+      for (const u of UNIT_KEYS) {
         const live = this.sides[s].filter((g) => g.u === u && !g.dead);
         const want = arm[u] > 0 ? Math.max(1, Math.ceil(arm[u] / this.per[s])) : 0;
         for (let k = live.length - 1; k >= want; k--) {
@@ -155,6 +178,7 @@ export class BattleField {
     const front = order === "ricat" ? 0.62 : 0.5;
     for (let k = 0; k < 16; k++) this.puffs.push({ x: front + (Math.random() - 0.5) * 0.14, y: 0.1 + Math.random() * 0.8, vx: (Math.random() - 0.5) * 0.08, vy: -Math.random() * 0.12, t0: now + dur * (0.3 + Math.random() * 0.2), life: 900, kind: "dust" });
     this.puffs = this.puffs.filter((p) => now - p.t0 < p.life).slice(-160);
+    this.floats = this.floats.filter((f) => now - f.t0 < 1400).slice(-24);
   }
 
   /** Askerin bu turdaki ileri-geri kayması (alan genişliğine oranla). */
@@ -220,13 +244,20 @@ export class BattleField {
     g.shadowBlur = 5;
     const k = (SPR - 8) / Math.max(img.naturalWidth, img.naturalHeight);
     g.drawImage(img, (-img.naturalWidth * k) / 2, (-img.naturalHeight * k) / 2, img.naturalWidth * k, img.naturalHeight * k);
+    if (s) {
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      g.shadowBlur = 0;
+      g.globalCompositeOperation = "source-atop";
+      g.fillStyle = "rgba(150,24,14,0.38)";
+      g.fillRect(0, 0, SPR, SPR);
+    }
     this.sprites.set(key, c);
     return c;
   }
 
   private draw(): void {
     const { ctx, w, h } = this;
-    if (this.cv.clientWidth && Math.abs(this.cv.clientWidth - w) > 2) this.resize();
+    if (this.cv.clientWidth && (Math.abs(this.cv.clientWidth - w) > 2 || Math.abs(this.cv.clientHeight - h) > 2)) this.resize();
     const now = performance.now();
     const p = (now - this.t0) / this.dur;
     ctx.drawImage(this.ground(), 0, 0, w, h);
@@ -296,6 +327,35 @@ export class BattleField {
         ctx.fillRect(x, y, 2, 2);
       }
     }
+    ctx.textAlign = "center";
+    ctx.font = `bold ${Math.round(Math.max(11, Math.min(14, h / 16)))}px Georgia, serif`;
+    if (!this.end)
+      for (let s = 0; s < 2; s++)
+        for (const u of UNIT_KEYS) {
+          const n = this.cur[s][u];
+          if (!n) continue;
+          const [x0, x1] = BLOCK[u];
+          const fx = (x0 + x1) / 2;
+          const x = (s ? 1 - fx : fx) * w;
+          ctx.lineWidth = 3;
+          ctx.strokeStyle = "#1a0e04";
+          ctx.strokeText(`${n}`, x, 15);
+          ctx.fillStyle = SIDE_COLOR[s];
+          ctx.fillText(`${n}`, x, 15);
+        }
+    for (const f of this.floats) {
+      const t = (now - f.t0) / 1400;
+      if (t < 0 || t > 1) continue;
+      ctx.globalAlpha = 1 - t * t;
+      ctx.font = `bold ${Math.round(Math.min(20, h / 10))}px Georgia, serif`;
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = "#1a0e04";
+      const y = f.y * h - t * 26;
+      ctx.strokeText(f.text, f.x * w, y);
+      ctx.fillStyle = f.color;
+      ctx.fillText(f.text, f.x * w, y);
+    }
+    ctx.globalAlpha = 1;
     let line = 0;
     for (const c of this.calls) {
       const t = (now - c.t0) / 1500;
@@ -308,9 +368,9 @@ export class BattleField {
       ctx.lineWidth = 4;
       ctx.strokeStyle = "#2a1606";
       const y = h * 0.2 + row * Math.min(26, h / 6) - t * 10;
-      ctx.strokeText(c.text, w / 2, y);
+      ctx.strokeText(tr(c.text), w / 2, y);
       ctx.fillStyle = c.color;
-      ctx.fillText(c.text, w / 2, y);
+      ctx.fillText(tr(c.text), w / 2, y);
       ctx.restore();
     }
   }

@@ -60,9 +60,10 @@ console.log("rb zoom:", z0.toFixed(2), "->", (await ev<number>(`return g.cam.zoo
 await page.screenshot({ path: `${out}-1.png` });
 
 await tap(9);
-console.log("start -> panel:", await page.locator(".panel:not(.hidden)").count(), "tab:", await page.locator(".panel .tab.on").innerText());
+const onTabs = async () => (await page.locator(".panel .tab.on").allInnerTexts()).join(" / ");
+console.log("start -> panel:", await page.locator(".panel:not(.hidden)").count(), "tab:", await onTabs());
 await tap(5);
-console.log("rb tab:", await page.locator(".panel .tab.on").innerText(), "focus:", await focused());
+console.log("rb tab:", await onTabs(), "focus:", await focused());
 await tap(13);
 await tap(13);
 console.log("down focus:", await focused());
