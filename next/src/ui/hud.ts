@@ -56,6 +56,7 @@ import { BOND_LIKES, BOND_LIKES_EN, BOND_QUEST, COMP_QUESTS, SWORN_MULT, bondTie
 import { SETS, SET_FORGE, SET_KEYS, SET_SLOTS, UNIQUES, modsText, type SetId } from "../game/legend";
 import { FACTIONS, FACTION_KEYS, HOSTILE, OCCUPY, REP_RANKS, RANK_PERKS, factionOf } from "../game/factions";
 import { RUIN_KINDS, ruinKind } from "../game/delve";
+import { CAPTIVE_MAX, GUILD } from "../game/saga";
 import { ERAS, RULER_TRAITS, WOLF_MAX, WOLF_PACK_AT, favTactic, moonPhase, shortMult } from "../game/world";
 import { BRO_MODS, NEM_TRAITS, diyetCost, nemName } from "../game/nemesis";
 import { BIRDS, birdSight, birdXpNeed } from "../game/falcon";
@@ -1324,7 +1325,62 @@ export class Hud {
       ${w.drought ? `<p class="dear">${t("Kuraklık sürüyor · {n} gün kaldı", { n: Math.max(0, w.drought.until - day) })}</p>` : ""}
       <p class="dim">${moon}</p>
       <p>${t("Oyun tarzın")}: <b>${t(st.now)}</b> · ${t("genel")}: <b>${t(st.life)}</b>${fav.n >= 4 ? ` · ${t("düşmanların senin {t} alışkanlığını biliyor (%{p})", { t: t(TACTICS[fav.t].name), p: Math.round(fav.share * 100) })}` : ""}</p>
-      ${pend.length ? `<p class="dim">${t("Bozkır unutmaz: {g} iyiliğin ve {b} kötülüğün hâlâ anılıyor.", { g: pend.filter((d) => d.good).length, b: pend.filter((d) => !d.good).length })}</p>` : ""}`;
+      ${pend.length ? `<p class="dim">${t("Bozkır unutmaz: {g} iyiliğin ve {b} kötülüğün hâlâ anılıyor.", { g: pend.filter((d) => d.good).length, b: pend.filter((d) => !d.good).length })}</p>` : ""}
+      ${this.sagaHtml()}`;
+  }
+
+  private sagaHtml(): string {
+    const g = this.g;
+    const s = g.s;
+    const w = g.wd();
+    const out: string[] = [];
+    const toy = w.toy;
+    if (toy) {
+      const me = g.toyTotal();
+      const rows = [...toy.foes, { name: s.hero.name, pts: me, me: true }].sort((a, b) => b.pts - a.pts);
+      out.push(`<h3>${ic("trophy")} ${t("Büyük Toy")} · ${t("son gün {d}", { d: toy.to })}</h3>
+        <p class="dim">${t("Okçuluk")} <b>${toy.pts.ok}</b> · ${t("Güreş")} <b>${toy.pts.gur}</b> · ${t("Kökbörü")} <b>${toy.pts.kb}</b></p>
+        <p>${rows.map((r, i) => `${i + 1}. ${"me" in r ? `<b class="cheap">${r.name}</b>` : r.name} <b>${r.pts}</b>`).join(" · ")}</p>
+        <div class="row"><button class="btn sm go" data-a="${this.act(() => this.openArchery())}">${t("Okçuluk")}</button><button class="btn sm go" data-a="${this.act(() => this.openMini("wr"))}">${t("Güreş")}</button><button class="btn sm go" data-a="${this.act(() => this.openMini("kb"))}">${t("Kökbörü")}</button></div>`);
+    }
+    if (w.captives.length) {
+      out.push(`<h3>${ic("j_bandit")} ${t("Esirler")} ${w.captives.length}/${CAPTIVE_MAX}</h3>` + w.captives.map((c) => {
+        const rec = c.kind === "bey" ? t("Biat ettir") : c.kind === "harami" ? t("Saflarına kat") : "";
+        return `<div class="qrow">${ic(c.kind === "harami" ? "j_bandit" : c.kind === "bey" ? "lord_bey" : "seal")} <b>${c.name}</b><span>${t("fidye")} ${c.value}</span></div>
+          <div class="row"><button class="btn sm go" data-a="${this.act(() => g.captiveAct(c.id, "ransom"))}">${t("Fidye al")}</button><button class="btn sm" data-a="${this.act(() => g.captiveAct(c.id, "free"))}">${t("Serbest bırak")}</button>${rec ? `<button class="btn sm" data-a="${this.act(() => g.captiveAct(c.id, "recruit"))}">${rec}</button>` : ""}<button class="btn sm bad" data-a="${this.act(() => g.captiveAct(c.id, "sell"))}">${t("Esir pazarına sat")}</button></div>`;
+      }).join(""));
+    }
+    const sick = Object.entries(w.plague).filter(([, p]) => p > 0);
+    if (sick.length) out.push(`<p class="dear">${ic("healer")} ${t("Salgın")}: ${sick.map(([c, p]) => `${CITY_NAME[c]} <b>${"●".repeat(Math.ceil(p))}</b>${w.quarantine[c] ? ` (${t("karantina")})` : ""}`).join(" · ")}</p>`);
+    const G = GUILD[w.guild];
+    const nx = GUILD[w.guild + 1];
+    out.push(`<p>${ic("merchant")} ${t("Lonca")}: <b>${t(G.name)}</b>${nx ? ` · ${t("sonraki")}: ${t(nx.name)} (${Math.floor(s.c.profit)}/${nx.need} ${t("kâr")})` : ""}</p>`);
+    if (w.order) out.push(`<p class="dim">${t("Lonca siparişi: {n} {g} → {c}, {d}. güne kadar · {p} altın", { n: w.order.n, g: GOODS[w.order.good as keyof typeof GOODS].name, c: CITY_NAME[w.order.city], d: w.order.until, p: w.order.gold })}</p>`);
+    if (w.hoard) out.push(`<p class="cheap">${ic("parsomen")} ${t("Define haritası: {w}. Haritada kırmızı çarpı.", { w: w.hoard.near })} <button class="btn sm" data-a="${this.act(() => { this.close(); g.cam.flyTo(w.hoard!.x, w.hoard!.y, 0.8); })}">${t("Göster")}</button></p>`);
+    else if (w.mapBits) out.push(`<p class="dim">${ic("parsomen")} ${t("Harita parçaları: {n}/3", { n: w.mapBits })}</p>`);
+    const told = w.omens.filter((o) => o.told);
+    if (told.length) out.push(`<p class="dim">${ic("ruh")} ${t("Kam'ın kehanetleri: {n} rüya gerçekleşmeyi bekliyor.", { n: told.length })}</p>`);
+    return out.join("");
+  }
+
+  private cityExtraHtml(city: string, near: boolean): string {
+    const g = this.g;
+    const s = g.s;
+    if (!s.free) return "";
+    const w = g.wd();
+    let h = "";
+    const p = g.plagueOf(city);
+    if (p > 0) {
+      const cost = Math.round(80 + 40 * p);
+      h += `<div class="odds bad">${ic("healer")} <b>${t("Salgın!")}</b> ${t("Şiddet")} ${"●".repeat(Math.ceil(p))} · ${t("fiyatlar +%{n}", { n: Math.round(p * 3) })}
+        <div class="row"><button class="btn sm go ${!near || s.res.gold < cost ? "off" : ""}" data-a="${this.act(() => g.plagueDonate(city))}">${t("Şifacılara bağış · {g} altın", { g: cost })}</button>${s.owned[city] ? `<button class="btn sm ${w.quarantine[city] ? "off" : ""}" data-a="${this.act(() => g.plagueQuarantine(city))}">${t("Karantina ilan et")}</button>` : ""}</div></div>`;
+    }
+    const o = w.order;
+    if (o && o.city === city) {
+      const have = s.hero.cargo[o.good as keyof typeof GOODS] ?? 0;
+      h += `<div class="odds mid">${ic("merchant")} ${t("Lonca siparişi")}: ${have}/${o.n} ${GOODS[o.good as keyof typeof GOODS].name} · ${o.gold} ${t("altın")} <button class="btn sm go ${g.orderReady() ? "" : "off"}" data-a="${this.act(() => g.orderDeliver())}">${t("Teslim et")}</button></div>`;
+    }
+    return h;
   }
 
   private openHero(): void {
@@ -1693,6 +1749,7 @@ export class Hud {
         <p class="dim">${tr("Malın üretildiği şehirde ucuz, talep edildiği şehirde pahalıdır. Çok alırsan fiyat yükselir, çok satarsan düşer; zamanla eski haline döner.")}</p>
         <div class="odds mid">${g.sea().icon} ${g.sea().name}: ${Object.entries(g.sea().goods).map(([k, m]) => `${GOODS[k as keyof typeof GOODS].name} <b class="${m! > 1 ? "neg" : "cheap"}">${m! > 1 ? "▲" : "▼"}%${Math.round(Math.abs(m! - 1) * 100)}</b>`).join(" · ")}</div>` +
         this.newsHtml(c.id, near) +
+        this.cityExtraHtml(c.id, near) +
         this.haggleHtml(c.id, near) +
         GOOD_KEYS.map((k) => {
           const intel = near ? null : g.intelOf(c.id);

@@ -22,6 +22,8 @@ export interface SideQuest {
   done?: boolean;
   /** kıtlık çeken şehre yardım */
   aid?: boolean;
+  /** salgın şehrine şifalı ot */
+  cure?: boolean;
   /** cephe erzakı: bu devlete karşı savaşa katkı */
   war?: FactionId;
 }

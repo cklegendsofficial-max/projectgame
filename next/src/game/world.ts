@@ -57,6 +57,62 @@ export interface WorldState {
   rulers: Partial<Record<FactionId, { name: string; gen: string; trait: RulerTrait; since: number }>>;
   /** son yıllık destanın yılı */
   year: number;
+  /** hazine haritası parçaları ve açılmış define yeri */
+  mapBits: number;
+  hoard: { x: number; y: number; near: string } | null;
+  hoards: number;
+  /** elindeki esirler */
+  captives: Captive[];
+  /** salgın: şehir → şiddet 0..5; bağışıklık bitiş günü; karantina */
+  plague: Record<string, number>;
+  plagueImm: Record<string, number>;
+  plagueAt: Record<string, number>;
+  toy: Toy | null;
+  quarantine: Record<string, number>;
+  /** rüyalarda görülen ve gerçekleşecek kehanetler */
+  omens: Omen[];
+  dreamDay: number;
+  /** büyük toy: yılı, katıldın mı, şampiyonlar */
+  toyYear: number;
+  champs: { y: number; name: string }[];
+  /** tüccar loncası rütbesi ve siparişi */
+  guild: number;
+  order: GuildOrder | null;
+  orderDay: number;
+}
+
+export interface Captive {
+  id: number;
+  name: string;
+  kind: "bey" | "harami" | "soylu";
+  from: FactionId | null;
+  rival?: number;
+  value: number;
+  day: number;
+}
+
+export interface Toy {
+  y: number;
+  to: number;
+  pts: { ok: number; gur: number; kb: number };
+  foes: { name: string; rival?: number; pts: number }[];
+}
+
+export interface Omen {
+  kind: "war" | "plague" | "drought" | "hoard" | "wolves";
+  day: number;
+  a?: FactionId;
+  b?: FactionId;
+  city?: string;
+  told: boolean;
+}
+
+export interface GuildOrder {
+  good: string;
+  n: number;
+  city: string;
+  until: number;
+  gold: number;
 }
 
 export type RulerTrait = "savasci" | "barisci" | "comert" | "kurnaz";
@@ -99,6 +155,22 @@ export function newWorld(): WorldState {
     boruSlain: false,
     rulers: {},
     year: 1,
+    mapBits: 0,
+    hoard: null,
+    hoards: 0,
+    captives: [],
+    plague: {},
+    plagueImm: {},
+    plagueAt: {},
+    toy: null,
+    quarantine: {},
+    omens: [],
+    dreamDay: -9,
+    toyYear: 0,
+    champs: [],
+    guild: 0,
+    order: null,
+    orderDay: -9,
   };
 }
 

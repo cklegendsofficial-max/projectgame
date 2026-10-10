@@ -522,6 +522,41 @@ export class WorldView {
         g.circle(x - 7, y, 4 * inv).circle(x + 7, y, 4 * inv).fill({ color: 0xffe060, alpha: Math.min(0.95, e * 1.3) });
       }
     }
+    const h = s.hero;
+    for (let i = 0; i < s.ruins.length; i++) {
+      const r = s.ruins[i];
+      if (r.looted || Math.abs(r.x - h.x) > 2600 || Math.abs(r.y - h.y) > 1800 || !game.isExplored(r.x, r.y)) continue;
+      for (let k = 0; k < 4; k++) {
+        const ph = (this.time * 0.35 + k / 4 + i * 0.13) % 1;
+        const x = r.x + Math.sin(i * 3.1 + k * 1.9) * 26 + Math.sin(this.time + k) * 4;
+        g.circle(x, r.y - 20 - ph * 60, 2.4 * Math.min(2, inv)).fill({ color: 0xffe6a0, alpha: Math.sin(ph * Math.PI) * 0.8 });
+      }
+    }
+    for (const [c, p] of Object.entries(w.plague ?? {})) {
+      if (p <= 0) continue;
+      const P = pos(c);
+      if (!P || !game.isExplored(P.x, P.y)) continue;
+      const a = 0.16 + p * 0.05 + Math.sin(this.time * 1.1 + P.x) * 0.03;
+      g.ellipse(P.x, P.y, 200 + p * 40, 140 + p * 26).fill({ color: 0x8a9a10, alpha: a * 0.7 });
+      g.ellipse(P.x, P.y, 130 + p * 30, 90 + p * 20).fill({ color: 0xb8c828, alpha: a * 0.6 });
+      const n = Math.round(8 + p * 3);
+      for (let i = 0; i < n; i++) {
+        const ph = (this.time * 0.12 + i / n) % 1;
+        const ang = i * 2.4 + this.time * 0.3;
+        const rr = 60 + ph * (140 + p * 30);
+        g.circle(P.x + Math.cos(ang) * rr, P.y + Math.sin(ang) * rr * 0.65 - ph * 50, (12 + ph * 22) * Math.min(1.6, inv)).fill({ color: 0xd8e050, alpha: (1 - ph) * 0.4 });
+      }
+      g.ellipse(P.x, P.y, 200 + p * 40, 140 + p * 26).stroke({ color: 0xd0d040, width: 3 * inv, alpha: 0.5 });
+      if (w.quarantine?.[c]) g.circle(P.x, P.y, 200 + p * 30).stroke({ color: 0xffd040, width: 4 * inv, alpha: 0.55 });
+    }
+    if (w.hoard && game.isExplored(w.hoard.x, w.hoard.y)) {
+      const { x, y } = w.hoard;
+      const pr = (this.time * 0.7) % 1;
+      g.circle(x, y, 30 + pr * 70).stroke({ color: 0xffd040, width: 4 * inv, alpha: 0.7 * (1 - pr) });
+      const sw = 20 * inv;
+      g.moveTo(x - sw, y - sw).lineTo(x + sw, y + sw).moveTo(x + sw, y - sw).lineTo(x - sw, y + sw).stroke({ color: 0x8a1010, width: 9 * inv, alpha: 0.95 });
+      g.moveTo(x - sw, y - sw).lineTo(x + sw, y + sw).moveTo(x + sw, y - sw).lineTo(x - sw, y + sw).stroke({ color: 0xe03020, width: 5 * inv, alpha: 0.95 });
+    }
   }
 
   private buildDeco(): void {
