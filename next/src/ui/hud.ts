@@ -55,6 +55,7 @@ import { ORIGINS, ORIGIN_BY_ID, type Origin, type OriginId } from "../game/origi
 import { BOND_LIKES, BOND_LIKES_EN, BOND_QUEST, COMP_QUESTS, SWORN_MULT, bondTier } from "../game/bonds";
 import { SETS, SET_FORGE, SET_KEYS, SET_SLOTS, UNIQUES, modsText, type SetId } from "../game/legend";
 import { FACTIONS, FACTION_KEYS, HOSTILE, OCCUPY, REP_RANKS, RANK_PERKS, factionOf } from "../game/factions";
+import { RUIN_KINDS, ruinKind } from "../game/delve";
 import { ERAS, RULER_TRAITS, WOLF_MAX, WOLF_PACK_AT, favTactic, moonPhase, shortMult } from "../game/world";
 import { BRO_MODS, NEM_TRAITS, diyetCost, nemName } from "../game/nemesis";
 import { BIRDS, birdSight, birdXpNeed } from "../game/falcon";
@@ -1525,9 +1526,12 @@ export class Hud {
       case "ruin": {
         const r = s.ruins[t.i];
         const near = Math.hypot(r.x - s.hero.x, r.y - s.hero.y) < 80;
-        html = this.frame("Antik Harabe", "Unutulmuş bir kervansaray", assetUrl("map/ruins"), r.looted ? "<p>Burası çoktan yağmalanmış.</p>" : `
-          <p>Yıkık duvarların arasında eski tüccarların sakladığı hazineler ve silahlar olabilir.</p>
-          ${near ? `<button class="btn go big" data-a="${this.act(() => { this.toast(g.lootRuin(t.i), "good"); this.close(); })}">${ic("chest")} Harabeyi ara</button>` : this.walkBtn(t, "Harabeye yürü")}`);
+        const K = RUIN_KINDS[ruinKind(r.x, r.y)];
+        const tier = g.ruinTier(t.i);
+        html = this.frame(tr(K.name), tr("Antik Harabe"), assetUrl(K.img), r.looted ? `<p>${tr("Burası çoktan yağmalanmış.")}</p>` : `
+          <p>${tr(K.text)}</p>
+          <p class="dim">${tr("Tehlike")}: <b>${"◆".repeat(tier)}${"◇".repeat(5 - tier)}</b> · ${tr("Üç oda, en dipte hazine")}</p>
+          ${near ? `<button class="btn go big" data-a="${this.act(() => { this.close(); g.delveStart(t.i); })}">${ic("chest")} ${tr("Harabeye gir")}</button>` : this.walkBtn(t, tr("Harabeye yürü"))}`);
         break;
       }
     }

@@ -50,6 +50,7 @@ import { FALL_PRICE, FALL_TEXT, LEG_DAYS, MONGOL_DAY, MONGOL_LV, RECOVER_DAYS, R
 import { KIP_ALLY_FX, KIP_ALLY_MODS, KIP_FOOD, KIP_FORT_FX, KIP_GIFT, KIP_GIFT_REP, KIP_HIRE_GAP, KIP_HIRE_N, KIP_HIRE_REP, KIP_RAW, KIP_SELL_MULT, KIP_SELL_REP, KIP_STEPS, KIP_STONES_MODS, STONES, STONE_FX, inKipchak, kipBoss, kipFortArmy, kipHireCost, newKip, stoneXp, type KipPoi, type KipState } from "./kipchak";
 import { SEASONS, SEASON_DAYS, seasonOf, type Season, type SeasonId } from "./seasons";
 import { FACTIONS, FACTION_KEYS, HOSTILE, OCCUPY, REP_RANKS, RANK_PERKS, citiesOf, factionOf, repRank, type FactionId } from "./factions";
+import { RIDDLES as RUIN_RIDDLES, ROOM_INFO, RUIN_KINDS, RUIN_LETTERS, RUIN_SPIRIT_LINES, rollRooms, ruinKind, type RoomKind, type RuinKind } from "./delve";
 import { BASE_TRAIT, HEIRS, RULER_TRAITS, type RulerTrait, DROUGHT_DAYS, ERAS, PEACE_GAP, RIOT_AT, SAFE_CITIES, SHORT_MAX, STYLE_NAME, WAR_CAUSES, WAR_CHANCE, WAR_MAX_DAYS, WAR_MIN_DAY, WAR_PAIRS, WAR_TAKE, WOLF_MAX, WOLF_PACK_AT, WOLF_SACRED, adaptWeights, counterOf, eraOf, favTactic, lifeStyle, moonKind, moonPhase, newWorld, noteTactic, realFest, shortMult, styleMix, warKey, type Style, type War, type WorldState } from "./world";
 import { CLASS_BY_ID, CLASS_SKILLS, SKILL_MAX, WEAPON_NAME, WEAPON_STAT, skillPow, skillRank, type ClassDef, type ClassId, type ClassSkill, type WeaponKind } from "./classes";
 import { ACT2, ACT3, CHAPTERS, COMP_BY_ID, COMP_MAX, ENDINGS, ERLIK, ERLIK_SHADE, FORT_GUARD, GATE_GUARD, KARA_HAN, KASIM, KOK_BORU, PEAK_GUARD, SHADE_GUARD, endingOf, type Chapter, type CompId, type CompMods, type Companion } from "./story";
@@ -168,6 +169,7 @@ export class Game {
   private retreatHook: (() => void) | null = null;
   private kurAnn = -1;
   private moon: "dolunay" | "karaay" | null = moonKind(moonPhase(new Date()));
+  delve: { i: number; kind: RuinKind; tier: number; rooms: RoomKind[]; at: number; gold: number; xp: number; riddle: boolean; notes: string[] } | null = null;
 
   constructor(public world: World, public view: WorldView, public cam: Camera) {
     this.s = loadGame(world);
@@ -8127,6 +8129,200 @@ export class Game {
     const up = this.addXp(20 * tier);
     const it = this.legendDrop(0.03 * tier) ?? this.drop(tier, 0.7);
     return `Harabelerde eski bir hazine buldun: +${gold} altın, +${20 * tier} TP${it ? ` · ${it.name}` : ""}${up ? " — Seviye atladın!" : ""}`;
+  }
+
+  // ---------- harabe keşfi ----------
+
+  ruinTier(i: number): number {
+    const r = this.s.ruins[i];
+    return Math.min(5, 1 + Math.floor(Math.hypot(r.x - CAPITAL.x, r.y - CAPITAL.y) / 800));
+  }
+
+  delveStart(i: number): void {
+    const s = this.s;
+    const r = s.ruins[i];
+    if (!r || r.looted || this.delve) return;
+    r.looted = true;
+    const kind = ruinKind(r.x, r.y);
+    const tier = this.ruinTier(i);
+    this.delve = { i, kind, tier, rooms: rollRooms(kind, 3), at: 0, gold: 0, xp: 0, riddle: false, notes: [] };
+    this.battleLock = true;
+    this.note("kesif");
+    const K = RUIN_KINDS[kind];
+    this.hud.choice(tr(K.name), K.img, `${tr(K.text)}<br><br><span class="dim">${tr("Üç oda ve en dipte hazine. Her odada ganimetinle çıkabilir ya da derine inebilirsin; ölürsen ya da yenilirsen bulduğunun yarısını kaybedersin.")}</span>`, [
+      { label: tr("Meşaleyi yak, içeri gir"), cls: "go", fn: () => this.delveRoom() },
+      { label: tr("Vazgeç"), cls: "", fn: () => { r.looted = false; this.delve = null; this.battleLock = false; } },
+    ]);
+  }
+
+  private delveLeave(): { label: string; cls: string; fn: () => void } {
+    const d = this.delve!;
+    return { label: tr("Ganimetle çık · {g} altın", { g: d.gold }), cls: "", fn: () => this.delveExit(false) };
+  }
+
+  private delveNext(): void {
+    const d = this.delve;
+    if (!d) return;
+    d.at++;
+    this.battleLock = true;
+    this.delveRoom();
+  }
+
+  private delveRoom(): void {
+    const d = this.delve;
+    if (!d) return;
+    if (d.at >= d.rooms.length) return this.delveTreasure();
+    const s = this.s;
+    const h = s.hero;
+    const room = d.rooms[d.at];
+    const R = ROOM_INFO[room];
+    const head = `<span class="dim">${tr("{n}. oda", { n: d.at + 1 })} / ${d.rooms.length} · ${tr("Ganimet")}: <b>${d.gold}</b> ${tr("altın")}</span><br><br>`;
+    const body = head + tr(oneOf(R.texts));
+    const title = tr(R.name);
+    const base = 25 + d.tier * 20;
+    const hurt = (k: number) => { h.hp = Math.max(1, Math.round(h.hp - this.maxHp() * k)); };
+    const odds = (st: Stat) => Math.min(0.92, 0.45 + this.stat(st) * 0.04 + this.tal("golge") * 0.02);
+    const pc = (p: number) => `%${Math.round(p * 100)}`;
+    const ok = (t: string) => { d.notes.push(t); this.hud.toast(t, "good"); this.delveNext(); };
+    const bad = (t: string, end = false) => { d.notes.push(t); this.hud.toast(t, "bad"); if (end) this.delveExit(true); else this.delveNext(); };
+    const opts: { label: string; cls: string; fn: () => void }[] = [];
+    switch (room) {
+      case "tuzak": {
+        const pC = odds("cev");
+        const pD = odds("day");
+        opts.push({ label: `${tr("Çevikçe atla")} (ÇEV · ${pc(pC)})`, cls: "go", fn: () => (Math.random() < pC ? ok(tr("Tuzağı çevikçe atlattın.")) : (hurt(0.2), bad(tr("Oklar sıyırdı geçti: canın azaldı.")))) });
+        opts.push({ label: `${tr("Kalkanla göğüsle")} (DAY · ${pc(pD)})`, cls: "", fn: () => (Math.random() < pD ? ok(tr("Kalkanın okları yuttu.")) : (hurt(0.15), bad(tr("Bir ok zırhını deldi: canın azaldı.")))) });
+        break;
+      }
+      case "bilmece": {
+        const q = oneOf(RUIN_RIDDLES);
+        const ans = [q.a, ...q.wrong].sort(() => Math.random() - 0.5);
+        for (const a of ans)
+          opts.push({ label: tr(a), cls: "", fn: () => {
+            if (a === q.a) {
+              d.riddle = true;
+              d.xp += base;
+              this.addKut(2);
+              ok(tr("Taş kapı gıcırdayarak açıldı. Atalarının bilgisi seninle."));
+            } else bad(tr("Taş düğme çöktü; kapı açılmadı, yan geçitten dolaşmak zorunda kaldın."));
+          } });
+        return this.hud.choice(title, R.img, `${body}<br><br><i>"${tr(q.q)}"</i>`, [...opts, this.delveLeave()]);
+      }
+      case "bekci": {
+        const foe = kurganGuard(Math.max(1, d.tier - 1));
+        const n = armySize(foe);
+        const pS = Math.min(0.85, 0.3 + this.stat("cev") * 0.04 + this.tal("golge") * 0.03);
+        const fight = (extra: number) => {
+          this.battleLock = false;
+          this.battle(tr("Harabe bekçileri"), foe, 0.02 * d.tier + extra, (win) => {
+            if (win) {
+              const g = base * 2;
+              d.gold += g;
+              this.afterBattle = () => this.delveNext();
+              return `<p class="good">${tr("Bekçiler dağıldı; kamplarında {g} altın vardı.", { g })}</p>`;
+            }
+            d.gold = Math.floor(d.gold / 2);
+            this.afterBattle = () => this.delveExit(true);
+            return `<p class="warn">${tr("Harabeden zor kaçtın; ganimetin yarısı geride kaldı.")}</p>`;
+          }, null, tr("Mezar soyguncuları"));
+          if (!this.battleLock) this.delveExit(true);
+        };
+        opts.push({ label: `${tr("Saldır")} · ~${n} ${tr("asker")}`, cls: "bad", fn: () => fight(0) });
+        opts.push({ label: `${tr("Gölgelerden süzül")} (ÇEV · ${pc(pS)})`, cls: "", fn: () => (Math.random() < pS ? ok(tr("Bekçiler seni fark etmedi.")) : (this.hud.toast(tr("Bir taş yuvarlandı; bekçiler uyandı!"), "bad"), fight(0.1))) });
+        break;
+      }
+      case "sunak": {
+        const cost = 20 + d.tier * 15;
+        opts.push({ label: tr("Adak sun · {c} altın (kut, ata kutsaması)", { c: cost }), cls: s.res.gold >= cost ? "go" : "off", fn: () => {
+          if (!this.pay({ gold: cost })) return this.delveNext();
+          this.addKut(4, tr("sunağa adak"));
+          s.buffs.ata = (s.buffs.ata ?? 0) + 3;
+          ok(tr("Putun gözleri bir an parladı. Ataların kutsaması 3 savaş boyunca seninle."));
+        } });
+        opts.push({ label: tr("Putu sök al · +{g} altın (kut düşer)", { g: base * 3 }), cls: "bad", fn: () => {
+          d.gold += base * 3;
+          this.addKut(-5, tr("putu yağmaladın"));
+          if (Math.random() < 0.35) {
+            hurt(0.25);
+            bad(tr("Put yerinden kalkınca soğuk bir el göğsüne değdi: lanetlendin, canın azaldı."));
+          } else ok(tr("Putu heybene koydun. Arkanda bir fısıltı kaldı."));
+        } });
+        opts.push({ label: tr("Dokunma, geç"), cls: "", fn: () => this.delveNext() });
+        break;
+      }
+      case "kalinti": {
+        const g = Math.round(base * (0.8 + Math.random() * 0.6));
+        const letter = oneOf(RUIN_LETTERS);
+        opts.push({ label: tr("Keseyi al, mektubu oku · +{g} altın", { g }), cls: "go", fn: () => {
+          d.gold += g;
+          d.xp += Math.round(base * 0.5);
+          this.chron(`${gen(h.name)} bir harabede ölü bir tüccarın son mektubunu buldu: <i>${letter}</i>`);
+          this.hud.story(tr("Son Mektup"), "icons/scroll", `<i>${tr(letter)}</i><br><br><b class="cheap">+${g} ${tr("altın")}</b>`, tr("Ruhu şad olsun"));
+          this.delveNext();
+        } });
+        break;
+      }
+      case "cokme": {
+        const pD = Math.min(0.9, 0.4 + this.stat("day") * 0.04);
+        opts.push({ label: `${tr("Aşağı atla, derine dal")} (DAY · ${pc(pD)})`, cls: "bad", fn: () => {
+          if (Math.random() < pD) {
+            d.gold += base * 2;
+            d.xp += base;
+            ok(tr("Toz bulutundan sıyrıldın; alt katta el değmemiş bir oda buldun."));
+          } else {
+            d.gold = Math.floor(d.gold / 2);
+            hurt(0.2);
+            bad(tr("Tavan çöktü! Molozların altından zor çıktın; ganimetin yarısı gömüldü."));
+          }
+        } });
+        opts.push({ label: tr("Dolaş, sağlam taşlara bas"), cls: "", fn: () => ok(tr("Yavaş ama güvenle geçtin.")) });
+        break;
+      }
+      case "ruh": {
+        const line = oneOf(RUIN_SPIRIT_LINES);
+        opts.push({ label: tr("Saygıyla eğil · +1 Ruh Taşı"), cls: "go", fn: () => {
+          s.mats.ruh += 1;
+          this.addKut(2);
+          ok(tr("Ruh başını eğdi ve dağıldı; yerinde bir Ruh Taşı kaldı."));
+        } });
+        opts.push({ label: tr("Yolları sor · haritada çevre açılır"), cls: "", fn: () => {
+          const r = s.ruins[d.i];
+          this.reveal(r.x, r.y, 9);
+          d.xp += base;
+          ok(tr("Ruh sana unutulmuş yolları gösterdi; haritan genişledi."));
+        } });
+        return this.hud.choice(title, R.img, `${body}<br><br><i>${tr(line)}</i>`, [...opts, this.delveLeave()]);
+      }
+    }
+    this.hud.choice(title, R.img, body, [...opts, this.delveLeave()]);
+  }
+
+  private delveTreasure(): void {
+    const d = this.delve!;
+    const g = Math.round((60 * d.tier + Math.random() * 60 * d.tier) * (d.riddle ? 1.3 : 1));
+    d.gold += g;
+    d.xp += 30 * d.tier;
+    const it = this.legendDrop(0.05 * d.tier + (d.riddle ? 0.05 : 0)) ?? this.drop(d.tier, 0.95);
+    if (it) d.notes.push(it.name);
+    this.chron(`${gen(this.s.hero.name)} ${tr(RUIN_KINDS[d.kind].name)} harabesinin en dibine indi ve hazine odasını buldu.`);
+    this.hud.choice(tr("Hazine Odası"), "icons/schest", `${tr("Son kapının ardında yüzyıllardır kimsenin dokunmadığı sandıklar.")}${d.riddle ? `<br><span class="cheap">${tr("Bilmeceyi çözdüğün için gizli bölme de açıldı (+%30).")}</span>` : ""}<br><br><b class="cheap">+${g} ${tr("altın")}</b>${it ? ` · <b class="r4">${it.name}</b>` : ""}`, [
+      { label: tr("Heybeni doldur, gün ışığına çık"), cls: "go", fn: () => this.delveExit(false) },
+    ]);
+  }
+
+  private delveExit(lost: boolean): void {
+    const d = this.delve;
+    if (!d) return;
+    this.delve = null;
+    this.battleLock = false;
+    const s = this.s;
+    const room = s.res.gold;
+    this.gain({ gold: d.gold });
+    const got = s.res.gold - room;
+    const up = d.xp ? this.addXp(d.xp) : false;
+    audio.play(lost ? "bad" : "quest");
+    this.hud.toast(`${tr(RUIN_KINDS[d.kind].name)}: +${got} ${tr("altın")}${d.xp ? `, +${d.xp} TP` : ""}${up ? ` — ${tr("Seviye atladın!")}` : ""}`, lost ? "bad" : "good");
+    saveGame(s);
   }
 
   marchLoad(a: Army): number {
