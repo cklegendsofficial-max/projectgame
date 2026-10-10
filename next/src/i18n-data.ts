@@ -168,6 +168,8 @@ export function localizeData(): void {
     kut: ["Blessed by the Sky", "Raise your kut above 90."], karahan: ["Black Tamga", "Defeat Kara Khan and finish the first saga."],
     erlik: ["Erlik's Gate", "Defeat Erlik Khan."], kagan: ["Khagan", "Be elected Khagan at the kurultai."],
     port: ["Caspian Captain", "Complete 5 voyages on the Caspian."], governor: ["Governor Maker", "Appoint a governor to a conquered city."],
+    hoard: ["Treasure Hunter", "Dig up the hoard of a treasure map."], toy: ["Steppe Champion", "Win the Great Toy."],
+    guild: ["Prince of Merchants", "Reach the highest rank of the merchant guild."],
     ending: ["End of the Saga", "Finish the third act and choose your fate."],
   };
   for (const a of ACHIEVEMENTS) if (ach[a.id]) [a.name, a.desc] = ach[a.id];

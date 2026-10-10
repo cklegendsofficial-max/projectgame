@@ -72,7 +72,7 @@ await ev(`g.hud.openPlace({ kind: "kurgan", i: 0 });`);
 await page.evaluate(() => document.querySelector(".panel .odds.mid")?.scrollIntoView());
 await shot("05-panel");
 console.log("seals", await ev(`return g.s.seals;`), "theme", await ev(`return g.s.kurgans.slice(0, 5).map((k, i) => i);`));
-await ev(`g.s.seals = 300; g.s.deepBest = Math.max(g.s.deepBest, 12); const k = g.s.kurgans[0]; k.delved = false; g.hud.render();`);
+await ev(`g.s.seals = 300; g.s.deepBest = Math.max(g.s.deepBest, 12); g.s.hero.army = { spear: 70, archer: 40, horse: 25 }; g.s.hero.hp = g.maxHp(); const k = g.s.kurgans[0]; k.delved = false; g.s.hero.x = k.x + 20; g.s.hero.y = k.y + 20; g.s.hero.path = null; g.hud.render();`);
 for (let k = 0; k < 30; k++) {
   const b = page.locator(".panel .grow .btn:not(.off)", { hasText: "mühür" });
   if (!(await b.count())) break;
@@ -82,6 +82,7 @@ for (let k = 0; k < 30; k++) {
 await page.evaluate(() => [...document.querySelectorAll("h3")].find((h) => h.textContent?.includes("Derinlik Sırları"))?.scrollIntoView());
 await shot("06-perks");
 console.log("perks", JSON.stringify(await ev(`return { perks: g.s.deepPerks, seals: g.s.seals, starts: g.deepStarts(), torches: g.deepTorches() };`)));
+console.log("gate", JSON.stringify(await ev(`const k = g.s.kurgans[0]; return { why: g.deepReason(0), d: Math.hypot(k.x - g.s.hero.x, k.y - g.s.hero.y), place: g.hud.place, btns: [...document.querySelectorAll(".panel .btn.big")].map(b => b.textContent) };`)));
 await page.locator(".panel .btn.big", { hasText: "11. kata" }).click();
 await page.waitForTimeout(400);
 await dismiss();

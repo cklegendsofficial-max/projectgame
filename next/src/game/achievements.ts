@@ -40,6 +40,9 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: "port", name: "Hazar Kaptanı", desc: "Hazar'da 5 sefer tamamla.", icon: "j_caravan", done: (s) => (s.c.voyages ?? 0) >= 5 },
   { id: "governor", name: "Vali Atayan", desc: "Fethettiğin bir şehre vali ata.", icon: "crown", done: (s) => Object.values(s.owned).some((o) => !!o.gov) },
   { id: "kipcak", name: "Kıpçak Kardeşi", desc: "Köten Han ile ant iç.", icon: "u_cavalry", done: (s) => !!s.kip?.ally },
+  { id: "hoard", name: "Define Avcısı", desc: "Bir hazine haritasının definesini çıkar.", icon: "coins", done: (s) => (s.wd?.hoards ?? 0) >= 1 },
+  { id: "toy", name: "Bozkır Pehlivanı", desc: "Büyük Toy'da şampiyon ol.", icon: "crown", done: (s) => !!s.wd?.champs?.some((c) => c.name === s.hero.name) },
+  { id: "guild", name: "Melikü't-Tüccar", desc: "Tüccar loncasında en yüksek rütbeye eriş.", icon: "coins", done: (s) => (s.wd?.guild ?? 0) >= 4 },
   { id: "ending", name: "Destanın Sonu", desc: "Üçüncü perdeyi bitir ve kaderini seç.", icon: "crown", done: (s) => !!s.act3?.ending },
 ];
 
