@@ -265,6 +265,21 @@ body.nomini .mini { display: none; }
 .tresv.on { border: 1px solid #6aa8e8; background: #1a2a3a88; }
 .tresv.on em { background: #2f6ab0; color: #fff; }
 .tresv .ic { width: 30px; height: 30px; flex: none; }
+.bbox.duel { max-width: 560px; text-align: center; }
+.dsides { display: flex; align-items: center; justify-content: space-around; margin: 10px 0; }
+.dsides > div { display: flex; flex-direction: column; align-items: center; gap: 4px; transition: transform .1s; }
+.dsides .bp { width: 76px; height: 76px; }
+.dsides .hurt { animation: dhurt .35s; }
+@keyframes dhurt { 20% { transform: translateX(-8px); filter: brightness(2) saturate(0); } 60% { transform: translateX(6px); } }
+.dsides .pips { display: flex; gap: 4px; min-height: 10px; }
+.dsides .pips i { width: 10px; height: 10px; border-radius: 50%; background: #ffd56a; box-shadow: 0 0 6px #ffd56a; }
+.dfoe .pips i { background: #ff7a5a; box-shadow: 0 0 6px #ff7a5a; }
+.dtrack { position: relative; height: 26px; margin: 14px 8px 8px; border-radius: 13px; background: linear-gradient(90deg, #3a1a0a, #5a3a1a 50%, #3a1a0a); border: 1px solid #8a5a2a; overflow: hidden; }
+.dzone { position: absolute; top: 0; bottom: 0; background: linear-gradient(#ffe08a, #c88a2a); box-shadow: 0 0 12px #ffd56a; opacity: .85; transition: left .25s, width .25s; }
+.dneedle { position: absolute; top: -2px; bottom: -2px; width: 4px; margin-left: -2px; background: #fff; box-shadow: 0 0 8px #fff, 0 0 2px #000; }
+.dmsg { min-height: 22px; margin: 6px 0; font-size: 14px; }
+.dbtns { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.dbtns .dhit { min-width: 200px; }
 .result .rout { text-align: center; font-weight: 700; color: #ffd56a; margin: 2px 0 6px; letter-spacing: .5px; }
 
 .army { display: flex; gap: 6px; }

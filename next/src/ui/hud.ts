@@ -2109,7 +2109,7 @@ export class Hud {
     const g = this.g;
     const cur = curSlot();
     const pct = (v: number) => Math.round(v * 100);
-    const toggle = (k: "eco" | "mini" | "haptic" | "narrate" | "dynMusic" | "cine", label: string, note = "") =>
+    const toggle = (k: "eco" | "mini" | "haptic" | "narrate" | "dynMusic" | "cine" | "duel", label: string, note = "") =>
       `<div class="setrow"><span>${label}</span><button class="btn sm ${settings[k] ? "on" : ""}" data-a="${this.act(() => {
         settings[k] = !settings[k];
         saveSettings();
@@ -2152,6 +2152,9 @@ export class Hud {
       ${toggle("cine", t("Sinematik sahneler"), "Şehre girişte ve uzun yolculuklarda ara sahne gösterilir.")}
       ${toggle("eco", t("Pil tasarrufu"), "Pil tasarrufu sayfa yenilenince devreye girer (30 FPS, düşük çözünürlük).")}
       ${"vibrate" in navigator ? toggle("haptic", t("Titreşim")) : ""}
+      <h3>${t("Oynanış")}</h3>
+      ${toggle("duel", t("Er meydanı"))}
+      <p class="dim">${t("Büyük savaşlardan önce teke tek düello mini oyunu. Kazanırsan düşman morali düşük başlar.")}</p>
       <h3>${t("Kayıt yuvaları")}</h3>
       <p class="dim">${t("Oyun her birkaç saniyede bir etkin yuvaya kaydedilir. Yuva değiştirince mevcut oyunun kaydedilir ve sayfa yeniden yüklenir.")}</p>
       ${slots}
@@ -2730,6 +2733,86 @@ export class Hud {
     }
     const tl = s.title ? titleOf(s.title) : null;
     return this.frame(h.name, s.free ? `${t("Seviye")} ${h.lv} · ${s.act3.ending ? `<b class="ttl">${endingOf(s.act3.ending)!.name}</b>${tl ? ` · ${tl.name}` : ""}` : s.kagan ? `<b class="ttl">${t("Kağan")}</b>${tl ? ` · ${tl.name}` : ""}` : tl ? `<b class="ttl">${tl.name}</b>` : s.beylik ? t("Bey") : t("Hür yiğit")}` : `${t("Seviye")} ${h.lv} · ${t("Köle")}`, assetUrl(g.face()), tabs + body);
+  }
+
+  /** Er meydanı: üç el zamanlamalı vuruş. done(-1) atlandı, aksi halde isabet sayısı. */
+  duel(title: string, foeName: string, foeIcon: string, zone: number, done: (hits: number) => void): void {
+    this.battleOpen = true;
+    this.close();
+    const el = document.createElement("div");
+    el.className = "battle";
+    el.innerHTML = `<div class="bbox duel"><h2>${ic("swords")} ${t("Er meydanı")}</h2>
+      <p class="dim">${t("{t}: iki ordu durdu, saflardan birer er çıktı.", { t: title })}</p>
+      <div class="dsides"><div class="dme">${ic(this.g.face(), "bp")}<b>${this.g.s.hero.name}</b><div class="pips"></div></div><div class="vs">VS</div><div class="dfoe">${ic(foeIcon, "bp")}<b>${foeName}</b><div class="pips"></div></div></div>
+      <div class="dtrack"><div class="dzone"></div><div class="dneedle"></div></div>
+      <div class="dmsg">${t("İbre altın bölgedeyken vur! Üç el.")}</div>
+      <div class="dbtns"><button class="btn go big dhit">${t("Vur!")}</button><button class="btn dskip">${t("Er meydanına çıkma")}</button></div>
+    </div>`;
+    this.root.appendChild(el);
+    const zoneEl = el.querySelector(".dzone") as HTMLElement;
+    const needle = el.querySelector(".dneedle") as HTMLElement;
+    const msg = el.querySelector(".dmsg")!;
+    const hitBtn = el.querySelector(".dhit") as HTMLButtonElement;
+    const pips = [el.querySelector(".dme .pips")!, el.querySelector(".dfoe .pips")!];
+    let pass = 0, hits = 0, c0 = 0.5, t0 = performance.now(), speed = 0.9, raf = 0, wait = false, pos = 0;
+    const finish = (n: number) => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("keydown", key);
+      el.remove();
+      this.battleOpen = false;
+      done(n);
+    };
+    const setup = () => {
+      c0 = 0.2 + Math.random() * 0.6;
+      speed = 0.9 + pass * 0.35;
+      zoneEl.style.left = `${(c0 - zone / 2) * 100}%`;
+      zoneEl.style.width = `${zone * 100}%`;
+      let p0 = Math.random();
+      if (Math.abs(p0 - c0) < zone + 0.1) p0 = c0 > 0.5 ? 0.02 : 0.98;
+      const ph0 = Math.random() < 0.5 ? p0 : 2 - p0;
+      t0 = performance.now() - (ph0 / speed) * 1000;
+      wait = false;
+      hitBtn.classList.remove("off");
+    };
+    const tick = () => {
+      const ph = ((performance.now() - t0) / 1000) * speed;
+      pos = 1 - Math.abs((ph % 2) - 1);
+      needle.style.left = `${pos * 100}%`;
+      if (!wait && ph > 6) strike();
+      raf = requestAnimationFrame(tick);
+    };
+    const strike = () => {
+      if (wait) return;
+      wait = true;
+      hitBtn.classList.add("off");
+      const ok = Math.abs(pos - c0) <= zone / 2;
+      if (ok) hits++;
+      pips[ok ? 0 : 1].insertAdjacentHTML("beforeend", "<i></i>");
+      el.querySelector(ok ? ".dfoe" : ".dme")!.classList.add("hurt");
+      setTimeout(() => el.querySelectorAll(".hurt").forEach((n) => n.classList.remove("hurt")), 350);
+      audio.play(ok ? "hit" : "lose");
+      haptic(ok ? 25 : 80);
+      msg.textContent = ok ? t("İsabet!") : t("Iskaladın, rakip vurdu!");
+      pass++;
+      if (pass < 3) return void setTimeout(setup, 750);
+      cancelAnimationFrame(raf);
+      const win = hits >= 2;
+      msg.innerHTML = `<b class="${win ? "good" : "dear"}">${win ? t("Er meydanını kazandın! Düşmanın morali çöktü.") : t("Erin yere serildi; askerlerin sarsıldı.")}</b>`;
+      hitBtn.textContent = t("Savaşa!");
+      hitBtn.classList.remove("off");
+      hitBtn.onclick = () => finish(hits);
+      el.querySelector(".dskip")!.remove();
+    };
+    hitBtn.onclick = strike;
+    el.querySelector(".dskip")!.addEventListener("click", () => finish(-1));
+    const key = (e: KeyboardEvent) => {
+      if (e.code !== "Space" && e.code !== "Enter") return;
+      e.preventDefault();
+      hitBtn.click();
+    };
+    window.addEventListener("keydown", key);
+    setup();
+    raf = requestAnimationFrame(tick);
   }
 
   showBattle(title: string, before: Army, enemy: Army, sim: Sim, hero: { hpBefore: number; maxHp: number }, boss: Boss | null, foe: string, auto: boolean, field: Field | null, apply: (res: BattleResult) => { xp: number; lvUp: boolean; note: string }, onClose: () => void): void {

@@ -175,6 +175,16 @@ export class Sim {
     }
   }
 
+  /** Savaş başlamadan (er meydanı vb.) iki tarafın moralini ayarlar. */
+  opening(ma: number, mb: number, ev: string): void {
+    this.ma = ma;
+    this.mb = mb;
+    const r0 = this.rounds[this.rounds.length - 1];
+    r0.ma = ma;
+    r0.mb = mb;
+    r0.ev.push(ev);
+  }
+
   private aAlive(): boolean {
     return armySize(this.a) + armySize(this.resv) > 0 || (!!this.c && this.c.hp > 0);
   }

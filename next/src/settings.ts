@@ -12,9 +12,10 @@ export interface Settings {
   narrate: boolean;
   dynMusic: boolean;
   cine: boolean;
+  duel: boolean;
 }
 
-const DEF: Settings = { music: 0.5, fx: 0.7, ui: 1, eco: false, mini: true, haptic: true, lang: "tr", speed: 1, narrate: false, dynMusic: true, cine: true };
+const DEF: Settings = { music: 0.5, fx: 0.7, ui: 1, eco: false, mini: true, haptic: true, lang: "tr", speed: 1, narrate: false, dynMusic: true, cine: true, duel: !navigator.webdriver };
 
 export function weakDevice(): boolean {
   const nav = navigator as Navigator & { deviceMemory?: number };

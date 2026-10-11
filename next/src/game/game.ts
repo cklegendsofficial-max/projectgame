@@ -99,6 +99,8 @@ export interface Hint {
 
 const TRIP_MIN = 600;
 const TELL_TRUE = 0.7;
+const DUEL_MIN = 25;
+const DUEL_FOES = ["Kara Buğa", "Demir Kıyak", "Bars Tegin", "Tolun Er", "Aybars", "Kılıç Arslan", "Böri Han", "Yağmur Alp"];
 const HAGGLE = [
   { label: "Nazikçe iste", gain: 0.04, base: 0.7, loss: 0.02 },
   { label: "Sıkı pazarlık", gain: 0.08, base: 0.42, loss: 0.04 },
@@ -3586,12 +3588,22 @@ export class Game {
     const tline = auto ? `${tr("Kolay av: taktiğe gerek kalmadı")} · ${tr("Düşman")}: ${TACTICS[stance].name}` : `Taktik: ${TACTICS[t].name} · Düşman: ${TACTICS[stance].name}${edge}`;
     const before = { ...h.army };
     const hpBefore = h.hp;
-    this.hud.showBattle(title, before, enemy, sim, { hpBefore, maxHp: this.maxHp() }, boss, foe, auto, field, (res) => this.applyBattle(res, enemy, boss, after, tline, before, title), () => {
-      this.battleLock = false;
-      saveGame(this.s);
-      const f = this.afterBattle;
-      this.afterBattle = null;
-      f?.();
+    const show = () =>
+      this.hud.showBattle(title, before, enemy, sim, { hpBefore, maxHp: this.maxHp() }, boss, foe, auto, field, (res) => this.applyBattle(res, enemy, boss, after, tline, before, title), () => {
+        this.battleLock = false;
+        saveGame(this.s);
+        const f = this.afterBattle;
+        this.afterBattle = null;
+        f?.();
+      });
+    if (!settings.duel || auto || boss || !field || armySize(enemy) < DUEL_MIN || armySize(h.army) < 10 || Math.random() > 0.6) return show();
+    const zone = Math.max(0.08, Math.min(0.24, 0.15 + this.stat("cev") * 0.008 - Math.min(0.05, armySize(enemy) / 2000)));
+    this.hud.duel(title, oneOf(DUEL_FOES), "j_bandit", zone, (hits) => {
+      if (hits >= 2) {
+        sim.opening(100, hits === 3 ? 55 : 68, "Er meydanını kazandın!");
+        this.s.c.duels = (this.s.c.duels ?? 0) + 1;
+      } else if (hits >= 0) sim.opening(hits === 1 ? 88 : 78, 100, "Erin yere serildi");
+      show();
     });
   }
 
