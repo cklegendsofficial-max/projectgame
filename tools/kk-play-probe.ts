@@ -15,7 +15,7 @@ page.on("console", (m) => m.type() === "error" && errs.push(m.text()));
 await page.goto("http://localhost:5174/");
 await page.evaluate(() => {
   localStorage.clear();
-  localStorage.setItem("kk_settings", JSON.stringify({ speed: 3, spoils: true, tips: true }));
+  localStorage.setItem("kk_settings", JSON.stringify({ speed: 3, spoils: true, tips: true, pages: true, fires: true }));
 });
 await page.reload();
 await page.waitForFunction(() => !document.getElementById("loading"), null, { timeout: 60000 });
