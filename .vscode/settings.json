@@ -1,0 +1,29 @@
+{
+  "files.watcherExclude": {
+    "**/node_modules/**": true,
+    "**/dist/**": true,
+    "**/release/**": true,
+    "**/playtest/**": true,
+    "**/android/**": true,
+    "art/hires/**": true,
+    "art/esrgan/**": true,
+    "art/upres/**": true,
+    "art/tmp/**": true,
+    "art/*_bak/**": true,
+    "art/*-backup/**": true,
+    "**/.git/objects/**": true
+  },
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/dist": true,
+    "**/release": true,
+    "**/playtest": true,
+    "**/android": true,
+    "art/hires": true,
+    "art/esrgan": true,
+    "art/upres": true,
+    "art/tmp": true
+  },
+  "search.followSymlinks": false,
+  "typescript.tsserver.maxTsServerMemory": 2048
+}
