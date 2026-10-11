@@ -2170,7 +2170,7 @@ export class Hud {
     const g = this.g;
     const cur = curSlot();
     const pct = (v: number) => Math.round(v * 100);
-    const toggle = (k: "eco" | "mini" | "haptic" | "narrate" | "dynMusic" | "cine" | "duel" | "tips", label: string, note = "") =>
+    const toggle = (k: "eco" | "mini" | "haptic" | "narrate" | "dynMusic" | "cine" | "duel" | "tips" | "spoils", label: string, note = "") =>
       `<div class="setrow"><span>${label}</span><button class="btn sm ${settings[k] ? "on" : ""}" data-a="${this.act(() => {
         settings[k] = !settings[k];
         saveSettings();
@@ -2217,6 +2217,8 @@ export class Hud {
       ${toggle("duel", t("Er meydanı"))}
       <p class="dim">${t("Büyük savaşlardan önce teke tek düello mini oyunu. Kazanırsan düşman morali düşük başlar.")}</p>
       ${toggle("tips", t("İpuçları"))}
+      ${toggle("spoils", t("Ganimet seçimi"))}
+      <p class="dim">${t("Büyük zaferlerden sonra üç ganimetten birini sen seçersin. Kapalıysa altın otomatik alınır.")}</p>
       <h3>${t("Kayıt yuvaları")}</h3>
       <p class="dim">${t("Oyun her birkaç saniyede bir etkin yuvaya kaydedilir. Yuva değiştirince mevcut oyunun kaydedilir ve sayfa yeniden yüklenir.")}</p>
       ${slots}
@@ -2799,6 +2801,39 @@ export class Hud {
   }
 
   /** Er meydanı: üç el zamanlamalı vuruş. done(-1) atlandı, aksi halde isabet sayısı. */
+  spoils(title: string, opts: { icon: string; name: string; desc: string; cls?: string; off?: string }[], pick: (i: number) => void): void {
+    this.battleOpen = true;
+    this.close();
+    const el = document.createElement("div");
+    el.className = "battle";
+    el.innerHTML = `<div class="bbox spoil"><h2>${ic("trophy")} ${t("Ganimet payı")}</h2>
+      <p class="dim">${t("{t} düştü. Meydanda kalanlardan birini seç.", { t: title })}</p>
+      <div class="spks">${opts.map((o, i) => `<button class="spk ${o.off ? "off" : ""}" data-i="${i}" style="animation-delay:${0.08 + i * 0.1}s"><kbd>${i + 1}</kbd>${ic(o.icon, "simg")}<b class="${o.cls ?? ""}">${o.name}</b><small>${o.off ?? o.desc}</small></button>`).join("")}</div>
+    </div>`;
+    let picked = false;
+    const done = (i: number) => {
+      if (picked || opts[i]?.off) return;
+      picked = true;
+      window.removeEventListener("keydown", key);
+      el.querySelector(`.spk[data-i="${i}"]`)!.classList.add("chosen");
+      el.classList.add("picked");
+      audio.play("coin");
+      setTimeout(() => {
+        el.remove();
+        this.battleOpen = false;
+        pick(i);
+      }, 550);
+    };
+    const key = (e: KeyboardEvent) => {
+      const i = Number(e.key) - 1;
+      if (i >= 0 && i < opts.length) done(i);
+    };
+    window.addEventListener("keydown", key);
+    el.querySelectorAll<HTMLButtonElement>(".spk").forEach((b) => b.addEventListener("click", () => done(Number(b.dataset.i))));
+    this.root.appendChild(el);
+    audio.play("win");
+  }
+
   duel(title: string, foeName: string, foeIcon: string, zone: number, done: (hits: number) => void): void {
     this.battleOpen = true;
     this.close();

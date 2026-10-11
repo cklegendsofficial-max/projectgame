@@ -14,9 +14,10 @@ export interface Settings {
   cine: boolean;
   duel: boolean;
   tips: boolean;
+  spoils: boolean;
 }
 
-const DEF: Settings = { music: 0.5, fx: 0.7, ui: 1, eco: false, mini: true, haptic: true, lang: "tr", speed: 1, narrate: false, dynMusic: true, cine: true, duel: !navigator.webdriver, tips: !navigator.webdriver };
+const DEF: Settings = { music: 0.5, fx: 0.7, ui: 1, eco: false, mini: true, haptic: true, lang: "tr", speed: 1, narrate: false, dynMusic: true, cine: true, duel: !navigator.webdriver, tips: !navigator.webdriver, spoils: !navigator.webdriver };
 
 export function weakDevice(): boolean {
   const nav = navigator as Navigator & { deviceMemory?: number };

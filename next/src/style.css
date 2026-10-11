@@ -162,6 +162,20 @@ body.nomini .mini { display: none; }
 .tipc .x { position: absolute; top: 3px; right: 5px; background: none; border: 0; color: #9ab; font-size: 16px; cursor: pointer; padding: 0 3px; }
 @keyframes tipin { from { opacity: 0; transform: translateX(40px); } }
 @media (max-width: 700px) { .tipc { top: 92px; right: 8px; } }
+.bbox.spoil { max-width: 560px; text-align: center; }
+.spks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 10px; }
+.spk { position: relative; display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 14px 8px 12px; border-radius: 12px; cursor: pointer; color: #f2e6c8; font: inherit; background: linear-gradient(#4a3016, #24160a); border: 1px solid #8a5d2a; box-shadow: 0 4px 12px #0008; opacity: 0; animation: scin .45s cubic-bezier(.2, 1.4, .5, 1) forwards; transition: transform .15s, border-color .15s, box-shadow .15s, opacity .3s; }
+.spk:hover:not(.off) { transform: translateY(-4px); border-color: #ffd56a; box-shadow: 0 8px 18px #000a, 0 0 14px #ffd56a55; }
+.spk.off { filter: grayscale(.8); cursor: not-allowed; }
+.spk.off small { color: #ff8a6a; }
+.spk .simg { width: 54px; height: 54px; filter: drop-shadow(0 3px 5px #000a); }
+.spk b { font: 700 15px Georgia, serif; color: #ffe7a8; }
+.spk small { font-size: 11.5px; line-height: 1.3; opacity: .85; }
+.spk kbd { position: absolute; top: 6px; left: 8px; font-size: 10px; opacity: .5; }
+.battle.picked .spk:not(.chosen) { opacity: .25 !important; transform: scale(.94); }
+.spk.chosen { transform: scale(1.06); border-color: #ffd56a; box-shadow: 0 0 24px #ffd56a99; }
+@keyframes scin { from { opacity: 0; transform: translateY(18px) rotateX(40deg); } to { opacity: 1; transform: none; } }
+@media (max-width: 700px) { .spks { grid-template-columns: 1fr; } .spk { flex-direction: row; text-align: left; padding: 8px 10px; } .spk .simg { width: 40px; height: 40px; } }
 .rec { display: flex; gap: 12px; align-items: center; margin: 4px 0 6px; }
 .rring { --p: 0; flex: none; width: 78px; height: 78px; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: radial-gradient(#24160a 58%, transparent 59%), conic-gradient(#ffd56a calc(var(--p) * 1%), #5a2a1a 0); box-shadow: 0 0 10px #0008; }
 .rring b { font: 700 19px Georgia, serif; color: #ffe7a8; line-height: 1; }

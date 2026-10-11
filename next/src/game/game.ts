@@ -10,7 +10,7 @@ import { audio, type MusicScene } from "../audio";
 import { settings } from "../settings";
 import { Sim, TACTICS, TACTIC_KEYS, fight, odds, stanceWeights, tacticDelta, type BattleResult, type Boss, type Champion, type Field, type Tactic } from "./battle";
 import { BUILDINGS, BUILDING_BY_ID, CITY_NAME, DAY_SEC, RES_KEYS, UNITS, UNIT_KEYS, army, armyPower, armySize, buildCost, buildTime, prodPerMin, storageCap, trainSpeed, unitUnlocked, xpNeed, type Army, type BuildingId, type Res, type Unit } from "./data";
-import { CITY_TRADE, GOODS, GOOD_KEYS, PLUS_CHANCE, SLOTS, STAT_INFO, canPlus, classItem, goodMult, itemPrice, itemStats, makeHorse, makeItem, plusCost, rollItem, setPiece, setPlus, skillLv, uniqueItem, type Good, type Item, type Skill, type Slot, type Stat } from "./rpg";
+import { CITY_TRADE, GOODS, GOOD_KEYS, PLUS_CHANCE, RARITY, SLOTS, STAT_INFO, canPlus, classItem, goodMult, itemPrice, itemStats, makeHorse, makeItem, plusCost, rollItem, setPiece, setPlus, skillLv, uniqueItem, type Good, type Item, type Skill, type Slot, type Stat } from "./rpg";
 import { SETS, SET_FORGE, SET_KEYS, SET_SLOTS, UNIQUES, addMods, type GearMods, type SetId } from "./legend";
 import { TITLE_CATS, titleKey, titleOf, titleReward } from "./titles";
 import { DAILY_POOL, today, yesterday, type Daily, type DailyTask } from "./daily";
@@ -102,6 +102,9 @@ const TELL_TRUE = 0.7;
 const DUEL_MIN = 25;
 /** Yenilgide düşen askerlerin savaş yerinde kurtarılmayı bekleyen payı. */
 const WOUNDED_SHARE = 0.3;
+/** Ganimet seçimi için en az düşman sayısı ve esirlerden saflara geçen pay. */
+const SPOIL_MIN = 20;
+const SPOIL_CAPTIVE = 0.12;
 const DUEL_FOES = ["Kara Buğa", "Demir Kıyak", "Bars Tegin", "Tolun Er", "Aybars", "Kılıç Arslan", "Böri Han", "Yağmur Alp"];
 const HAGGLE = [
   { label: "Nazikçe iste", gain: 0.04, base: 0.7, loss: 0.02 },
@@ -3634,7 +3637,10 @@ export class Game {
         saveGame(this.s);
         const f = this.afterBattle;
         this.afterBattle = null;
-        f?.();
+        const sp = this.spoilQ;
+        this.spoilQ = null;
+        if (sp) this.offerSpoils(sp.title, sp.n, sp.enemy, () => f?.());
+        else f?.();
       });
     if (!settings.duel || auto || boss || !field || armySize(enemy) < DUEL_MIN || armySize(h.army) < 10 || Math.random() > 0.6) return show();
     const zone = Math.max(0.08, Math.min(0.24, 0.15 + this.stat("cev") * 0.008 - Math.min(0.05, armySize(enemy) / 2000)));
@@ -3709,8 +3715,68 @@ export class Game {
       this.s.res.gold += loot;
       routNote = tr("Bozgun: kaçanları kovaladın, +{g} altın ve +%15 TP", { g: loot });
     }
-    const note = [tline, extra || fled, woundNote, routNote, revived ? `Ruh Çağrısı: ${revived} asker hayata döndü` : "", vetNote].filter(Boolean).join("<br>");
+    let spoilNote = "";
+    const n = armySize(enemy);
+    if (res.win && !boss && !this.deep && !this.delve && n >= SPOIL_MIN) {
+      if (settings.spoils) {
+        this.spoilQ = { title, n, enemy: { ...enemy } };
+        spoilNote = tr("Meydanda ganimet bekliyor: pencereyi kapatınca seç.");
+      } else {
+        const gold = this.spoilGold(n);
+        this.s.res.gold += gold;
+        spoilNote = tr("Ganimet payı: +{g} altın", { g: gold });
+      }
+    }
+    const note = [tline, extra || fled, woundNote, routNote, spoilNote, revived ? `Ruh Çağrısı: ${revived} asker hayata döndü` : "", vetNote].filter(Boolean).join("<br>");
     return { xp, lvUp, note };
+  }
+
+  private spoilQ: { title: string; n: number; enemy: Army } | null = null;
+
+  private spoilGold(n: number): number {
+    return Math.round((n * 3 + 30) * this.cls().mods.loot);
+  }
+
+  /** Büyük zaferden sonra üç ganimetten biri: altın, esir asker ya da silah yığınından bir eşya. */
+  private offerSpoils(title: string, n: number, enemy: Army, then: () => void): void {
+    const h = this.s.hero;
+    const gold = this.spoilGold(n);
+    const room = Math.max(0, this.heroCap() - armySize(h.army));
+    const want = Math.max(1, Math.round(n * SPOIL_CAPTIVE));
+    const take = Math.min(room, want);
+    const total = Math.max(1, armySize(enemy));
+    const recruits = Object.fromEntries(UNIT_KEYS.map((u) => [u, 0])) as Army;
+    let left = take;
+    for (const u of [...UNIT_KEYS].sort((a, b) => enemy[b] - enemy[a])) {
+      const k = Math.min(left, Math.round((take * enemy[u]) / total));
+      recruits[u] += k;
+      left -= k;
+    }
+    recruits[UNIT_KEYS.reduce((a, b) => (enemy[a] >= enemy[b] ? a : b))] += left;
+    const it = rollItem(this.s.nextId++, Math.min(5, 1 + Math.floor(n / 25)), this.cls(), 0.15);
+    const unitTxt = UNIT_KEYS.filter((u) => recruits[u]).map((u) => `${recruits[u]} ${UNITS[u].name}`).join(", ");
+    this.hud.spoils(
+      title,
+      [
+        { icon: "coins", name: `+${gold} ${tr("altın")}`, desc: tr("Düşmanın keseleri ve sandıkları.") },
+        { icon: "tug", name: `+${take || want} ${tr("asker")}`, desc: `${tr("Esirler safına geçer")}: ${unitTxt}`, off: take ? undefined : tr("Birliğinde yer yok") },
+        { icon: it.icon, name: it.name, desc: `${RARITY[it.rar].name} · ${itemStats(it)}`, cls: `r${it.rar}` },
+      ],
+      (i) => {
+        if (i === 0) {
+          this.s.res.gold += gold;
+          this.hud.toast(tr("Ganimet payı: +{g} altın", { g: gold }), "good");
+        } else if (i === 1) {
+          for (const u of UNIT_KEYS) h.army[u] += recruits[u];
+          this.hud.toast(tr("{n} esir saflarına katıldı.", { n: take }), "good");
+        } else {
+          h.bag.push(it);
+          this.hud.toast(`${tr("Heybene kondu")}: ${it.name}`, "good");
+        }
+        saveGame(this.s);
+        then();
+      },
+    );
   }
 
   battleRec(): BattleRec {
