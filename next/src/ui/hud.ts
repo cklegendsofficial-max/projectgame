@@ -1,6 +1,6 @@
 import { LORD_SERAIS, NEWS_GOLD, type Game, type Hint, type Quest, type Target } from "../game/game";
 import { BUILDINGS, DAY_SEC, NODE_NAME, RES_ICON, RES_KEYS, RES_NAME, UNITS, UNIT_KEYS, armySize, buildCost, buildTime, prodPerMin, unitUnlocked, xpNeed, type Army, type Res, type Unit } from "../game/data";
-import { GROUNDS, ORDERS, ORDER_KEYS, TACTICS, TACTIC_KEYS, type BattleResult, type Boss, type Field, type Order, type Sim, type Tactic } from "../game/battle";
+import { GROUNDS, ORDERS, ORDER_KEYS, RESERVE_MIN, TACTICS, TACTIC_KEYS, type BattleResult, type Boss, type Field, type Order, type Sim, type Tactic } from "../game/battle";
 import { BattleField } from "./battleField";
 import { SpiritView, type Realm } from "./spirit";
 import { openDestan } from "./destan";
@@ -1280,8 +1280,15 @@ export class Hud {
           const T = TACTICS[o.t];
           return `<button class="tact ${o.t === last ? "last" : ""}" data-t="${o.t}">${ic(T.icon, "ti")}<b>${T.name}</b><small>${T.text}</small><small class="tbeat">${TACTICS[T.beats].name} karşısında güçlü</small><span class="odds ${o.odds >= 0.7 ? "good" : o.odds >= 0.4 ? "mid" : "bad"}">%${Math.round(o.odds * 100)}</span></button>`;
         })
-        .join("")}</div><button class="btn flee">${flee}</button></div>`;
+        .join("")}</div>${armySize(this.g.s.hero.army) >= RESERVE_MIN ? `<button class="tresv ${this.g.reserve ? "on" : ""}">${ic("tug")}<div><b>${t("Yedek kuvvet ayır")} <em>${this.g.reserve ? t("Açık") : t("Kapalı")}</em></b><small>${t("Askerlerin dörtte biri tepede bekler; savaşın ortasında 'Yedekler!' emriyle taze kuvvet olarak iner.")}</small></div></button>` : ""}<button class="btn flee">${flee}</button></div>`;
     this.root.appendChild(el);
+    el.querySelector(".tresv")?.addEventListener("click", (e) => {
+      const b = e.currentTarget as HTMLElement;
+      this.g.reserve = !this.g.reserve;
+      b.classList.toggle("on", this.g.reserve);
+      b.querySelector("em")!.textContent = this.g.reserve ? t("Açık") : t("Kapalı");
+      audio.play("click");
+    });
     el.querySelector(".flee")!.addEventListener("click", () => {
       el.remove();
       this.battleOpen = false;
@@ -2742,12 +2749,12 @@ export class Hud {
       </div>
       ${field ? `<div class="fground">${t(GROUNDS[field.ground].name)}${field.night ? ` · ${t("Gece")}` : ""}</div>` : ""}
       <canvas class="field"></canvas>
-      <div class="orders">${ORDER_KEYS.map((o) => `<button class="btn sm ord" data-o="${o}" title="${ORDERS[o].text}">${ic(ORDERS[o].icon)} ${ORDERS[o].name}</button>`).join("")}<button class="btn sm fast" title="Hızlandır">⏩</button></div>
+      <div class="orders">${ORDER_KEYS.filter((o) => o !== "yedek" || sim.canOrder(o)).map((o) => `<button class="btn sm ord" data-o="${o}" title="${ORDERS[o].text}">${ic(ORDERS[o].icon)} ${ORDERS[o].name}</button>`).join("")}<button class="btn sm fast" title="Hızlandır">⏩</button></div>
       <div class="rlog">Savaş başladı…</div>
       <div class="result"></div>
     </div>`;
     this.root.appendChild(el);
-    const bf = new BattleField(el.querySelector("canvas.field")!, before, enemy, assetUrl(face), boss ? assetUrl(boss.icon) : null, field);
+    const bf = new BattleField(el.querySelector("canvas.field")!, sim.rounds[0].a, enemy, assetUrl(face), boss ? assetUrl(boss.icon) : null, field);
     const setMor = (sel: string, m: number | undefined) => {
       const b = el.querySelector(`${sel} .bar.mor`);
       if (!b || m === undefined) return;

@@ -9,6 +9,7 @@ interface Glyph {
   y: number;
   ph: number;
   dead: number;
+  born?: number;
 }
 
 interface Arrow {
@@ -144,6 +145,7 @@ export class BattleField {
     else if (order === "kanat") this.calls.push({ text: "Kanatlar dolanıyor!", t0: now, color: "#ffe39a" });
     else if (order === "nara") this.calls.push({ text: "Nara!", t0: now, color: "#ffe39a" });
     else if (ev.includes("Kritik!")) this.calls.push({ text: "Kritik!", t0: now, color: "#fff" });
+    if (ev.includes("Yedekler meydana indi!")) this.calls.push({ text: "Yedekler meydana indi!", t0: now, color: "#9ad0ff" });
     if (ev.includes("Düşman bozguna uğradı!")) this.calls.push({ text: "Düşman bozguna uğradı!", t0: now + 80, color: "#ffd56a" });
     if (ev.includes("Askerlerin dağıldı!")) this.calls.push({ text: "Askerlerin dağıldı!", t0: now + 80, color: "#ff7a5a" });
     this.calls = this.calls.filter((c) => now - c.t0 < 1600);
@@ -160,6 +162,11 @@ export class BattleField {
       for (const u of UNIT_KEYS) {
         const live = this.sides[s].filter((g) => g.u === u && !g.dead);
         const want = arm[u] > 0 ? Math.max(1, Math.ceil(arm[u] / this.per[s])) : 0;
+        const [x0, x1] = BLOCK[u];
+        for (let k = live.length; k < want; k++) {
+          const fx = x0 + Math.random() * (x1 - x0);
+          this.sides[s].push({ u, x: s ? 1 - fx : fx, y: 0.06 + Math.random() * 0.88, ph: Math.random() * 6, dead: 0, born: now + Math.random() * dur * 0.2 });
+        }
         for (let k = live.length - 1; k >= want; k--) {
           const g = live.splice(Math.floor(Math.random() * live.length), 1)[0];
           g.dead = now + dur * (0.4 + Math.random() * 0.2);
@@ -296,7 +303,9 @@ export class BattleField {
       const dir = s ? -1 : 1;
       for (const gl of this.sides[s]) {
         const dying = gl.dead && now >= gl.dead;
-        const off = dying ? 0 : this.lunge(s, gl.u, p) * dir;
+        if (gl.born && now < gl.born) continue;
+        const enter = gl.born ? 1 - Math.min(1, (now - gl.born) / 700) : 0;
+        const off = dying ? 0 : this.lunge(s, gl.u, p) * dir - enter * enter * 0.35 * dir;
         const wheel = !dying && s === 0 && gl.u === "horse" && (this.order === "kanat" || this.charge) ? Math.sin(Math.PI * Math.min(1, p)) * (gl.y < 0.5 ? -0.12 : 0.12) : 0;
         const x = (gl.x + off) * w;
         const gallop = gl.u === "horse" ? Math.abs(Math.sin(now / 90 + gl.ph)) * 2.2 : Math.sin(now / 160 + gl.ph) * 0.8;

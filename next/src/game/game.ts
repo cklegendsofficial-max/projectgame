@@ -150,6 +150,7 @@ export class Game {
   private sceneDay: Record<string, number> = {};
   private readEdge = false;
   lastTactic: Tactic = "hucum";
+  reserve = false;
   private spawnAt = new Map<number, number>();
   battleLock = false;
   private roadD = 0;
@@ -3516,7 +3517,7 @@ export class Game {
       const d = known ? this.tdelta(t, stance) : TACTIC_KEYS.reduce((a, f) => a + w[f] * this.tdelta(t, f), 0);
       return { t, odds: odds(h.army, this.heroBonus() + d, enemy, enemyBonus, champ, boss, field) };
     });
-    const go = (t: Tactic, auto: boolean) => this.resolveBattle(title, enemy, enemyBonus, after, boss, foe, t, stance, auto, field);
+    const go = (t: Tactic, auto: boolean) => this.resolveBattle(title, enemy, enemyBonus, after, boss, foe, t, stance, auto, field, !auto && this.reserve);
     const best = opts.reduce((a, b) => (b.odds > a.odds ? b : a));
     if (!boss && best.odds >= 0.98) return go(best.t, true);
     const chased = this.s.bandits.some((b) => Math.hypot(b.x - h.x, b.y - h.y) < 80);
@@ -3572,13 +3573,13 @@ export class Game {
     return this.stat("cev") >= 6 || this.hasComp("ferhat") || this.s.cls === "hirsiz" || this.tal("gozcu") > 0 || (this.s.bird?.lv ?? 0) >= 3;
   }
 
-  private resolveBattle(title: string, enemy: Army, enemyBonus: number, after: (win: boolean) => string, boss: Boss | null, foe: string, t: Tactic, stance: Tactic, auto: boolean, field: Field | null): void {
+  private resolveBattle(title: string, enemy: Army, enemyBonus: number, after: (win: boolean) => string, boss: Boss | null, foe: string, t: Tactic, stance: Tactic, auto: boolean, field: Field | null, reserve: boolean): void {
     const h = this.s.hero;
     this.lastTactic = auto ? this.lastTactic : t;
     if (!auto) noteTactic(this.wd().tac, t);
     this.note("savas");
     const champ = this.champion();
-    const sim = new Sim(h.army, this.heroBonus() + this.tdelta(t, stance), enemy, enemyBonus, champ, boss, field);
+    const sim = new Sim(h.army, this.heroBonus() + this.tdelta(t, stance), enemy, enemyBonus, champ, boss, field, reserve);
     this.readEdge = !auto && TACTICS[t].beats === stance;
     const edge = auto ? "" : this.readEdge ? ` — <b class="cheap">${tr("düşmanı okudun! +%25 TP")}</b>` : TACTICS[stance].beats === t ? ` — <b class="dear">${tr("düşman seni okudu!")}</b>` : "";
     for (const k of Object.keys(this.s.buffs)) if (--this.s.buffs[k] <= 0) delete this.s.buffs[k];

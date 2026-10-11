@@ -259,6 +259,12 @@ body.nomini .mini { display: none; }
 .tground.g-dag { border-color: #9a9aa8; }
 .tground small { display: block; opacity: .85; }
 .tground .ic { width: 34px; height: 34px; flex: none; }
+.tresv { display: flex; align-items: center; gap: 8px; width: 100%; margin: 6px 0; padding: 6px 10px; border-radius: 8px; background: #0005; border: 1px dashed #5a3a1a; color: inherit; font: inherit; font-size: 12.5px; text-align: left; cursor: pointer; }
+.tresv small { display: block; opacity: .8; }
+.tresv em { font-style: normal; margin-left: 6px; padding: 0 6px; border-radius: 6px; background: #0006; color: #c8b090; }
+.tresv.on { border: 1px solid #6aa8e8; background: #1a2a3a88; }
+.tresv.on em { background: #2f6ab0; color: #fff; }
+.tresv .ic { width: 30px; height: 30px; flex: none; }
 .result .rout { text-align: center; font-weight: 700; color: #ffd56a; margin: 2px 0 6px; letter-spacing: .5px; }
 
 .army { display: flex; gap: 6px; }
