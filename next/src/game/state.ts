@@ -208,6 +208,8 @@ export interface Counters {
 export interface GameState {
   v: number;
   mapW?: number;
+  /** Gösterilmiş bağlamsal ipuçları. */
+  tips?: string[];
   res: Res;
   resAt: number;
   buildings: Record<BuildingId, { lv: number; until: number }>;

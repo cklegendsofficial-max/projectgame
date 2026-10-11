@@ -1072,7 +1072,30 @@ export class Hud {
     done?.();
   }
 
-  private menuTo(tab: string): void {
+  /** Bağlamsal ipucu: sağ üstte tek kart, kendiliğinden kaybolur. */
+  tip(icon: string, text: string, open: (() => void) | null = null, ttl = 16000): void {
+    this.root.querySelector(".tipc")?.remove();
+    const el = document.createElement("div");
+    el.className = `tipc${open ? " link" : ""}`;
+    el.innerHTML = `${ic(icon, "ni")}<div><small>${t("İpucu")}</small><span>${text}</span>${open ? `<em>${t("Göster")} ›</em>` : ""}</div><button class="x" aria-label="×">×</button>`;
+    const drop = () => {
+      el.classList.add("out");
+      setTimeout(() => el.remove(), 350);
+    };
+    el.querySelector(".x")!.addEventListener("click", (e) => {
+      e.stopPropagation();
+      drop();
+    });
+    el.addEventListener("click", () => {
+      drop();
+      open?.();
+    });
+    this.root.appendChild(el);
+    audio.play("click");
+    setTimeout(drop, ttl);
+  }
+
+  menuTo(tab: string): void {
     this.closeMenu();
     if (this.storyOpen) return;
     this.openHero();
@@ -2109,7 +2132,7 @@ export class Hud {
     const g = this.g;
     const cur = curSlot();
     const pct = (v: number) => Math.round(v * 100);
-    const toggle = (k: "eco" | "mini" | "haptic" | "narrate" | "dynMusic" | "cine" | "duel", label: string, note = "") =>
+    const toggle = (k: "eco" | "mini" | "haptic" | "narrate" | "dynMusic" | "cine" | "duel" | "tips", label: string, note = "") =>
       `<div class="setrow"><span>${label}</span><button class="btn sm ${settings[k] ? "on" : ""}" data-a="${this.act(() => {
         settings[k] = !settings[k];
         saveSettings();
@@ -2155,6 +2178,7 @@ export class Hud {
       <h3>${t("Oynanış")}</h3>
       ${toggle("duel", t("Er meydanı"))}
       <p class="dim">${t("Büyük savaşlardan önce teke tek düello mini oyunu. Kazanırsan düşman morali düşük başlar.")}</p>
+      ${toggle("tips", t("İpuçları"))}
       <h3>${t("Kayıt yuvaları")}</h3>
       <p class="dim">${t("Oyun her birkaç saniyede bir etkin yuvaya kaydedilir. Yuva değiştirince mevcut oyunun kaydedilir ve sayfa yeniden yüklenir.")}</p>
       ${slots}

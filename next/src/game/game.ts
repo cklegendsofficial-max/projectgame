@@ -1308,11 +1308,44 @@ export class Game {
     this.checkContract();
     this.seraiVisit();
     this.sideTick();
+    this.tipTick(dt);
     this.saveT += dt;
     if (this.saveT > 8) {
       this.saveT = 0;
       saveGame(s);
     }
+  }
+
+  private tipT = 0;
+  private tipGap = 20;
+
+  /** Her biri bir kez gösterilen bağlamsal ipuçları; iki ipucu arasında en az 45 sn. */
+  private tipTick(dt: number): void {
+    this.tipT += dt;
+    if (this.tipT < 1.5) return;
+    this.tipGap -= this.tipT;
+    this.tipT = 0;
+    if (!settings.tips || this.tipGap > 0 || this.battleLock || this.hud.battleOpen || this.s.time < 25) return;
+    const s = this.s;
+    const h = s.hero;
+    const seen = (s.tips ??= []);
+    const tips: [string, () => boolean, string, string, (() => void) | null][] = [
+      ["beceri", () => h.spts > 0, "scroll", "Beceri puanın var! Kahraman panelinden güç, çeviklik ya da liderliğe harca.", () => this.hud.menuTo("beceri")],
+      ["yetenek", () => h.tpts > 0, "tr_star", "Yetenek puanı kazandın. Yetenek ağacından sınıfına uygun bir dal seç.", () => this.hud.menuTo("yetenek")],
+      ["yara", () => h.hp < this.maxHp() * 0.4, "healer", "Yaralısın. Şehirlerde can üç kat hızlı dolar; yaralıyken savaşa girme.", null],
+      ["enerji", () => h.energy < this.maxEnergy() * 0.2, "food", "Enerjin tükeniyor. Şehirde beklersen enerji iki kat hızlı yenilenir.", null],
+      ["asker", () => s.free && armySize(h.army) === 0 && s.res.gold >= 80, "u_spear", "Yollar tek başına tehlikeli. Köylerden gönüllü topla ya da şehir hanlarından paralı asker tut.", () => this.hud.menuTo("ordu")],
+      ["ticaret", () => s.free && s.c.bought === 0 && s.res.gold >= 150 && this.nearCity() >= 0, "coins", "Çarşıda bir malı ucuza al, onu arayan başka bir şehirde pahalıya sat. Kervan ticareti servetin en hızlı yoludur.", null],
+      ["harami", () => s.free && s.bandits.some((b) => !b.amb && Math.hypot(b.x - h.x, b.y - h.y) < 320 && armyPower(b.army) > this.heroPower() * 0.8), "j_bandit", "Yakında güçlü haramiler dolaşıyor. Üzerlerine dokunup güçlerine bak; senden güçlüyse yolunu değiştir ya da bir şehre sığın.", null],
+      ["moral", () => s.kills > 0, "tug", "Savaşta mavi çubuk moraldir: sıfırlanan taraf bozguna uğrar. Nara, kanat saldırısı ve yedek kuvvet dengeyi değiştirir.", null],
+      ["arazi", () => s.kills >= 15, "u_cavalry", "Savaş yeri önemlidir: bozkırda atlılar, dağda okçular, çayırda mızraklılar güçlenir. Geceleri oklar şaşar.", null],
+    ];
+    const next = tips.find(([id, cond]) => !seen.includes(id) && cond());
+    if (!next) return;
+    const [id, , icon, text, open] = next;
+    seen.push(id);
+    this.tipGap = 45;
+    this.hud.tip(icon, tr(text), open);
   }
 
   private vitals(dt: number): void {
