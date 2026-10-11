@@ -149,7 +149,7 @@ export const ROAD_EVENTS: RoadEvent[] = [
   {
     id: "kacak",
     title: "Kaçak Köleler",
-    icon: "foal",
+    icon: "heroes/slave",
     text: "Sazlıkta saklanan bir avuç kaçak köle. Zincir izleri bileklerinde taze. Peşlerinde köle tacirlerinin atlıları var.",
     opts: () => [
       { label: "Onları sakla, birliğine al", cost: { food: 20 }, ok: { text: "Bir zamanlar senin de bileklerinde zincir vardı. Kaçaklar sana yemin etti.", units: { spear: 3 }, kut: 3 } },
@@ -244,7 +244,7 @@ export const ROAD_EVENTS: RoadEvent[] = [
     icon: "merchant",
     text: "Tek devesiyle yol alan bir tüccar seni selamladı. \"Şehre varmadan mal almak isteyen var mı? Fiyatım yoldan ucuz!\"",
     opts: () => [
-      { label: "Mallarına bak · 70 altın", cost: { gold: 70 }, ok: { text: "Birkaç balya mal aldın. Doğru şehirde iki katına gider.", good: 2 } },
+      { label: "Mallarına bak", cost: { gold: 70 }, ok: { text: "Birkaç balya mal aldın. Doğru şehirde iki katına gider.", good: 2 } },
       { label: "Yol haberlerini sor", ok: { text: "Tüccar hangi geçitte harami olduğunu, hangi kalenin el değiştirdiğini anlattı.", xp: 10 } },
     ],
   },
