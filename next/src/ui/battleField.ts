@@ -1,5 +1,5 @@
 import { UNIT_KEYS, armySize, type Army, type Unit } from "../game/data";
-import type { Field, Ground, Order } from "../game/battle";
+import type { Field, Ground, Order, Sky } from "../game/battle";
 import { assetUrl } from "../render/worldView";
 import { t as tr } from "../i18n";
 
@@ -399,6 +399,7 @@ export class BattleField {
       ctx.fillStyle = "rgba(255,245,220,0.14)";
       ctx.fillRect(0, 0, w, h);
     }
+    if (this.field?.sky) this.drawSky(this.field.sky, now);
     if (this.end && !this.end.win) {
       ctx.fillStyle = `rgba(30,6,2,${0.4 * Math.min(1, (now - this.end.t0) / 1600)})`;
       ctx.fillRect(0, 0, w, h);
@@ -449,6 +450,55 @@ export class BattleField {
       ctx.fillText(tr(c.text), w / 2, y);
       ctx.restore();
     }
+  }
+
+  private sky: [number, number, number][] = Array.from({ length: 130 }, () => [Math.random(), Math.random(), 0.5 + Math.random()]);
+
+  private drawSky(kind: Sky, now: number): void {
+    const { ctx, w, h } = this;
+    const t = now / 1000;
+    if (kind === "kum") {
+      const gr = ctx.createLinearGradient(0, 0, w, 0);
+      const pulse = 0.08 * Math.sin(t * 1.3);
+      gr.addColorStop(0, `rgba(196,150,80,${0.42 + pulse})`);
+      gr.addColorStop(0.5, `rgba(214,170,100,${0.3 - pulse})`);
+      gr.addColorStop(1, `rgba(196,150,80,${0.45 + pulse})`);
+      ctx.fillStyle = gr;
+      ctx.fillRect(0, 0, w, h);
+      ctx.strokeStyle = "rgba(250,222,160,0.75)";
+      ctx.lineWidth = 1.6;
+    } else if (kind === "yagmur") {
+      ctx.fillStyle = "rgba(40,60,90,0.18)";
+      ctx.fillRect(0, 0, w, h);
+      ctx.strokeStyle = "rgba(190,210,240,0.55)";
+      ctx.lineWidth = 1;
+    } else {
+      ctx.fillStyle = kind === "tipi" ? "rgba(220,230,245,0.2)" : "rgba(220,230,245,0.08)";
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = "rgba(255,255,255,0.85)";
+    }
+    ctx.beginPath();
+    for (const [px, py, sp] of this.sky) {
+      if (kind === "kum") {
+        const x = ((px + t * 0.7 * sp) % 1) * (w + 80) - 40;
+        const y = (py + Math.sin(t * 2 + px * 9) * 0.015) * h;
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + 30 * sp, y + 2);
+      } else if (kind === "yagmur") {
+        const x = ((px + t * 0.12 * sp) % 1) * (w + 40) - 20;
+        const y = ((py + t * 1.4 * sp) % 1) * h;
+        ctx.moveTo(x, y);
+        ctx.lineTo(x - 3, y + 9 * sp);
+      } else {
+        const drift = kind === "tipi" ? 0.35 : 0.06;
+        const x = ((px + t * drift * sp + Math.sin(t + py * 10) * 0.01) % 1) * w;
+        const y = ((py + t * 0.12 * sp) % 1) * h;
+        ctx.moveTo(x + 1.6 * sp, y);
+        ctx.arc(x, y, 1.6 * sp, 0, Math.PI * 2);
+      }
+    }
+    if (kind === "kum" || kind === "yagmur") ctx.stroke();
+    else ctx.fill();
   }
 
   private banner(x: number, color: string, now: number, s: number): void {

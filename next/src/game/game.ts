@@ -3565,7 +3565,10 @@ export class Game {
   fieldHere(): Field | null {
     if (this.deep || this.delve) return null;
     const h = this.s.hero;
-    return { ground: this.biomeAt(h.x, h.y), night: this.isNight() };
+    const hs = this.heroStorm();
+    const winter = this.season() === "kis";
+    const sky = hs ? (hs.kind === "kum" ? "kum" : winter ? "tipi" : "yagmur") : winter ? "kar" : null;
+    return { ground: this.biomeAt(h.x, h.y), night: this.isNight(), sky };
   }
 
   private retreat(): void {

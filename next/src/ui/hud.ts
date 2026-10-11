@@ -1,6 +1,6 @@
 import { LORD_SERAIS, NEWS_GOLD, type Game, type Hint, type Quest, type Target } from "../game/game";
 import { BUILDINGS, DAY_SEC, NODE_NAME, RES_ICON, RES_KEYS, RES_NAME, UNITS, UNIT_KEYS, armySize, buildCost, buildTime, prodPerMin, unitUnlocked, xpNeed, type Army, type Res, type Unit } from "../game/data";
-import { GROUNDS, ORDERS, ORDER_KEYS, RESERVE_MIN, TACTICS, TACTIC_KEYS, type BattleResult, type Boss, type Field, type Order, type Sim, type Tactic } from "../game/battle";
+import { GROUNDS, ORDERS, ORDER_KEYS, RESERVE_MIN, SKIES, TACTICS, TACTIC_KEYS, type BattleResult, type Boss, type Field, type Order, type Sim, type Tactic } from "../game/battle";
 import { BattleField } from "./battleField";
 import { SpiritView, type Realm } from "./spirit";
 import { openDestan } from "./destan";
@@ -1297,7 +1297,7 @@ export class Hud {
     el.innerHTML = `<div class="bbox tbox"><h2>${ic("swords")} ${title}</h2>
       <div class="tfoe">${ic(boss?.icon ?? "j_bandit", "bp" + (boss ? " boss" : ""))}<div><b>${boss?.name ?? foe}</b>${armySize(enemy) ? armyHtml(enemy) : ""}</div></div>
       ${intel}
-      ${field ? `<div class="tground g-${field.ground}">${ic(GROUNDS[field.ground].icon)}<div><b>${t(GROUNDS[field.ground].name)}${field.night ? ` · ${t("Gece")}` : ""}</b><small>${t(GROUNDS[field.ground].text)}${field.night ? ` ${t("Karanlıkta oklar şaşar: okçu -%25.")}` : ""}</small></div></div>` : ""}
+      ${field ? `<div class="tground g-${field.ground}">${ic(GROUNDS[field.ground].icon)}<div><b>${t(GROUNDS[field.ground].name)}${field.night ? ` · ${t("Gece")}` : ""}</b><small>${t(GROUNDS[field.ground].text)}${field.night ? ` ${t("Karanlıkta oklar şaşar: okçu -%25.")}` : ""}${field.sky ? `<span class="sky">${t(SKIES[field.sky].name)}: ${t(SKIES[field.sky].text)}</span>` : ""}</small></div></div>` : ""}
       <div class="tacts">${opts
         .map((o) => {
           const T = TACTICS[o.t];
@@ -2854,7 +2854,7 @@ export class Hud {
         <div class="vs">VS</div>
         <div class="side foe">${ic(boss?.icon ?? "j_bandit", "bp" + (boss ? " boss" : ""))}<b>${boss?.name ?? foe}</b>${boss ? `<div class="bar boss"><i></i><span></span></div>` : ""}${n0b ? `<div class="bar hp foe"><i></i></div><div class="bar mor"><i></i><span></span></div>` : ""}<div class="arm"></div></div>
       </div>
-      ${field ? `<div class="fground">${t(GROUNDS[field.ground].name)}${field.night ? ` · ${t("Gece")}` : ""}</div>` : ""}
+      ${field ? `<div class="fground">${t(GROUNDS[field.ground].name)}${field.night ? ` · ${t("Gece")}` : ""}${field.sky ? ` · ${t(SKIES[field.sky].name)}` : ""}</div>` : ""}
       <canvas class="field"></canvas>
       <div class="orders">${ORDER_KEYS.filter((o) => o !== "yedek" || sim.canOrder(o)).map((o) => `<button class="btn sm ord" data-o="${o}" title="${ORDERS[o].text}">${ic(ORDERS[o].icon)} ${ORDERS[o].name}</button>`).join("")}<button class="btn sm fast" title="Hızlandır">⏩</button></div>
       <div class="rlog">Savaş başladı…</div>

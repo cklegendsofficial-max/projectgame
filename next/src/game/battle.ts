@@ -38,7 +38,15 @@ export type Ground = "bozkir" | "cayir" | "kum" | "dag";
 export interface Field {
   ground: Ground;
   night: boolean;
+  sky?: Sky | null;
 }
+export type Sky = "kum" | "yagmur" | "tipi" | "kar";
+export const SKIES: Record<Sky, { name: string; mul: Partial<Record<Unit, number>>; text: string }> = {
+  kum: { name: "Kum fırtınası", mul: { archer: 0.6 }, text: "Göz gözü görmüyor: okçu -%40." },
+  yagmur: { name: "Sağanak", mul: { archer: 0.8, horse: 0.85 }, text: "Yay kirişleri ıslandı, toprak çamur: okçu -%20, atlı -%15." },
+  tipi: { name: "Tipi", mul: { archer: 0.75, horse: 0.8 }, text: "Kar fırtınası: okçu -%25, atlı -%20." },
+  kar: { name: "Karlı meydan", mul: { horse: 0.85 }, text: "Atlar karda zorlanıyor: atlı -%15." },
+};
 export const GROUNDS: Record<Ground, { name: string; icon: string; mul: Partial<Record<Unit, number>>; text: string }> = {
   bozkir: { name: "Açık bozkır", icon: "u_cavalry", mul: { horse: 1.3 }, text: "Atlılar için uçsuz meydan: atlı hasarı +%30." },
   cayir: { name: "Çayır ve koru", icon: "u_spear", mul: { spear: 1.2, archer: 0.85 }, text: "Ağaçlar okları keser, mızrak safı sağlam durur: mızraklı +%20, okçu -%15." },
@@ -49,6 +57,7 @@ export function fieldMul(f: Field | null): Partial<Record<Unit, number>> {
   if (!f) return {};
   const m = { ...GROUNDS[f.ground].mul };
   if (f.night) m.archer = (m.archer ?? 1) * 0.75;
+  if (f.sky) for (const [u, k] of Object.entries(SKIES[f.sky].mul) as [Unit, number][]) m[u] = (m[u] ?? 1) * k;
   return m;
 }
 
