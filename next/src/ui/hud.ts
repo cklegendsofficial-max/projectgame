@@ -76,6 +76,24 @@ const CAP_I = CITIES.findIndex((c) => c.id === "samarkand");
 const JOURNEY_SPEED = 4;
 const RIVAL_CSS: Record<string, string> = { peace: "#e8d39a", ally: "#6fe07a", war: "#ff4a3a", vassal: "#ffc94a", dead: "#888" };
 
+/** Uzun hikâye metnini paragraf sınırlarından en çok üç sayfaya böler. */
+function storyPages(html: string): string[] {
+  const plain = (s: string) => s.replace(/<[^>]+>/g, "").length;
+  if (plain(html) < 520) return [html];
+  const paras = html.split(/(?:<br\s*\/?>\s*){2,}/);
+  if (paras.length < 2) return [html];
+  const pages: string[] = [];
+  let cur = "";
+  for (const para of paras) {
+    if (cur && plain(cur) + plain(para) > 380 && pages.length < 2) {
+      pages.push(cur);
+      cur = para;
+    } else cur = cur ? `${cur}<br><br>${para}` : para;
+  }
+  if (cur) pages.push(cur);
+  return pages;
+}
+
 function fmt(n: number): string {
   n = Math.floor(n);
   if (n >= 1e6) return (n / 1e6).toFixed(1).replace(".0", "") + "M";
@@ -194,6 +212,7 @@ export class Hud {
       <div class="top"></div>
       <div class="track"><div class="quest"></div><div class="quest saga hidden"></div><div class="quest task hidden"></div><div class="quest sq hidden"></div><div class="quest mog hidden"></div><button class="qmore hidden"></button></div>
       <div class="toasts"></div>
+      <div class="rumor"></div>
       <div class="notes"></div>
       <div class="actbar hidden"></div>
       <div class="bottom">
@@ -1193,7 +1212,7 @@ export class Hud {
     });
     box.appendChild(el);
     audio.play("quest");
-    while (box.children.length > 4) box.firstElementChild!.remove();
+    while (box.children.length > (this.narrow.matches ? 2 : 3)) box.firstElementChild!.remove();
     if (ttl) setTimeout(drop, ttl);
     if (alive) {
       const iv = setInterval(() => {
@@ -1206,7 +1225,36 @@ export class Hud {
     }
   }
 
+  private rumQ: string[] = [];
+  private rumOn = false;
+
+  /** Söylentiler bildirim yığınına değil, alt çubuğun üstündeki tek satırlık habere düşer. */
+  rumor(text: string): void {
+    if (this.rumQ.includes(text)) return;
+    this.rumQ.push(text);
+    if (this.rumQ.length > 5) this.rumQ.shift();
+    if (!this.rumOn) this.nextRumor();
+  }
+
+  private nextRumor(): void {
+    const el = this.root.querySelector<HTMLElement>(".rumor")!;
+    const text = this.rumQ.shift();
+    if (!text) {
+      this.rumOn = false;
+      el.classList.remove("on");
+      return;
+    }
+    this.rumOn = true;
+    el.innerHTML = `${ic("scroll", "ni")}<span></span>`;
+    el.querySelector("span")!.textContent = text;
+    el.title = text;
+    el.classList.add("on");
+    setTimeout(() => this.nextRumor(), 5200);
+  }
+
   toast(text: string, kind: "good" | "bad" | "info" = "info"): void {
+    const rm = /^(Söylenti|Rumou?r): /.exec(text);
+    if (rm) return this.rumor(text.slice(rm[0].length));
     if ([...this.toasts.children, ...this.toastQ.map((q) => q.el)].some((c) => c.textContent === text)) return;
     if (kind === "bad") audio.play("bad");
     else if (kind === "good" && /altın|\+/.test(text)) audio.play("coin");
@@ -1243,17 +1291,34 @@ export class Hud {
     this.storyOpen = true;
     this.close();
     audio.play("story");
+    const pages = storyPages(html);
+    let pg = 0;
     const el = document.createElement("div");
     el.className = "battle";
-    el.innerHTML = `<div class="bbox story">${this.listenBtn()}<img class="simg" src="${assetUrl(img)}" alt=""><h2>${title}</h2><p>${html}</p><button class="btn go big">${btn}</button></div>`;
+    const dots = pages.length > 1 ? `<div class="sdots">${pages.map((_, i) => `<i class="${i ? "" : "on"}"></i>`).join("")}</div>` : "";
+    el.innerHTML = `<div class="bbox story${pages.length > 1 ? " paged" : ""}">${this.listenBtn()}<img class="simg" src="${assetUrl(img)}" alt=""><h2>${title}</h2><p class="spage">${pages[0]}</p>${dots}<button class="btn go big">${pages.length > 1 ? `${t("Devam")} ›` : btn}</button>${pages.length > 1 ? `<button class="sskip">${t("Geç")}</button>` : ""}</div>`;
     this.root.appendChild(el);
     this.wireListen(el, title, html);
-    el.querySelector(".btn.go")!.addEventListener("click", () => {
+    const go = el.querySelector<HTMLButtonElement>(".btn.go")!;
+    const p = el.querySelector<HTMLElement>(".spage")!;
+    const close = () => {
       hush();
       el.remove();
       this.storyOpen = false;
       this.nextStory();
+    };
+    go.addEventListener("click", () => {
+      if (++pg >= pages.length) return close();
+      audio.play("page");
+      p.classList.remove("turn");
+      void p.offsetWidth;
+      p.classList.add("turn");
+      p.innerHTML = pages[pg];
+      el.querySelectorAll(".sdots i").forEach((d, i) => d.classList.toggle("on", i === pg));
+      go.textContent = pg === pages.length - 1 ? btn : `${t("Devam")} ›`;
+      if (pg === pages.length - 1) el.querySelector(".sskip")?.remove();
     });
+    el.querySelector(".sskip")?.addEventListener("click", close);
   }
 
   private spiritBtn(): string {

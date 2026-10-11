@@ -141,6 +141,11 @@ body.nomini .mini { display: none; }
 .birdbtn.ready img { filter: none; }
 .birdbtn.aim { border-color: #7fd36a; box-shadow: 0 0 14px #7fd36a; animation: pulse 1s infinite; }
 
+.rumor { position: absolute; bottom: 86px; left: 50%; transform: translateX(-50%) translateY(6px); max-width: min(560px, 86vw); display: flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 14px; background: rgba(28,16,6,.82); border: 1px solid #6b4a22; color: #e8d39a; font-size: 12px; font-style: italic; white-space: nowrap; overflow: hidden; opacity: 0; transition: opacity .4s, transform .4s; pointer-events: none; }
+.rumor.on { opacity: 1; transform: translateX(-50%); }
+.rumor span { overflow: hidden; text-overflow: ellipsis; }
+.rumor .ni { width: 16px; height: 16px; flex: none; }
+@media (max-width: 600px) { .rumor { bottom: 74px; font-size: 11px; } }
 .toasts { position: absolute; top: 64px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .toast { padding: 8px 16px; border-radius: 10px; font-size: 14px; font-weight: 600; background: #2a1a0cee; border: 1px solid #8a5d2a; box-shadow: 0 4px 12px #0008; animation: tin .25s ease-out; transition: opacity .4s, transform .4s; }
 .toast.good { border-color: #7fd36a; color: #dfffd2; }
@@ -474,6 +479,13 @@ body.nomini .mini { display: none; }
 .listen.on { opacity: 1; border-color: #ffd56a; box-shadow: 0 0 10px #ffd56a88; animation: listenPulse 1.2s ease-in-out infinite; }
 @keyframes listenPulse { 50% { box-shadow: 0 0 16px #ffd56acc; } }
 .bbox.story p { line-height: 1.5; font-size: 15px; text-align: left; }
+.bbox.story.paged p.spage { min-height: 7.5em; font-size: 16px; }
+.bbox.story p.turn { animation: sturn .45s ease; }
+@keyframes sturn { from { opacity: 0; transform: translateX(14px); } to { opacity: 1; transform: none; } }
+.sdots { display: flex; justify-content: center; gap: 6px; margin: 4px 0 8px; }
+.sdots i { width: 7px; height: 7px; border-radius: 50%; background: #5a4220; transition: background .3s; }
+.sdots i.on { background: #e2bd62; box-shadow: 0 0 6px #e2bd62; }
+.sskip { display: block; margin: 8px auto 0; background: none; border: 0; color: #a8946a; font-size: 12px; text-decoration: underline; cursor: pointer; }
 .simg { width: 120px; height: 120px; border-radius: 50%; object-fit: cover; border: 3px solid #ffd56a; background: #1a0f06; }
 .bottom button.pulse { animation: pulse 1.2s infinite; border-color: #ffd56a; }
 @keyframes pulse { 50% { box-shadow: 0 0 18px #ffd56a, 0 4px 12px #0008; } }

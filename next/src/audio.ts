@@ -60,6 +60,7 @@ class SoundSystem {
     this.music.gain.setTargetAtTime(g * 0.25, t, 0.15);
     this.music.gain.setTargetAtTime(g, t + 0.5, 0.4);
     if (sc === "battle") [0, 0.3, 0.6].forEach((d) => this.drum(t + 0.5 + d, true));
+    this.bazaar(sc === "city");
   }
 
   duck(on: boolean): void {
@@ -345,12 +346,118 @@ class SoundSystem {
     s.stop(t + dur + 0.02);
   }
 
-  play(kind: "click" | "coin" | "hit" | "win" | "lose" | "quest" | "story" | "bad" | "level"): void {
+  /** Gürültüyü süzgeçten geçirip zarfla çalar; frekans süpürmesi isteğe bağlı. */
+  private swept(t: number, dur: number, vol: number, type: BiquadFilterType, f0: number, f1: number, q = 1, attack = 0.005): void {
+    const ctx = this.ctx!;
+    const s = ctx.createBufferSource();
+    s.buffer = this.noise;
+    const bp = ctx.createBiquadFilter();
+    bp.type = type;
+    bp.Q.value = q;
+    bp.frequency.setValueAtTime(f0, t);
+    bp.frequency.exponentialRampToValueAtTime(f1, t + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(vol, t + attack);
+    g.gain.exponentialRampToValueAtTime(0.0008, t + dur);
+    s.connect(bp).connect(g).connect(this.fx);
+    s.start(t, Math.random() * 0.5);
+    s.stop(t + dur + 0.02);
+  }
+
+  /** Metal çınlaması: uyumsuz kısmi sesler, kılıç ve örs için. */
+  private ring(t: number, f: number, vol: number, dur: number): void {
+    for (const [mul, v] of [[1, 1], [2.41, 0.6], [3.93, 0.4], [5.6, 0.25]] as const) this.tone(f * mul * (0.98 + Math.random() * 0.04), t, dur * (1.2 - mul * 0.12), vol * v, "sine");
+  }
+
+  private murmur: { src: AudioBufferSourceNode; g: GainNode } | null = null;
+
+  /** Şehir sahnesinde çarşı uğultusu; sahne değişince söner. */
+  private bazaar(on: boolean): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    if (on && !this.murmur && !this.muted) {
+      const src = ctx.createBufferSource();
+      src.buffer = this.noise;
+      src.loop = true;
+      const bp = ctx.createBiquadFilter();
+      bp.type = "bandpass";
+      bp.frequency.value = 520;
+      bp.Q.value = 0.9;
+      const lfo = ctx.createOscillator();
+      lfo.frequency.value = 0.35;
+      const lg = ctx.createGain();
+      lg.gain.value = 180;
+      lfo.connect(lg).connect(bp.frequency);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(0.03, t + 1.5);
+      src.connect(bp).connect(g).connect(this.fx);
+      src.start(t);
+      lfo.start(t);
+      src.onended = () => lfo.stop();
+      this.murmur = { src, g };
+    } else if (!on && this.murmur) {
+      const m = this.murmur;
+      this.murmur = null;
+      m.g.gain.setTargetAtTime(0, t, 0.4);
+      m.src.stop(t + 2);
+    }
+  }
+
+  play(kind: "click" | "coin" | "hit" | "win" | "lose" | "quest" | "story" | "bad" | "level" | "clash" | "arrow" | "hoof" | "horn" | "roar" | "anvil" | "page"): void {
     const ctx = this.ctx;
     if (!ctx || this.muted || ctx.state !== "running") return;
     const t = ctx.currentTime + 0.01;
     const n = (k: number) => ROOT * 2 ** (HICAZ[k] / 12);
     switch (kind) {
+      case "clash":
+        this.swept(t, 0.09, 0.3, "highpass", 2500, 4000, 0.7);
+        this.ring(t, 900 + Math.random() * 500, 0.05, 0.5);
+        break;
+      case "arrow":
+        for (let k = 0; k < 3; k++) this.swept(t + k * 0.07 + Math.random() * 0.05, 0.35, 0.09, "bandpass", 3800, 900, 4, 0.08);
+        break;
+      case "hoof":
+        for (let k = 0; k < 8; k++) {
+          const at = t + Math.floor(k / 3) * 0.32 + (k % 3) * 0.075;
+          this.tone(95 + Math.random() * 20, at, 0.09, 0.14, "sine", 55);
+          this.swept(at, 0.05, 0.07, "lowpass", 900, 300, 1);
+        }
+        break;
+      case "horn": {
+        const o = ctx.createOscillator();
+        o.type = "sawtooth";
+        o.frequency.setValueAtTime(ROOT / 2, t);
+        o.frequency.linearRampToValueAtTime(ROOT * 0.75, t + 0.35);
+        o.frequency.setValueAtTime(ROOT * 0.75, t + 1.3);
+        o.frequency.linearRampToValueAtTime(ROOT * 0.7, t + 1.7);
+        const lp = ctx.createBiquadFilter();
+        lp.type = "lowpass";
+        lp.frequency.setValueAtTime(300, t);
+        lp.frequency.linearRampToValueAtTime(1200, t + 0.5);
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0, t);
+        g.gain.linearRampToValueAtTime(0.16, t + 0.3);
+        g.gain.setValueAtTime(0.16, t + 1.3);
+        g.gain.linearRampToValueAtTime(0, t + 1.8);
+        o.connect(lp).connect(g).connect(this.fx);
+        o.start(t);
+        o.stop(t + 1.9);
+        break;
+      }
+      case "roar":
+        this.swept(t, 1.4, 0.16, "bandpass", 380, 700, 0.8, 0.35);
+        this.swept(t + 0.1, 1.2, 0.08, "bandpass", 900, 1300, 1.5, 0.3);
+        break;
+      case "anvil":
+        this.ring(t, 1250, 0.09, 0.9);
+        this.swept(t, 0.06, 0.25, "highpass", 3000, 5000);
+        break;
+      case "page":
+        this.swept(t, 0.22, 0.06, "highpass", 2500, 6000, 0.5, 0.06);
+        break;
       case "click":
         this.tone(1800, t, 0.04, 0.06, "square", 900);
         break;

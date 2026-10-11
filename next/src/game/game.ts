@@ -2302,6 +2302,8 @@ export class Game {
     if (protect) this.s.mats.parsomen--;
     const p = it.plus ?? 0;
     const h = this.s.hero;
+    audio.play("anvil");
+    setTimeout(() => audio.play("anvil"), 600);
     this.start(`Demirci +${p + 1} basıyor`, 2, () => {
       if (Math.random() < PLUS_CHANCE[p]) {
         setPlus(it, p + 1);
@@ -2585,6 +2587,7 @@ export class Game {
     const base = gearCost(slot, t);
     if (this.craftReason(base, (t - 1) * 3 + 1)) return;
     this.payMats(this.craftCost(base));
+    [0, 700, 1400].forEach((ms) => setTimeout(() => audio.play("anvil"), ms));
     this.start("Atölyede dövüyorsun", 4, () => {
       const s = this.s;
       const r = Math.random() + 0.08 + this.skill("zanaat") * 0.012 + 0.06 * this.tal("zanaat");

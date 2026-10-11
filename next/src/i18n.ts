@@ -690,6 +690,7 @@ const EN: Record<string, string> = {
   "Bu kamp daha önce yağmalanmıştı; sandıkları yarı boş.": "This camp was looted before; its chests are half empty.",
   "Haftalık hesap: teçhizat {g} altın{t}": "Weekly accounts: gear {g} gold{t}",
   ", hanın payı {n} altın": ", the khan's share {n} gold",
+  "Geç": "Skip",
   "stat puanı": "stat points",
   "yetenek puanı": "talent points",
   "beceri puanı": "skill points",

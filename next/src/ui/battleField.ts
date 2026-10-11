@@ -2,6 +2,7 @@ import { UNIT_KEYS, armySize, type Army, type Unit } from "../game/data";
 import type { Field, Ground, Order, Sky } from "../game/battle";
 import { assetUrl } from "../render/worldView";
 import { t as tr } from "../i18n";
+import { audio } from "../audio";
 
 interface Glyph {
   u: Unit;
@@ -86,6 +87,12 @@ export class BattleField {
   private frozen = 0;
   private lastReal = performance.now();
   private shake = { t0: 0, amp: 0 };
+  private epic = false;
+  private sfx: number[] = [];
+
+  private cue(kind: Parameters<typeof audio.play>[0], ms: number): void {
+    this.sfx.push(window.setTimeout(() => audio.play(kind), ms));
+  }
 
   /** Vuruş duraklamasında duran sahne saati. */
   private clock(): number {
@@ -111,8 +118,10 @@ export class BattleField {
     this.heroImg = Object.assign(new Image(), { src: heroSrc });
     this.bossImg = bossSrc ? Object.assign(new Image(), { src: bossSrc }) : null;
     this.cur = [{ ...a }, { ...b }];
+    this.epic = !!bossSrc || armySize(a) + armySize(b) >= 80;
     if (bossSrc) this.calls.push({ text: "Destan savaşı!", t0: this.clock() + 150, color: "#d9a8ff" });
-    else if (armySize(a) + armySize(b) >= 80) this.calls.push({ text: "Meydan muharebesi!", t0: this.clock() + 150, color: "#ffe39a" });
+    else if (this.epic) this.calls.push({ text: "Meydan muharebesi!", t0: this.clock() + 150, color: "#ffe39a" });
+    if (this.epic) audio.play("horn");
     this.resize();
     [a, b].forEach((arm, s) => {
       const per = (this.per[s] = Math.max(1, Math.ceil(armySize(arm) / 36)));
@@ -150,10 +159,12 @@ export class BattleField {
 
   stop(): void {
     cancelAnimationFrame(this.raf);
+    this.sfx.forEach(clearTimeout);
   }
 
   finish(win: boolean): void {
     this.end = { win, t0: this.clock() };
+    if (win) this.cue("roar", 150);
     if (win)
       for (let k = 0; k < 60; k++) {
         const t0 = this.end.t0 + 200 + Math.random() * 900;
@@ -222,6 +233,10 @@ export class BattleField {
       for (let k = 0; k < Math.min(12, 3 + Math.ceil(melee / 4)); k++)
         this.puffs.push({ x: front + (Math.random() - 0.5) * 0.08, y: 0.1 + Math.random() * 0.8, vx: 0, vy: 0, t0: now + dur * (0.38 + Math.random() * 0.2), life: 260, kind: "clash" });
     if (lost > 0) this.shake = { t0: now + dur * 0.42, amp: Math.min(7, 1.5 + lost * 0.25) };
+    if (a.archer + b.archer > 0) this.cue("arrow", dur * 0.04);
+    if (melee > 0) this.cue("clash", dur * 0.42);
+    if (melee > 10) this.cue("clash", dur * 0.52);
+    if (this.charge || order === "kanat" || order === "ricat") this.cue("hoof", 0);
     for (let k = 0; k < 16; k++) this.puffs.push({ x: front + (Math.random() - 0.5) * 0.14, y: 0.1 + Math.random() * 0.8, vx: (Math.random() - 0.5) * 0.08, vy: -Math.random() * 0.12, t0: now + dur * (0.3 + Math.random() * 0.2), life: 900, kind: "dust" });
     this.puffs = this.puffs.filter((p) => now - p.t0 < p.life).slice(-160);
     this.floats = this.floats.filter((f) => now - f.t0 < 1400).slice(-24);
