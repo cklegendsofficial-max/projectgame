@@ -3175,6 +3175,13 @@ export class Hud {
       c.lineTo(f.x * sx - 3.5, f.y * sy + 2.5);
       c.fill();
     }
+    for (const sc of g.s.scars ?? []) {
+      if (!sc.w) continue;
+      c.fillStyle = "#3a2410";
+      c.fillRect(sc.x * sx - 0.5, sc.y * sy - 7, 1.5, 8);
+      c.fillStyle = "#f2e6c8";
+      c.fillRect(sc.x * sx + 1, sc.y * sy - 7, 5, 3.5);
+    }
     const wanted = new Set(g.s.bounties.filter((b) => b.taken).map((b) => b.camp));
     g.s.camps.forEach((cp, i) => {
       if (!cp.alive || (!g.isExplored(cp.x, cp.y) && !wanted.has(i))) return;
