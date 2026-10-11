@@ -1217,7 +1217,7 @@ export class Hud {
   }
 
   private pushToast(el: HTMLElement, ms: number, first = false): void {
-    if (this.toasts.children.length >= (this.narrow.matches ? 2 : 3)) {
+    if (this.covered || this.toasts.children.length >= (this.narrow.matches ? 2 : 3)) {
       if (first) this.toastQ.unshift({ el, ms });
       else this.toastQ.push({ el, ms });
       if (this.toastQ.length > 8) this.toastQ.splice(this.toastQ.findIndex((q) => !q.el.classList.contains("qdone")) >>> 0, 1);
@@ -1323,6 +1323,7 @@ export class Hud {
     }
     this.storyOpen = true;
     this.close();
+    opts = [...opts.filter((o) => !o.cls.includes("off")), ...opts.filter((o) => o.cls.includes("off"))];
     const el = document.createElement("div");
     el.className = "battle";
     el.innerHTML = `<div class="bbox story choice">${this.listenBtn()}<img class="simg" src="${assetUrl(img)}" alt=""><h2>${title}</h2><p>${html}</p>${opts.map((o, i) => `<button class="btn big ${o.cls}" data-i="${i}">${o.label}</button>`).join("")}</div>`;
@@ -3193,6 +3194,10 @@ export class Hud {
     if (now - this.miniT > 400) {
       this.miniT = now;
       this.drawMini();
+      if (this.toastQ.length && !this.covered && this.toasts.children.length < (this.narrow.matches ? 2 : 3)) {
+        const n = this.toastQ.shift()!;
+        this.pushToast(n.el, n.ms, true);
+      }
     }
   }
 

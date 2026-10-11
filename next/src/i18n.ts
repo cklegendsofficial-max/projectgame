@@ -685,6 +685,7 @@ const EN: Record<string, string> = {
   "Kuşatmada surları döv, lağım kaz, aç bırak ya da elçi gönder; hazır olunca hücum et. Ödül: altın, taş, şöhret, TP, eşya; kale her gün {n} altın vergi toplar.": "In the siege, bombard the walls, dig saps, starve them or send envoys; assault when ready. Reward: gold, stone, renown, XP, an item; the fortress collects {n} gold in taxes each day.",
   "Mancınık kur": "Build catapult",
   "Kuşat!": "Besiege!",
+  "Destan seni bekliyor": "Your saga awaits",
   "stat puanı": "stat points",
   "yetenek puanı": "talent points",
   "beceri puanı": "skill points",

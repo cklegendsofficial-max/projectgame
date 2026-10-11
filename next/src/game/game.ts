@@ -1333,6 +1333,7 @@ export class Game {
 
   private tipT = 0;
   private tipGap = 20;
+  private chSeen: { key: string; t: number } | null = null;
 
   /** Her biri bir kez gösterilen bağlamsal ipuçları; iki ipucu arasında en az 45 sn. */
   private tipTick(dt: number): void {
@@ -1356,7 +1357,20 @@ export class Game {
       ["arazi", () => s.kills >= 15, "u_cavalry", "Savaş yeri önemlidir: bozkırda atlılar, dağda okçular, çayırda mızraklılar güçlenir. Geceleri oklar şaşar.", null],
     ];
     const next = tips.find(([id, cond]) => !seen.includes(id) && cond());
-    if (!next) return;
+    if (!next) {
+      const ch = s.free ? this.chapter() : null;
+      const key = ch ? `destan:${this.sagaLabel()}` : "";
+      if (!ch || seen.includes(key)) return;
+      if (this.chSeen?.key !== key) this.chSeen = { key, t: s.time };
+      if (s.time - this.chSeen.t < DAY_SEC * 2) return;
+      seen.push(key);
+      this.tipGap = 45;
+      this.hud.tip(ch.img, `<b>${tr("Destan seni bekliyor")}: ${tr(ch.title)}</b><br>${tr(ch.goal)}`, () => {
+        const p = ch.goto(this);
+        if (p) this.cam.flyTo(p.x, p.y, Math.max(this.cam.zoom, 0.65));
+      });
+      return;
+    }
     const [id, , icon, text, open] = next;
     seen.push(id);
     this.tipGap = 45;
