@@ -3646,6 +3646,12 @@ export class Game {
   private applyBattle(res: BattleResult, enemy: Army, boss: Boss | null, after: (win: boolean) => string, tline: string, before: Army, title: string): { xp: number; lvUp: boolean; note: string } {
     const h = this.s.hero;
     if (res.orders.includes("ricat")) this.s.c.turan = (this.s.c.turan ?? 0) + 1;
+    const dead = armySize(res.lostA) + armySize(res.lostB);
+    if (!this.deep && !this.delve && dead >= 4) {
+      const sc = (this.s.scars ??= []);
+      sc.push({ x: Math.round(h.x), y: Math.round(h.y), t: this.s.time, n: dead });
+      if (sc.length > 12) sc.shift();
+    }
     h.army = { ...res.rounds[res.rounds.length - 1].a };
     h.hp = Math.max(1, res.heroHp);
     h.skills.silah += 6 * (res.rounds.length - 2);

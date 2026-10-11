@@ -210,6 +210,8 @@ export interface GameState {
   mapW?: number;
   /** Gösterilmiş bağlamsal ipuçları. */
   tips?: string[];
+  /** Haritadaki taze savaş yerleri: t savaş anı (s.time), n toplam ölü. */
+  scars?: { x: number; y: number; t: number; n: number }[];
   res: Res;
   resAt: number;
   buildings: Record<BuildingId, { lv: number; until: number }>;

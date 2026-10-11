@@ -2,7 +2,7 @@ import { Application, Assets, Container, Graphics, Rectangle, Sprite, Text, Text
 import { CITIES, GH, GW, H, NH, NW, TW, W, type World } from "../world/gen";
 import type { Camera } from "./camera";
 import type { Game } from "../game/game";
-import { CITY_NAME, NODE_SPRITE, armySize } from "../game/data";
+import { CITY_NAME, DAY_SEC, NODE_SPRITE, armySize } from "../game/data";
 import { CAPITAL, SLAVE_RADIUS } from "../game/state";
 import { FACTIONS, citiesOf, type FactionId } from "../game/factions";
 import { nemName } from "../game/nemesis";
@@ -230,10 +230,12 @@ export class WorldView {
     this.layer.addChild(this.deco);
     this.layer.addChild(this.seasonG);
     this.buildPlaces();
+    this.layer.addChild(this.scarG);
     this.layer.addChild(this.places);
     this.layer.addChild(this.labels);
     this.layer.addChild(this.units);
     this.layer.addChild(this.fxG);
+    this.layer.addChild(this.scarAirG);
     this.glow = this.glowTex();
     this.layer.addChild(this.stormC);
     this.buildAmbience();
@@ -893,6 +895,45 @@ export class WorldView {
     this.units.addChild(c);
   }
 
+  private scarG = new Graphics();
+  private scarAirG = new Graphics();
+
+  /** Taze savaş yerleri: kararmış toprak, tüten duman, dönen leş kargaları; üç günde silinir. */
+  private drawScars(game: Game): void {
+    const g = this.scarG.clear();
+    const air = this.scarAirG.clear();
+    const s = game.s;
+    if (!s.scars?.length) return;
+    const life = DAY_SEC * 3;
+    s.scars = s.scars.filter((c) => s.time - c.t < life);
+    for (const [i, c] of s.scars.entries()) {
+      if (!game.isExplored(c.x, c.y)) continue;
+      const age = (s.time - c.t) / life;
+      const fade = 1 - age * age;
+      const r = 26 + Math.min(40, Math.sqrt(c.n) * 4);
+      g.ellipse(c.x, c.y + 6, r, r * 0.45).fill({ color: 0x2a1a0c, alpha: 0.32 * fade });
+      g.ellipse(c.x - r * 0.3, c.y + 4, r * 0.45, r * 0.18).fill({ color: 0x1a0e06, alpha: 0.28 * fade });
+      for (let k = 0; k < 5; k++) {
+        const a = i * 2.3 + k * 1.7;
+        g.rect(c.x + Math.cos(a) * r * 0.7, c.y + 6 + Math.sin(a) * r * 0.3, 3, 1.5).fill({ color: 0x5a4632, alpha: 0.7 * fade });
+      }
+      if (age < 0.6) {
+        for (let k = 0; k < 6; k++) {
+          const ph = (this.time * 0.35 + k / 6 + i * 0.13) % 1;
+          const sx = c.x + Math.sin(ph * 5 + k) * 5 + ph * 14;
+          air.circle(sx, c.y - ph * 70, 6 + ph * 16).fill({ color: 0x4a4540, alpha: 0.4 * (1 - ph) * (1 - age / 0.6) });
+        }
+      }
+      const crows = c.n >= 20 ? 4 : 2;
+      for (let k = 0; k < crows; k++) {
+        const a = this.time * (0.7 + k * 0.13) + (k * Math.PI * 2) / crows + i;
+        const cx = c.x + Math.cos(a) * (r + 10), cy = c.y - 50 + Math.sin(a) * (r + 10) * 0.35;
+        const fl = Math.sin(this.time * 9 + k * 2) * 3;
+        air.moveTo(cx - 7, cy - fl).lineTo(cx, cy + 1).lineTo(cx + 7, cy - fl).stroke({ color: 0x140c08, width: 2.2, alpha: 0.9 * fade });
+      }
+    }
+  }
+
   private birdC: Container | null = null;
   private birdKind = "";
 
@@ -1053,6 +1094,7 @@ export class WorldView {
     if (this.trail.length > 400) this.trail.splice(0, this.trail.length - 400);
     this.drawBird(game, inv);
     this.drawMongol(game, inv);
+    this.drawScars(game);
     s.comps.forEach((id, i) => {
       let c = this.compM.get(id);
       if (!c) {
