@@ -1095,6 +1095,24 @@ export class Hud {
     setTimeout(drop, ttl);
   }
 
+  levelUp(lv: number, gains: string[], open: () => void): void {
+    this.root.querySelector(".lvup")?.remove();
+    const el = document.createElement("div");
+    el.className = "lvup";
+    el.innerHTML = `<div class="lvrays"></div><small>${t("Seviye atladın!")}</small><b>${lv}</b><ul>${gains.map((g, i) => `<li style="animation-delay:${0.45 + i * 0.12}s">${g}</li>`).join("")}</ul><em>${t("Puanları dağıt")} ›</em>`;
+    const drop = () => {
+      el.classList.add("out");
+      setTimeout(() => el.remove(), 450);
+    };
+    el.addEventListener("click", () => {
+      drop();
+      open();
+    });
+    this.root.appendChild(el);
+    audio.play("level");
+    setTimeout(drop, 5200);
+  }
+
   menuTo(tab: string): void {
     this.closeMenu();
     if (this.storyOpen) return;

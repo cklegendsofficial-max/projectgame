@@ -1,0 +1,44 @@
+import { chromium } from "playwright-core";
+
+const mode = process.argv[2] ?? "desk";
+const cls = process.argv[3] ?? "alp";
+const out = `playtest/lvup-${mode}-${cls}`;
+const browser = await chromium.launch({ channel: "msedge", headless: true, args: ["--enable-gpu", "--ignore-gpu-blocklist", "--use-angle=d3d11"] });
+const vp = mode === "mob" ? { width: 390, height: 844 } : { width: 1280, height: 720 };
+const page = await browser.newPage({ viewport: vp, deviceScaleFactor: mode === "mob" ? 2 : 1 });
+const errs: string[] = [];
+page.on("pageerror", (e) => errs.push(e.message));
+page.on("console", (m) => m.type() === "error" && errs.push(m.text()));
+await page.goto("http://localhost:5174/");
+await page.evaluate(() => localStorage.clear());
+await page.reload();
+await page.waitForFunction(() => !document.getElementById("loading"), null, { timeout: 60000 });
+const ev = <T = unknown>(fn: string) => page.evaluate(`(() => { const g = window.game; ${fn} })()`) as Promise<T>;
+const check = (ok: boolean, what: string) => console.log(ok ? "OK  " : "FAIL", what);
+await page.locator(`.ccard[data-c="${cls}"]`).click();
+await page.locator(".cname .btn").click();
+for (let k = 0; k < 5 && (await page.locator(".battle .bbox.story .btn").count()); k++) {
+  await page.locator(".battle .bbox.story .btn").first().click();
+  await page.waitForTimeout(250);
+}
+await ev(`g.cam.zoom = 1.4;`);
+await ev(`g.addXp(1);`);
+await page.waitForTimeout(400);
+check((await page.locator(".lvup").count()) === 0, "seviye atlamadan kart yok");
+await ev(`g.battleLock = true; g.addXp(4000);`);
+await page.waitForTimeout(500);
+check((await page.locator(".lvup").count()) === 0, "savaş sürerken bekler");
+await ev(`g.battleLock = false;`);
+await page.waitForSelector(".lvup", { timeout: 3000 });
+await page.waitForTimeout(1300);
+await page.screenshot({ path: `${out}-01.png` });
+const lv = await ev<number>(`return g.s.hero.lv;`);
+const txt = (await page.locator(".lvup").textContent()) ?? "";
+check(txt.includes(String(lv)) && lv >= 3, `kartta seviye ${lv}`);
+check(txt.includes(`+${3 * (lv - 1)}`), "stat puanı toplamı");
+await page.locator(".lvup").click();
+await page.waitForTimeout(600);
+check((await page.locator(".tabs .tab.on").count()) > 0, "tıklayınca kahraman paneli");
+check((await page.locator(".lvup").count()) === 0, "kart kapandı");
+console.log("errors:", errs);
+await browser.close();

@@ -1309,6 +1309,7 @@ export class Game {
     this.seraiVisit();
     this.sideTick();
     this.tipTick(dt);
+    this.lvTick();
     this.saveT += dt;
     if (this.saveT > 8) {
       this.saveT = 0;
@@ -3742,6 +3743,7 @@ export class Game {
     xp = Math.round(xp * (1 + this.compMods().xp + 0.2 * this.tal("efsane") + 0.1 * this.tal("tengri") + (this.gearMods().xp ?? 0) + (hasLegacy("ozan") ? 0.15 : 0)));
     h.xp += xp;
     let up = false;
+    const lv0 = h.lv;
     while (h.xp >= xpNeed(h.lv)) {
       h.xp -= xpNeed(h.lv);
       h.lv++;
@@ -3752,7 +3754,25 @@ export class Game {
       up = true;
       if (h.lv % 10 === 0) this.chron(`${h.lv}. baharını gören kılıç: ${h.name} artık ${h.lv >= 30 ? "hanlara denk" : h.lv >= 20 ? "beylere denk" : "alplara denk"} sayılıyor.`);
     }
+    if (up) this.lvQ ??= lv0;
     return up;
+  }
+
+  private lvQ: number | null = null;
+
+  /** Seviye atlama sunumu: savaş ekranı kapanınca altın sütun + başlık kartı. */
+  private lvTick(): void {
+    if (this.lvQ === null || this.battleLock || this.hud.battleOpen) return;
+    const h = this.s.hero, n = h.lv - this.lvQ;
+    this.lvQ = null;
+    const gains = [`+${3 * n} ${tr("stat puanı")}`, `+${n} ${tr("yetenek puanı")}`];
+    const sp = Array.from({ length: n }, (_, k) => h.lv - k).filter((l) => l >= 3).length;
+    if (sp) gains.push(`+${sp} ${tr("beceri puanı")}`);
+    gains.push(tr("Can tamamen doldu"));
+    const opened = this.classSkills().filter((k) => k.unlock > h.lv - n && k.unlock <= h.lv).map((k) => tr(k.name));
+    if (opened.length) gains.push(`${tr("Yeni beceri")}: ${opened.join(", ")}`);
+    this.view.levelUpFx();
+    this.hud.levelUp(h.lv, gains, () => this.hud.menuTo("beceri"));
   }
 
   odds(enemy: Army, bonus = 0, boss: Boss | null = null): number {

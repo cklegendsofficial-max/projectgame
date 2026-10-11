@@ -897,6 +897,11 @@ export class WorldView {
 
   private scarG = new Graphics();
   private scarAirG = new Graphics();
+  private lvAt = -99;
+
+  levelUpFx(): void {
+    this.lvAt = this.time;
+  }
 
   /** Taze savaş yerleri: kararmış toprak, tüten duman, dönen leş kargaları; üç günde silinir. */
   private drawScars(game: Game): void {
@@ -1445,6 +1450,21 @@ export class WorldView {
     }
 
     this.fxG.clear();
+    const lk = (this.time - this.lvAt) / 2.6;
+    if (lk >= 0 && lk < 1) {
+      const hx = s.hero.x, hy = s.hero.y, a = 1 - lk;
+      const w = 26 * (1 - lk * 0.6);
+      this.fxG.rect(hx - w, hy - 520, w * 2, 510).fill({ color: 0xffd56a, alpha: 0.22 * a });
+      this.fxG.rect(hx - w * 0.35, hy - 520, w * 0.7, 510).fill({ color: 0xfff4c8, alpha: 0.4 * a });
+      for (let k = 0; k < 3; k++) {
+        const q = (lk * 1.6 + k / 3) % 1;
+        this.fxG.ellipse(hx, hy + 4, 20 + q * 90, 8 + q * 34).stroke({ color: 0xffd56a, width: 4, alpha: 0.8 * (1 - q) * a });
+      }
+      for (let k = 0; k < 14; k++) {
+        const q = (lk * 1.3 + k * 0.071) % 1;
+        this.fxG.circle(hx + Math.sin(k * 2.4 + this.time * 2) * 26, hy - q * 160, 2.5).fill({ color: 0xfff0b0, alpha: (1 - q) * a });
+      }
+    }
     if (!s.free) this.fxG.circle(CAPITAL.x, CAPITAL.y, SLAVE_RADIUS).stroke({ color: 0xff6a4a, width: 4, alpha: 0.35 + Math.sin(this.time * 2) * 0.1 });
     if (s.raid) {
       const v = s.villages[s.raid.v];
