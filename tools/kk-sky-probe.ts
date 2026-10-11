@@ -46,6 +46,7 @@ for (const [kind, label] of [["kum", "Kum fırtınası"], ["yagmur", "Sağanak"]
 }
 const scars = await ev<{ x: number; y: number; n: number }[]>(`return g.s.scars ?? [];`);
 check(scars.length >= 2, `savaş izleri kaydedildi (${scars.length})`);
+check((await ev<number>(`return g.s.rec?.fights ?? 0;`)) >= 2, "savaş karnesi sayıyor");
 await ev(`const c = g.s.scars[0]; g.s.hero.x = c.x + 160; g.s.hero.y = c.y + 60; g.cam.flyTo(c.x, c.y, 1.8); g.cam.x = c.x; g.cam.y = c.y; g.cam.zoom = 1.8;`);
 await page.waitForTimeout(1500);
 await page.screenshot({ path: `${out}-03-scar.png` });

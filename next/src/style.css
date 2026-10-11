@@ -162,6 +162,18 @@ body.nomini .mini { display: none; }
 .tipc .x { position: absolute; top: 3px; right: 5px; background: none; border: 0; color: #9ab; font-size: 16px; cursor: pointer; padding: 0 3px; }
 @keyframes tipin { from { opacity: 0; transform: translateX(40px); } }
 @media (max-width: 700px) { .tipc { top: 92px; right: 8px; } }
+.rec { display: flex; gap: 12px; align-items: center; margin: 4px 0 6px; }
+.rring { --p: 0; flex: none; width: 78px; height: 78px; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: radial-gradient(#24160a 58%, transparent 59%), conic-gradient(#ffd56a calc(var(--p) * 1%), #5a2a1a 0); box-shadow: 0 0 10px #0008; }
+.rring b { font: 700 19px Georgia, serif; color: #ffe7a8; line-height: 1; }
+.rring small { font-size: 10px; opacity: .75; }
+.rgrid { flex: 1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.rgrid div { display: flex; flex-direction: column; padding: 4px 6px; border-radius: 8px; background: #0003; font-size: 10.5px; line-height: 1.2; opacity: .9; }
+.rgrid b { font: 700 15px Georgia, serif; color: #ffe7a8; }
+.rgrid b.good { color: #8fe08a; }
+.rgrid b.bad { color: #ff8a6a; }
+.rbest { display: flex; gap: 8px; align-items: center; padding: 6px 9px; margin-bottom: 6px; border-radius: 10px; background: linear-gradient(90deg, #5a3a14aa, #0000); border-left: 3px solid #ffd56a; font-size: 12.5px; }
+.rbest .ni, .rbest img { width: 26px; height: 26px; }
+.rbest small { display: block; font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: #ffd56a; }
 .lvup { position: absolute; left: 50%; top: 26%; z-index: 7; transform: translateX(-50%); width: 260px; padding: 16px 18px 12px; text-align: center; border-radius: 16px; cursor: pointer; color: #fff4d6; background: radial-gradient(circle at 50% 30%, #6a4314f2, #24160af2 70%); border: 2px solid #ffd56a; box-shadow: 0 0 0 3px #3a240c, 0 10px 40px #000c, 0 0 40px #ffd56a55; animation: lvin .7s cubic-bezier(.2, 1.5, .4, 1); transition: opacity .4s, transform .4s; overflow: hidden; }
 .lvup.out { opacity: 0; transform: translateX(-50%) translateY(-20px) scale(.9); }
 .lvup > * { position: relative; }

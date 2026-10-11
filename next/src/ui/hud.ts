@@ -1095,6 +1095,21 @@ export class Hud {
     setTimeout(drop, ttl);
   }
 
+  private recHtml(): string {
+    const s = this.g.s, r = s.rec;
+    if (!r?.fights) return "";
+    const pct = Math.round((100 * r.wins) / r.fights);
+    const duels = s.c.duels ?? 0;
+    return (
+      `<h3>${ic("swords")} ${t("Savaş karnesi")}</h3><div class="rec">` +
+      `<div class="rring" style="--p:${pct}"><b>${pct}%</b><small>${t("zafer")}</small></div><div class="rgrid">` +
+      `<div><b>${r.fights}</b>${t("savaş")}</div><div><b class="good">${r.wins}</b>${t("zafer")}</div><div><b class="bad">${r.fights - r.wins}</b>${t("yenilgi")}</div>` +
+      `<div><b class="good">${r.routs}</b>${t("bozgun ettin")}</div><div><b class="bad">${r.routed}</b>${t("bozguna uğradın")}</div><div><b>${duels}/${r.duelTry}</b>${t("er meydanı")}</div>` +
+      `<div><b>${s.kills}</b>${t("yere serilen")}</div></div></div>` +
+      (r.best ? `<div class="rbest">${ic("trophy")}<span><small>${t("En büyük zafer")}</small>${r.best.title} · ${t("{n} düşman", { n: r.best.n })} · ${t("Gün")} ${r.best.day}</span></div>` : "")
+    );
+  }
+
   levelUp(lv: number, gains: string[], open: () => void): void {
     this.root.querySelector(".lvup")?.remove();
     const el = document.createElement("div");
@@ -2673,8 +2688,9 @@ export class Hud {
           const prim = cl.primary.includes(k);
           return `<div class="srow ${prim ? "prim" : ""}">${ic(STAT_INFO[k].icon, "gimg")}<div class="bi2"><b>${prim ? "★ " : ""}${STAT_INFO[k].name} <em>${h.stats[k]}${bonus ? ` +${bonus}` : ""}</em></b><small>${STAT_INFO[k].desc}</small></div><button class="btn sm plus ${h.points > 0 ? "" : "off"}" data-a="${this.act(() => g.statUp(k))}">+</button></div>`;
         }).join("") +
-        `<h3>${t("Savaş")}</h3><div class="stats"><div>${ic("swords")}${t("Saldırı")} <b>${g.heroAtk().toFixed(1)}</b></div><div>${ic("shield")}${t("Savunma")} <b>${g.heroDef().toFixed(1)}</b></div><div>${t("Can")} <b>${Math.floor(h.hp)}/${g.maxHp()}</b></div><div>${t("Enerji")} <b>${Math.floor(h.energy)}/${g.maxEnergy()}</b></div><div>${ic("tug")}${t("Birlik sınırı")} <b>${g.heroCap()}</b></div><div>${ic("j_caravan")}${t("Yük")} <b>${g.carryCap()}</b></div><div>${ic("crown")}${t("Şöhret")} <b>${s.renown}</b></div></div>
-        <h3>${t("Beceriler")}</h3>` +
+        `<h3>${t("Savaş")}</h3><div class="stats"><div>${ic("swords")}${t("Saldırı")} <b>${g.heroAtk().toFixed(1)}</b></div><div>${ic("shield")}${t("Savunma")} <b>${g.heroDef().toFixed(1)}</b></div><div>${t("Can")} <b>${Math.floor(h.hp)}/${g.maxHp()}</b></div><div>${t("Enerji")} <b>${Math.floor(h.energy)}/${g.maxEnergy()}</b></div><div>${ic("tug")}${t("Birlik sınırı")} <b>${g.heroCap()}</b></div><div>${ic("j_caravan")}${t("Yük")} <b>${g.carryCap()}</b></div><div>${ic("crown")}${t("Şöhret")} <b>${s.renown}</b></div></div>` +
+        this.recHtml() +
+        `<h3>${t("Beceriler")}</h3>` +
         SKILL_KEYS.map((k) => {
           const xp = h.skills[k];
           const lv = skillLv(xp);

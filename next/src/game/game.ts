@@ -55,7 +55,7 @@ import { RIDDLES as RUIN_RIDDLES, ROOM_INFO, RUIN_KINDS, RUIN_LETTERS, RUIN_SPIR
 import { BASE_TRAIT, HEIRS, RULER_TRAITS, type RulerTrait, DROUGHT_DAYS, ERAS, PEACE_GAP, RIOT_AT, SAFE_CITIES, SHORT_MAX, STYLE_NAME, WAR_CAUSES, WAR_CHANCE, WAR_MAX_DAYS, WAR_MIN_DAY, WAR_PAIRS, WAR_TAKE, WOLF_MAX, WOLF_PACK_AT, WOLF_SACRED, adaptWeights, counterOf, eraOf, favTactic, lifeStyle, moonKind, moonPhase, newWorld, noteTactic, realFest, shortMult, styleMix, warKey, type Captive, type Omen, type Style, type War, type WorldState } from "./world";
 import { CLASS_BY_ID, CLASS_SKILLS, SKILL_MAX, WEAPON_NAME, WEAPON_STAT, skillPow, skillRank, type ClassDef, type ClassId, type ClassSkill, type WeaponKind } from "./classes";
 import { ACT2, ACT3, CHAPTERS, COMP_BY_ID, COMP_MAX, ENDINGS, ERLIK, ERLIK_SHADE, FORT_GUARD, GATE_GUARD, KARA_HAN, KASIM, KOK_BORU, PEAK_GUARD, SHADE_GUARD, endingOf, type Chapter, type CompId, type CompMods, type Companion } from "./story";
-import { CAPITAL, SLAVE_RADIUS, banditArmy, campGarrison, importSave, kurganBoss, kurganGuard, loadGame, saveGame as rawSave, useSlot, wipeGame, type Bandit, type Bounty, type Caravan, type Contract, type GameState, type Storm } from "./state";
+import { CAPITAL, SLAVE_RADIUS, banditArmy, campGarrison, importSave, kurganBoss, kurganGuard, loadGame, saveGame as rawSave, useSlot, wipeGame, type Bandit, type BattleRec, type Bounty, type Caravan, type Contract, type GameState, type Storm } from "./state";
 
 export type Target =
   | { kind: "village" | "camp" | "node" | "ruin" | "city" | "bandit" | "kurgan" | "caravan" | "rival" | "kale"; i: number }
@@ -3636,6 +3636,7 @@ export class Game {
     if (!settings.duel || auto || boss || !field || armySize(enemy) < DUEL_MIN || armySize(h.army) < 10 || Math.random() > 0.6) return show();
     const zone = Math.max(0.08, Math.min(0.24, 0.15 + this.stat("cev") * 0.008 - Math.min(0.05, armySize(enemy) / 2000)));
     this.hud.duel(title, oneOf(DUEL_FOES), "j_bandit", zone, (hits) => {
+      if (hits >= 0) this.battleRec().duelTry++;
       if (hits >= 2) {
         sim.opening(100, hits === 3 ? 55 : 68, "Er meydanını kazandın!");
         this.s.c.duels = (this.s.c.duels ?? 0) + 1;
@@ -3653,6 +3654,12 @@ export class Game {
       sc.push({ x: Math.round(h.x), y: Math.round(h.y), t: this.s.time, n: dead });
       if (sc.length > 12) sc.shift();
     }
+    const rec = this.battleRec();
+    rec.fights++;
+    if (res.win) rec.wins++;
+    if (res.rout === "b") rec.routs++;
+    if (res.rout === "a") rec.routed++;
+    if (res.win && armySize(enemy) > (rec.best?.n ?? 0)) rec.best = { n: armySize(enemy), title, day: this.dayOf().day };
     h.army = { ...res.rounds[res.rounds.length - 1].a };
     h.hp = Math.max(1, res.heroHp);
     h.skills.silah += 6 * (res.rounds.length - 2);
@@ -3697,6 +3704,10 @@ export class Game {
     }
     const note = [tline, extra || fled, routNote, revived ? `Ruh Çağrısı: ${revived} asker hayata döndü` : "", vetNote].filter(Boolean).join("<br>");
     return { xp, lvUp, note };
+  }
+
+  battleRec(): BattleRec {
+    return (this.s.rec ??= { fights: 0, wins: 0, routs: 0, routed: 0, duelTry: 0, best: null });
   }
 
   private vetsAfter(before: Army, res: BattleResult, title: string): string {

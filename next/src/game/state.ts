@@ -205,6 +205,15 @@ export interface Counters {
   duels: number;
 }
 
+export interface BattleRec {
+  fights: number;
+  wins: number;
+  routs: number;
+  routed: number;
+  duelTry: number;
+  best: { n: number; title: string; day: number } | null;
+}
+
 export interface GameState {
   v: number;
   mapW?: number;
@@ -212,6 +221,7 @@ export interface GameState {
   tips?: string[];
   /** Haritadaki taze savaş yerleri: t savaş anı (s.time), n toplam ölü. */
   scars?: { x: number; y: number; t: number; n: number }[];
+  rec?: BattleRec;
   res: Res;
   resAt: number;
   buildings: Record<BuildingId, { lv: number; until: number }>;
