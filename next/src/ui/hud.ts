@@ -5,7 +5,7 @@ import { BattleField } from "./battleField";
 import { SpiritView, type Realm } from "./spirit";
 import { openDestan } from "./destan";
 import { CityScene, JourneyView, type CitySceneData } from "./journey";
-import { GOODS, GOOD_KEYS, PLUS_CHANCE, SKILL_INFO, SKILL_KEYS, SLOTS, SLOT_NAME, STAT_INFO, STAT_KEYS, canPlus, itemStats, kindName, plusCost, skillLv, skillNext, type Item, type Slot } from "../game/rpg";
+import { GOODS, GOOD_KEYS, PLUS_CHANCE, RARITY, SKILL_INFO, SKILL_KEYS, SLOTS, SLOT_NAME, STAT_INFO, STAT_KEYS, canPlus, itemStats, kindName, plusCost, skillLv, skillNext, type Item, type Slot } from "../game/rpg";
 import { ARMOR_NAME, CLASSES, SKILL_MAX, WEAPON_NAME, skillPow, skillRank, type ClassId } from "../game/classes";
 import { CAPITAL, SAVE_SLOTS, curSlot, exportSave, kurganBoss, slotInfo } from "../game/state";
 import { applyUi, haptic, saveSettings, settings, toggleFullscreen } from "../settings";
@@ -14,7 +14,7 @@ import { BRANCHES, BRANCH_KEYS, ROW_NEED, TALENTS, branchSpent } from "../game/t
 import { CONSUMABLES, CONS_BY_ID, CRAFT_SLOTS, REFINES, gearCost, type Cost, type Mat } from "../game/crafting";
 import { SIDE_TEXT, type SideQuest } from "../game/sidequests";
 import { CITY_NAME } from "../game/data";
-import { COMPANIONS, COMP_BY_ID, COMP_MAX, ERLIK, FORT_GUARD, GATE_GUARD, KARA_HAN, ENDINGS, KOK_BORU, PEAK_GUARD, endingOf, type CompId } from "../game/story";
+import { ACT2, ACT3, CHAPTERS, COMPANIONS, COMP_BY_ID, COMP_MAX, ERLIK, FORT_GUARD, GATE_GUARD, KARA_HAN, ENDINGS, KOK_BORU, PEAK_GUARD, endingOf, type CompId } from "../game/story";
 import { LEGACY_PERKS, legacy } from "../game/legacy";
 import { HERD_BUY, HERD_GOLD, HERD_MAX, MOVE_FOOD, OTAG_GOLD, OTAG_WOOD, REST_FOOD, ZONE_DESC, ZONE_NAME, bestZone, zoneOf } from "../game/otag";
 import { VET_LV_MAX, VET_MAX, VET_RANKS, vetBonus, vetTitle } from "../game/vets";
@@ -79,7 +79,7 @@ const RIVAL_CSS: Record<string, string> = { peace: "#e8d39a", ally: "#6fe07a", w
 /** Uzun hikâye metnini paragraf sınırlarından en çok üç sayfaya böler. */
 function storyPages(html: string): string[] {
   const plain = (s: string) => s.replace(/<[^>]+>/g, "").length;
-  if (plain(html) < 520) return [html];
+  if (!settings.pages || plain(html) < 520) return [html];
   const paras = html.split(/(?:<br\s*\/?>\s*){2,}/);
   if (paras.length < 2) return [html];
   const pages: string[] = [];
@@ -1418,7 +1418,7 @@ export class Hud {
     el.innerHTML = `<div class="bbox tbox"><h2>${ic("swords")} ${title}</h2>
       <div class="tfoe">${ic(boss?.icon ?? "j_bandit", "bp" + (boss ? " boss" : ""))}<div><b>${boss?.name ?? foe}</b>${armySize(enemy) ? armyHtml(enemy) : ""}</div></div>
       ${intel}
-      ${field ? `<div class="tground g-${field.ground}">${ic(GROUNDS[field.ground].icon)}<div><b>${t(GROUNDS[field.ground].name)}${field.night ? ` · ${t("Gece")}` : ""}</b><small>${t(GROUNDS[field.ground].text)}${field.night ? ` ${t("Karanlıkta oklar şaşar: okçu -%25.")}` : ""}${field.sky ? `<span class="sky">${t(SKIES[field.sky].name)}: ${t(SKIES[field.sky].text)}</span>` : ""}</small></div></div>` : ""}
+      ${field ? `<div class="tground g-${field.ground}">${ic(GROUNDS[field.ground].icon)}<div><b>${t(GROUNDS[field.ground].name)}${field.night ? ` · ${t("Gece")}` : ""}</b><small>${t(GROUNDS[field.ground].text)}${field.night ? ` ${t("Karanlıkta oklar şaşar: okçu -%25.")}` : ""}${field.sky ? `<span class="sky">${t(SKIES[field.sky].name)}: ${t(SKIES[field.sky].text)}</span>` : ""}${field.note ? `<span class="lairn">⚑ ${t(field.note)}</span>` : ""}</small></div></div>` : ""}
       <div class="tacts">${opts
         .map((o) => {
           const T = TACTICS[o.t];
@@ -1498,7 +1498,28 @@ export class Hud {
             : "";
       return `<div class="ufk ${x.kind}">${ic(x.icon, "gimg")}<div class="bi2"><small>${KIND[x.kind]}</small><b>${x.title}</b><span>${x.text}</span></div>${go ? `<button class="btn sm go" data-a="${go}">${x.at && !x.open ? t("Git") : t("Aç")}</button>` : ""}</div>`;
     }).join("");
-    return `<p class="dim">${t("Bozkırda yön bulmak zordur. Ufuk, şu an en çok işine yarayacak adımları gösterir.")}</p>${rows || `<p>${t("Ufuk sakin. Keşfe çık, yeni şehirler gör.")}</p>`}${g.s.free ? this.pulseHtml() : ""}`;
+    return `<p class="dim">${t("Bozkırda yön bulmak zordur. Ufuk, şu an en çok işine yarayacak adımları gösterir.")}</p>${rows || `<p>${t("Ufuk sakin. Keşfe çık, yeni şehirler gör.")}</p>`}${g.s.free ? this.pathHtml() + this.pulseHtml() : ""}`;
+  }
+
+  /** Köleden hakana uzanan büyük yolun kilometre taşları. */
+  private pathHtml(): string {
+    const s = this.g.s;
+    const owned = Object.keys(s.owned).length;
+    const steps: [string, string, number, number][] = [
+      ["Hürriyet", "heroes/slave", 1, 1],
+      ["Kara Tamga Destanı", "scroll", s.story.done ? CHAPTERS.length : s.story.ch, CHAPTERS.length],
+      ["Kendi beyliğin", "tug", s.beylik ? 1 : 0, 1],
+      ["İpek Yolu'nun Efendisi", "map/serai", Math.min(LORD_SERAIS, this.g.seraiCount()), LORD_SERAIS],
+      ["Erlik Destanı", "scroll", s.act2.done ? ACT2.length : s.story.done ? s.act2.ch : 0, ACT2.length],
+      ["Beş şehre hükmet", "crown", Math.min(5, owned), 5],
+      ["Gök Tengri Destanı", "tr_star", s.act3.ending ? ACT3.length : s.act2.done ? s.act3.ch : 0, ACT3.length],
+    ];
+    const next = steps.findIndex(([, , v, n]) => v < n);
+    const rows = steps.map(([name, icon, v, n], i) => {
+      const done = v >= n;
+      return `<div class="bpath${done ? " done" : i === next ? " now" : ""}">${ic(icon, "ni")}<b>${t(name)}</b><span class="bpbar"><i style="width:${Math.round((v / n) * 100)}%"></i></span><small>${done ? "✓" : `${v}/${n}`}</small></div>`;
+    }).join("");
+    return `<h3>${ic("tr_star")} ${t("Büyük Yol")}</h3><div class="bpaths">${rows}</div>`;
   }
 
   /** Dünyanın nabzı: oyuncudan bağımsız dönen savaşlar, kıtlıklar, doğa ve çağ. */
@@ -2253,7 +2274,7 @@ export class Hud {
     const g = this.g;
     const cur = curSlot();
     const pct = (v: number) => Math.round(v * 100);
-    const toggle = (k: "eco" | "mini" | "haptic" | "narrate" | "dynMusic" | "cine" | "duel" | "tips" | "spoils", label: string, note = "") =>
+    const toggle = (k: "eco" | "mini" | "haptic" | "narrate" | "dynMusic" | "cine" | "duel" | "tips" | "spoils" | "pages" | "fires", label: string, note = "") =>
       `<div class="setrow"><span>${label}</span><button class="btn sm ${settings[k] ? "on" : ""}" data-a="${this.act(() => {
         settings[k] = !settings[k];
         saveSettings();
@@ -2302,6 +2323,8 @@ export class Hud {
       ${toggle("tips", t("İpuçları"))}
       ${toggle("spoils", t("Ganimet seçimi"))}
       <p class="dim">${t("Büyük zaferlerden sonra üç ganimetten birini sen seçersin. Kapalıysa altın otomatik alınır.")}</p>
+      ${toggle("pages", t("Sayfalı hikâye"))}
+      ${toggle("fires", t("Kamp ateşi sohbetleri"))}
       <h3>${t("Kayıt yuvaları")}</h3>
       <p class="dim">${t("Oyun her birkaç saniyede bir etkin yuvaya kaydedilir. Yuva değiştirince mevcut oyunun kaydedilir ve sayfa yeniden yüklenir.")}</p>
       ${slots}
@@ -3011,7 +3034,7 @@ export class Hud {
         <div class="vs">VS</div>
         <div class="side foe">${ic(boss?.icon ?? "j_bandit", "bp" + (boss ? " boss" : ""))}<b>${boss?.name ?? foe}</b>${boss ? `<div class="bar boss"><i></i><span></span></div>` : ""}${n0b ? `<div class="bar hp foe"><i></i></div><div class="bar mor"><i></i><span></span></div>` : ""}<div class="arm"></div></div>
       </div>
-      ${field ? `<div class="fground">${t(GROUNDS[field.ground].name)}${field.night ? ` · ${t("Gece")}` : ""}${field.sky ? ` · ${t(SKIES[field.sky].name)}` : ""}</div>` : ""}
+      ${field ? `<div class="fground">${t(GROUNDS[field.ground].name)}${field.night ? ` · ${t("Gece")}` : ""}${field.sky ? ` · ${t(SKIES[field.sky].name)}` : ""}${field.note ? ` · ${t(field.note)}` : ""}</div>` : ""}
       <canvas class="field"></canvas>
       <div class="orders">${ORDER_KEYS.filter((o) => o !== "yedek" || sim.canOrder(o)).map((o) => `<button class="btn sm ord" data-o="${o}" title="${ORDERS[o].text}">${ic(ORDERS[o].icon)} ${ORDERS[o].name}</button>`).join("")}<button class="btn sm fast" title="Hızlandır">⏩</button></div>
       <div class="rlog">Savaş başladı…</div>
@@ -3019,6 +3042,9 @@ export class Hud {
     </div>`;
     this.root.appendChild(el);
     const bf = new BattleField(el.querySelector("canvas.field")!, sim.rounds[0].a, enemy, assetUrl(face), boss ? assetUrl(boss.icon) : null, field);
+    const armor = this.g.s.hero.equip.zirh;
+    if (armor && armor.rar >= 1) bf.heroRing = RARITY[armor.rar].color;
+    bf.setComps(this.g.s.comps.map((id) => COMP_BY_ID[id as CompId]?.icon).filter((x): x is string => !!x).map((k) => assetUrl(k)));
     const setMor = (sel: string, m: number | undefined) => {
       const b = el.querySelector(`${sel} .bar.mor`);
       if (!b || m === undefined) return;

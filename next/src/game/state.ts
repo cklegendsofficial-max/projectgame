@@ -228,6 +228,8 @@ export interface GameState {
   /** Şehir başına yaptırılan vakıf basamağı (1 çeşme, 2 imaret, 3 medrese). */
   vakif?: Record<string, number>;
   nemAt?: number;
+  fireDay?: number;
+  fires?: string[];
   evSeen?: Record<string, number>;
   sagaCall?: number;
   /** Günlük ham madde satışı (şehir başına adet). */

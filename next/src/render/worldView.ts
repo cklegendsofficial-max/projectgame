@@ -16,6 +16,7 @@ import { t as tr } from "../i18n";
 import { settings } from "../settings";
 import { terrainMesh, type TerrainMesh } from "./terrain";
 import { Life } from "./life";
+import { RARITY } from "../game/rpg";
 
 const urls: Record<string, string> = {};
 for (const [p, u] of Object.entries(import.meta.glob<string>("../assets/**/*.webp", { eager: true, query: "?url", import: "default" }))) {
@@ -882,6 +883,38 @@ export class WorldView {
     this.heroTamga.width = this.heroTamga.height = 30;
   }
 
+  private gearKey = "";
+  private gearG = new Graphics();
+  private gearWeap = new Sprite();
+  private gearSet = 0;
+
+  /** Kuşanılan zırhın nadirliği halkayı boyar, silah rozet olur, iki set parçası parıltı verir. */
+  private syncGear(game: Game): void {
+    const s = game.s;
+    const eq = s.hero.equip;
+    const top = Math.max(-1, ...[eq.zirh, eq.silah, eq.kalkan].map((it) => (it ? it.rar : -1)));
+    const plus = Math.max(0, ...[eq.zirh, eq.silah].map((it) => it?.plus ?? 0));
+    const sets = Object.values(eq).filter((it) => it?.set).length;
+    const key = s.free ? `${top}|${plus}|${sets}|${eq.silah?.icon ?? ""}` : "";
+    if (key !== this.gearKey) {
+      this.gearKey = key;
+      this.gearSet = sets;
+      const g = this.gearG.clear();
+      if (key && top >= 1) {
+        const col = parseInt(RARITY[top].color.slice(1), 16);
+        g.circle(0, 0, 27).stroke({ color: col, width: 3 + Math.min(3, plus * 0.4), alpha: 0.95 });
+        if (plus >= 5) g.circle(0, 0, 31).stroke({ color: col, width: 1.5, alpha: 0.6 });
+      }
+      const wi = s.free && eq.silah && (this.tex[eq.silah.icon] || this.tex["icons/" + eq.silah.icon]) ? eq.silah.icon : "";
+      this.gearWeap.visible = !!wi;
+      if (wi) {
+        this.gearWeap.texture = this.t(wi);
+        this.gearWeap.scale.set(22 / Math.max(1, this.gearWeap.texture.width, this.gearWeap.texture.height));
+      }
+    }
+    this.gearG.alpha = this.gearSet >= 2 ? 0.75 + 0.25 * Math.sin(this.time * 4) : 1;
+  }
+
   private buildHero(): void {
     const c = new Container();
     const sh = new Graphics().ellipse(0, 26, 22, 7).fill({ color: 0x000000, alpha: 0.35 });
@@ -902,7 +935,10 @@ export class WorldView {
     this.heroHorse.anchor.set(0.5, 0.8);
     this.heroHorse.position.set(-4, 30);
     this.heroHorse.visible = false;
-    c.addChild(sh, this.heroHorse, flag, this.heroTamga, p, this.heroCount, this.heroBars);
+    this.gearWeap.anchor.set(0.5);
+    this.gearWeap.position.set(-22, 14);
+    this.gearWeap.visible = false;
+    c.addChild(sh, this.heroHorse, flag, this.heroTamga, p, this.gearG, this.gearWeap, this.heroCount, this.heroBars);
     this.heroFlag = flag;
     this.hero = c;
     this.units.addChild(this.dustG);
@@ -1107,6 +1143,7 @@ export class WorldView {
       this.heroHorse.scale.set((62 / tw) * this.face, 62 / tw);
       this.heroHorse.rotation = moving ? Math.sin(this.time * 9) * 0.05 : 0;
     }
+    this.syncGear(game);
     this.dustAcc += moving && s.free ? dt : 0;
     while (this.dustAcc > 0.07) {
       this.dustAcc -= 0.07;

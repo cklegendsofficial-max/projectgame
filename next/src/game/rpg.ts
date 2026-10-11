@@ -215,7 +215,38 @@ export function itemStats(it: Item): string {
   if (it.kar) p.push(`${t("Karizma")} +${it.kar}`);
   if (it.mods) p.push(modsText(it.mods));
   if (it.horse) p.push(`${it.horse.gen}. kuşak${it.horse.sire ? ` · ${it.horse.sire} × ${it.horse.dam}` : ""}`);
+  const pr = itemProc(it);
+  if (pr) p.push(`✦ ${t(pr.name)}: ${t(PROC_TEXT[pr.kind])}`);
   return p.join(" · ");
+}
+
+type ProcKind = "poison" | "stun" | "burst" | "drain" | "shield" | "aura";
+const PROC_TEXT: Record<ProcKind, string> = {
+  poison: "her tur ek yara",
+  stun: "düşmanı sersemletir",
+  burst: "üç turda bir ağır darbe",
+  drain: "vurdukça can emer",
+  shield: "ilk turlarda hasarı keser",
+  aura: "bütün orduya güç verir",
+};
+const WEAPON_PROC: Record<WeaponKind, { name: string; kind: ProcKind; pow: number }> = {
+  kilic: { name: "Kan İzi", kind: "poison", pow: 0.12 },
+  balta: { name: "Kemik Kıran", kind: "stun", pow: 0.22 },
+  hancer: { name: "Sinsi Darbe", kind: "burst", pow: 0.6 },
+  ok: { name: "Ok Yağmuru", kind: "burst", pow: 0.5 },
+  asa: { name: "Ruh Emici", kind: "drain", pow: 0.25 },
+};
+
+/** Destansı ve efsanevi eşyaların savaşta tetiklenen özel etkisi. */
+export function itemProc(it: Item): { name: string; kind: ProcKind; pow: number } | null {
+  if (it.rar < 3 || it.slot === "at") return null;
+  const k = it.rar >= 4 ? 1.5 : 1;
+  const base =
+    it.slot === "silah" ? WEAPON_PROC[it.kind as WeaponKind] :
+    it.slot === "zirh" ? { name: "Demir Duvar", kind: "shield" as const, pow: 0.08 } :
+    it.slot === "kalkan" ? { name: "Kalkan Duvarı", kind: "shield" as const, pow: 0.1 } :
+    { name: "Tengri'nin Lütfu", kind: "aura" as const, pow: 0.04 };
+  return base ? { ...base, pow: base.pow * k } : null;
 }
 
 export function makeHorse(id: number, breed: Breed, info: HorseInfo, st?: { spd: number; carry: number; hp: number }, name?: string): Item {

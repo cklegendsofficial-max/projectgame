@@ -159,3 +159,55 @@ export const COMP_QUESTS: Record<CompId, CompQuest> = {
     sworn: "Venedik ticaret izniyle Lucia'nın bağlantıları artık senin de. Ticaret ve yük bonusu %50 arttı.",
   },
 };
+
+export interface Campfire {
+  id: string;
+  a: CompId;
+  b: CompId;
+  lines: [CompId, string][];
+  sideA: string;
+  sideB: string;
+}
+
+/** Gece kamp ateşi başında iki yoldaşın konuşması; kimin yanında durduğun bağlarını değiştirir. */
+export const CAMPFIRES: Campfire[] = [
+  { id: "korkut-ayse", a: "korkut", b: "ayse", lines: [
+    ["korkut", "Kopuzun teli gevşemiş. Bu bozkır her şeyi gevşetir; teli de, yemini de."],
+    ["ayse", "Yemini gevşeten bozkır değil Dede, insanın kendisi. Ben tutsakken kimse yeminini hatırlamadı."],
+    ["korkut", "Hatırlayan biri vardı ama kızım. Şimdi yanında oturuyor."],
+  ], sideA: "Dede haklı: yemin sözle değil yolla tutulur", sideB: "Ayşe haklı: unutulanları unutmamalıyız" },
+  { id: "batu-ayse", a: "batu", b: "ayse", lines: [
+    ["batu", "Dünkü köyü yaksaydık haramiler bir daha oraya sığınamazdı."],
+    ["ayse", "Köylüler de sığınamazdı Batu. Ateşle temizlenen yerde ekmek de pişmez."],
+    ["batu", "Merhametle de kılıç bilenmez."],
+  ], sideA: "Batu: korku düzen getirir", sideB: "Ayşe: halk yanımızda olmalı" },
+  { id: "ferhat-batu", a: "ferhat", b: "batu", lines: [
+    ["ferhat", "Bugün bir kurt izi gördüm; dişi, yavrulu. Avlamadım."],
+    ["batu", "Yavrular büyür, sürüye katılır, bir gün atlarımızı yer."],
+    ["ferhat", "Bozkırın da hakkı var Batu. Hepsini alırsan geriye ne kalır?"],
+  ], sideA: "Ferhat: av ölçüyle yapılır", sideB: "Batu: tehlikeyi kökünden kes" },
+  { id: "leyla-lucia", a: "leyla", b: "lucia", lines: [
+    ["leyla", "Venedikliler ipeği bizden üç akçeye alıp kendi limanlarında otuza satıyor."],
+    ["lucia", "Gemiyi, fırtınayı, korsanı da biz göğüslüyoruz tatlım. Deniz bedava değil."],
+    ["leyla", "Kervan yolu da bedava değil. Kumda ölen develeri sen saymadın."],
+  ], sideA: "Leyla: kâr kervanında kalmalı", sideB: "Lucia: deniz yolu ortaklık ister" },
+  { id: "korkut-batu", a: "korkut", b: "batu", lines: [
+    ["batu", "Dede, destanlarında hep kılıçlar konuşuyor. Ama sen hiç kılıç tutmadın."],
+    ["korkut", "Kılıcı tutan unutulur oğul, onu anlatan kalır. Senin adını da biri söyleyecek, değil mi?"],
+    ["batu", "Söylesin. Ama ben yaşarken söylesin."],
+  ], sideA: "Korkut: söz kılıçtan uzun yaşar", sideB: "Batu: şan meydanda kazanılır" },
+  { id: "leyla-batu", a: "leyla", b: "batu", lines: [
+    ["leyla", "Askerlerin ganimet payı hazineyi kurutuyor. Biraz kısalım."],
+    ["batu", "Payını alamayan asker ilk pusuda kaçar. Altını sen say, kılıcı ben."],
+  ], sideA: "Leyla: hazine önce", sideB: "Batu: asker önce" },
+  { id: "ayse-ferhat", a: "ayse", b: "ferhat", lines: [
+    ["ferhat", "Ayşe, sen o geceyi hiç anlatmıyorsun. Kara Tamga'nın elinden nasıl kurtuldun?"],
+    ["ayse", "Anlatmıyorum çünkü anlatınca yeniden yaşıyorum. Sen avını anlatır mısın, ölürken nasıl baktığını?"],
+    ["ferhat", "…Haklısın. Bir daha sormam."],
+  ], sideA: "Ferhat merak etti, kötü niyeti yoktu", sideB: "Ayşe'nin sessizliğine saygı duy" },
+  { id: "korkut-lucia", a: "korkut", b: "lucia", lines: [
+    ["lucia", "Sizin destanlarınızda hiç deniz yok, Dede."],
+    ["korkut", "Bizim denizimiz bozkırdır kızım. Dalgası rüzgârla gelir, boğulan da olur."],
+    ["lucia", "O zaman ben de bozkırın denizcisiyim."],
+  ], sideA: "Dede'nin bozkır denizi", sideB: "Lucia'nın gerçek denizi" },
+];

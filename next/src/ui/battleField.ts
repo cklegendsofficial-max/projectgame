@@ -88,6 +88,12 @@ export class BattleField {
   private lastReal = performance.now();
   private shake = { t0: 0, amp: 0 };
   private epic = false;
+  heroRing = "#ffd56a";
+  private comps: HTMLImageElement[] = [];
+
+  setComps(srcs: string[]): void {
+    this.comps = srcs.slice(0, 3).map((src) => Object.assign(new Image(), { src }));
+  }
   private sfx: number[] = [];
 
   private cue(kind: Parameters<typeof audio.play>[0], ms: number): void {
@@ -99,9 +105,13 @@ export class BattleField {
     const real = performance.now();
     if (real < this.frozen) this.lag += real - this.lastReal;
     else if (this.lastReal < this.frozen) this.lag += this.frozen - this.lastReal;
+    else if (real < this.slowTill) this.lag += (real - this.lastReal) * 0.65;
     this.lastReal = real;
     return real - this.lag;
   }
+
+  private slowTill = 0;
+  private born = performance.now();
 
   announce(text: string, color: string, delay = 0): void {
     this.calls.push({ text, t0: this.clock() + delay, color });
@@ -165,6 +175,7 @@ export class BattleField {
   finish(win: boolean): void {
     this.end = { win, t0: this.clock() };
     if (win) this.cue("roar", 150);
+    if (this.epic) this.slowTill = performance.now() + 1400;
     if (win)
       for (let k = 0; k < 60; k++) {
         const t0 = this.end.t0 + 200 + Math.random() * 900;
@@ -384,6 +395,17 @@ export class BattleField {
     const shk = sk > 0 && sk < 320 ? this.shake.amp * (1 - sk / 320) : 0;
     ctx.save();
     if (shk) ctx.translate((Math.random() - 0.5) * shk, (Math.random() - 0.5) * shk * 0.6);
+    if (this.epic) {
+      const open = Math.max(0, 1 - (performance.now() - this.born) / 1600);
+      const fin = this.end ? Math.min(1, (now - this.end.t0) / 900) : 0;
+      const z = 1 + 0.16 * open * open + 0.12 * (fin * (2 - fin));
+      if (z > 1.001) {
+        const cx = w * (this.end ? (this.end.win ? 0.58 : 0.42) : 0.5);
+        ctx.translate(cx, h * 0.55);
+        ctx.scale(z, z);
+        ctx.translate(-cx, -h * 0.55);
+      }
+    }
     ctx.drawImage(this.ground(), -8, -8, w + 16, h + 16);
     const size = Math.max(18, Math.min(46, h / 6.2));
     const top = h * HORIZON;
@@ -447,7 +469,12 @@ export class BattleField {
     }
     ctx.globalAlpha = 1;
     const heroOff = this.lunge(0, "spear", p);
-    this.portrait(this.heroImg, (0.45 + heroOff) * w, Y(0.5), size * 0.75, "#ffd56a");
+    this.comps.forEach((img, i) => {
+      const cy = Y(0.5) + (i === 1 ? -1 : i === 2 ? 0 : 1) * size * 0.95 + (i === 2 ? size * 0.3 : 0);
+      const cx = (0.45 + heroOff * 0.8) * w - size * (i === 2 ? 1.25 : 0.7);
+      this.portrait(img, cx, cy, size * 0.42, "#8fe07a");
+    });
+    this.portrait(this.heroImg, (0.45 + heroOff) * w, Y(0.5), size * 0.75, this.heroRing);
     if (this.bossImg) this.portrait(this.bossImg, (0.56 - this.lunge(1, "spear", p)) * w, Y(0.5), size, "#c27bff");
     ctx.lineWidth = 1.4;
     for (const r of this.arrows) {
@@ -621,6 +648,20 @@ export class BattleField {
   }
 
   private banner(x: number, color: string, now: number, s: number): void {
+    const { ctx, h } = this;
+    const fall = this.end && (this.end.win ? s === 1 : s === 0) ? Math.min(1, Math.max(0, (now - this.end.t0 - 250) / 700)) : 0;
+    ctx.save();
+    if (fall) {
+      ctx.translate(x, h - 6);
+      ctx.rotate((s ? 1 : -1) * fall * fall * 1.45);
+      ctx.translate(-x, -(h - 6));
+      ctx.globalAlpha = 1 - fall * 0.35;
+    }
+    this.bannerBody(x, color, now, s);
+    ctx.restore();
+  }
+
+  private bannerBody(x: number, color: string, now: number, s: number): void {
     const { ctx, h } = this;
     ctx.strokeStyle = "#3a2410";
     ctx.lineWidth = 2;

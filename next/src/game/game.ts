@@ -10,7 +10,7 @@ import { audio, type MusicScene } from "../audio";
 import { settings } from "../settings";
 import { Sim, TACTICS, TACTIC_KEYS, fight, odds, stanceWeights, tacticDelta, type BattleResult, type Boss, type Champion, type Field, type Tactic } from "./battle";
 import { BUILDINGS, BUILDING_BY_ID, CITY_NAME, DAY_SEC, RES_KEYS, UNITS, UNIT_KEYS, army, armyPower, armySize, buildCost, buildTime, prodPerMin, storageCap, trainSpeed, unitUnlocked, xpNeed, type Army, type BuildingId, type Res, type Unit } from "./data";
-import { CITY_TRADE, GOODS, GOOD_KEYS, PLUS_CHANCE, RARITY, SLOTS, STAT_INFO, canPlus, classItem, goodMult, itemPrice, itemStats, makeHorse, makeItem, plusCost, rollItem, setPiece, setPlus, skillLv, uniqueItem, type Good, type Item, type Skill, type Slot, type Stat } from "./rpg";
+import { CITY_TRADE, GOODS, GOOD_KEYS, PLUS_CHANCE, RARITY, SLOTS, STAT_INFO, canPlus, classItem, goodMult, itemPrice, itemProc, itemStats, makeHorse, makeItem, plusCost, rollItem, setPiece, setPlus, skillLv, uniqueItem, type Good, type Item, type Skill, type Slot, type Stat } from "./rpg";
 import { SETS, SET_FORGE, SET_KEYS, SET_SLOTS, UNIQUES, addMods, type GearMods, type SetId } from "./legend";
 import { TITLE_CATS, titleKey, titleOf, titleReward } from "./titles";
 import { DAILY_POOL, today, yesterday, type Daily, type DailyTask } from "./daily";
@@ -42,7 +42,7 @@ import { BALBAL_GOLD, BALBAL_MAX, BALBAL_STONE, YUG_LATE, balbalBonus, yugCost, 
 import type { WrestleFoe } from "../ui/wrestle";
 import { SIEGE_MAX_DAY, newSiege, siegeDay, siegeGar, siegeWall, type SiegeAct, type SiegeCtx, type SiegeRun } from "./siege";
 import { FORT_COFFER_DAYS, FORT_LV_SLACK, FORT_MIN_ARMY, FORT_NEAR, FORT_TIERS, FORT_WALL_COST, FORT_WALL_MAX, fortDefense, fortGarrison, fortIndex, fortKey, fortWall, type FortOwner } from "./forts";
-import { BOND_FX, BOND_LEAVE, BOND_QUEST, BOND_START, COMP_QUESTS, SWORN_MULT, type BondEvent, type CompQuest, type CqChoice } from "./bonds";
+import { BOND_FX, BOND_LEAVE, BOND_QUEST, BOND_START, CAMPFIRES, COMP_QUESTS, SWORN_MULT, type BondEvent, type CompQuest, type CqChoice } from "./bonds";
 import { lang, t as tr } from "../i18n";
 import { WEEK_TIERS, weekBoard, weekFrac, weekId, weekNeed, weekRank, weekReward, weekScore, weekTheme, type BoardRow, type WeekState } from "./weekly";
 import { steamStats } from "../platform";
@@ -667,9 +667,12 @@ export class Game {
       heal: m.heal + this.compMods().heal + 0.015 * this.tal("kanici") + (this.buff("tutsu") ? 0.04 : 0) + (this.buff("umay") ? 0.04 : 0) + (gm.heal ?? 0),
       rage: m.rage,
       firstStrike: m.firstStrike,
-      skills: this.classSkills()
-        .map((sk) => ({ name: sk.name, kind: sk.kind, pow: skillPow(sk, this.s.hero.cskill[sk.id] ?? 0) }))
-        .filter((x) => x.pow > 0),
+      skills: [
+        ...this.classSkills()
+          .map((sk) => ({ name: sk.name, kind: sk.kind, pow: skillPow(sk, this.s.hero.cskill[sk.id] ?? 0) }))
+          .filter((x) => x.pow > 0),
+        ...Object.values(this.s.hero.equip).flatMap((it) => (it ? [itemProc(it)].filter((p) => !!p) : [])).map((p) => ({ ...p!, name: tr(p!.name) })),
+      ],
     };
   }
 
@@ -1326,6 +1329,7 @@ export class Game {
     this.seraiVisit();
     this.sideTick();
     this.tipTick(dt);
+    this.campfireTick(dt);
     this.lvTick();
     this.woundTick();
     this.saveT += dt;
@@ -3714,6 +3718,7 @@ export class Game {
     const known = this.scouts();
     const champ = this.champion();
     const field = this.fieldHere();
+    this.lair = null;
     const opts = TACTIC_KEYS.map((t) => {
       const d = known ? this.tdelta(t, stance) : TACTIC_KEYS.reduce((a, f) => a + w[f] * this.tdelta(t, f), 0);
       return { t, odds: odds(h.army, this.heroBonus() + d, enemy, enemyBonus, champ, boss, field) };
@@ -3734,8 +3739,30 @@ export class Game {
     const hs = this.heroStorm();
     const winter = this.season() === "kis";
     const sky = hs ? (hs.kind === "kum" ? "kum" : winter ? "tipi" : "yagmur") : winter ? "kar" : null;
-    return { ground: this.biomeAt(h.x, h.y), night: this.isNight(), sky };
+    const f: Field = { ground: this.biomeAt(h.x, h.y), night: this.isNight(), sky };
+    const lair = this.lair;
+    if (lair) {
+      if (lair.ground) f.ground = lair.ground;
+      if (lair.night) f.night = true;
+      if (lair.sky) f.sky = lair.sky;
+      f.note = lair.note;
+    }
+    return f;
   }
+
+  /** Kampa saldırırken o çetenin yuvasına özgü savaş koşulu. */
+  private lair: { ground?: Field["ground"]; night?: boolean; sky?: Field["sky"]; bonus: number; note: string } | null = null;
+
+  private static LAIRS: Record<string, { ground?: Field["ground"]; night?: boolean; sky?: Field["sky"]; bonus: number; note: string }> = {
+    "Dağ Kartalları": { ground: "dag", bonus: 0.05, note: "Sarp yamaç: okçuları yukarıda" },
+    "Çöl Akrepleri": { ground: "kum", bonus: 0, note: "Kum tepeleri arasında" },
+    "Gece Atlıları": { night: true, bonus: 0.05, note: "Gece baskını bekliyorlar" },
+    "Kum Fırtınası": { sky: "kum", bonus: 0, note: "Fırtınanın içinden saldırıyorlar" },
+    "Demir Pençe": { bonus: 0.15, note: "Kazıklı çit: savunmaları güçlü" },
+    "Yılan Çetesi": { bonus: 0.1, note: "Dar geçitte pusu kurmuşlar" },
+    "Kızıl Kurtlar": { ground: "bozkir", bonus: 0.05, note: "Açık bozkır: atlıları hızlı" },
+    "Kara Çete": { bonus: 0, note: "Dağınık bir haramî obası" },
+  };
 
   private retreat(): void {
     const s = this.s;
@@ -4046,7 +4073,10 @@ export class Game {
   attackCamp(i: number): void {
     const c = this.s.camps[i];
     if (!c.alive) return;
-    this.battle(`${c.name} kampı`, c.garrison, 0.1, (win) => {
+    const lair = Game.LAIRS[c.name] ?? null;
+    this.lair = lair;
+    this.battle(`${c.name} kampı`, c.garrison, 0.1 + (lair?.bonus ?? 0), (win) => {
+      this.lair = null;
       if (!win) return "";
       c.alive = false;
       c.respawnAt = this.now + 15 * 60000 * ERAS[this.wd().era].respawn;
@@ -8383,6 +8413,32 @@ export class Game {
 
   bond(id: CompId): number {
     return this.s.bond?.[id] ?? BOND_START;
+  }
+
+  private fireT = 0;
+
+  /** Gece duraklayan ordu ateş başında toplanır; iki yoldaş arasında kısa bir konuşma geçer. */
+  private campfireTick(dt: number): void {
+    const s = this.s;
+    this.fireT += dt;
+    if (this.fireT < 3) return;
+    this.fireT = 0;
+    if (!settings.fires || !s.free || !this.isNight() || this.battleLock || this.hud.covered || this.act || s.hero.path?.length || s.comps.length < 2) return;
+    const day = this.dayOf().day;
+    if (day - (s.fireDay ?? -99) < 2) return;
+    const seen = (s.fires ??= []);
+    const pool = CAMPFIRES.filter((f) => this.hasComp(f.a) && this.hasComp(f.b));
+    const f = pool.find((x) => !seen.includes(x.id)) ?? (pool.length && seen.length >= CAMPFIRES.length ? pool[Math.floor(Math.random() * pool.length)] : null);
+    if (!f) return;
+    s.fireDay = day;
+    if (!seen.includes(f.id)) seen.push(f.id);
+    const A = COMP_BY_ID[f.a], B = COMP_BY_ID[f.b];
+    const text = f.lines.map(([who, line]) => `<b>${COMP_BY_ID[who].name}:</b> <i>"${line}"</i>`).join("<br><br>");
+    this.hud.choice(tr("Kamp ateşi"), A.icon, text, [
+      { label: f.sideA, cls: "", fn: () => { this.bondAdd(f.a, 4); this.bondAdd(f.b, -2); } },
+      { label: f.sideB, cls: "", fn: () => { this.bondAdd(f.b, 4); this.bondAdd(f.a, -2); } },
+      { label: tr("Sessizce ateşi izle"), cls: "", fn: () => { this.bondAdd(f.a, 1); this.bondAdd(f.b, 1); this.hud.toast(tr("{a} ile {b} gece boyu konuştu; ateş sönerken gülüşüyorlardı.", { a: A.name, b: B.name }), "good"); } },
+    ]);
   }
 
   bondEvent(k: BondEvent): void {

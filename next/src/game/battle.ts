@@ -39,6 +39,7 @@ export interface Field {
   ground: Ground;
   night: boolean;
   sky?: Sky | null;
+  note?: string;
 }
 export type Sky = "kum" | "yagmur" | "tipi" | "kar";
 export const SKIES: Record<Sky, { name: string; mul: Partial<Record<Unit, number>>; text: string }> = {
