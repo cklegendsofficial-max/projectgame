@@ -11,6 +11,7 @@ export interface Env {
 
 type C3 = [number, number, number];
 
+const COARSE = matchMedia("(pointer: coarse)");
 const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 const mix = (a: C3, b: C3, k: number): C3 => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
 const rgb = (c: C3, a = 1) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`;
@@ -100,7 +101,7 @@ class Vista {
   }
 
   resize(): void {
-    const dpr = Math.min(matchMedia("(pointer: coarse)").matches ? 1.5 : 2, devicePixelRatio || 1);
+    const dpr = Math.min(COARSE.matches ? 1.5 : 2, devicePixelRatio || 1);
     const w = Math.round(this.cv.clientWidth * dpr);
     const h = Math.round(this.cv.clientHeight * dpr);
     if (w === this.cv.width && h === this.cv.height) return;
