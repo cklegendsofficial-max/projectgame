@@ -246,6 +246,20 @@ body.nomini .mini { display: none; }
 .bar span { position: relative; display: block; text-align: center; font-size: 11px; line-height: 16px; font-weight: 700; color: #fff; text-shadow: 0 1px 2px #000; }
 .bar.hp i { background: linear-gradient(#a5e88a, #3f8a2a); }
 .bar.hp.foe i { background: linear-gradient(#ff8a6a, #b8341c); }
+.bar.mor { height: 12px; margin-top: 3px; }
+.bar.mor i { background: linear-gradient(#9ad0ff, #2f6ab0); }
+.bar.mor span { font-size: 9px; line-height: 10px; }
+.bar.mor.low i { background: linear-gradient(#ffb36a, #a8501c); animation: morlow .7s infinite alternate; }
+@keyframes morlow { to { opacity: .55; } }
+.fground { text-align: center; font-size: 12px; color: #e8d3a8; opacity: .85; margin: 2px 0; }
+.tground { display: flex; align-items: center; gap: 8px; margin: 6px 0; padding: 6px 10px; border-radius: 8px; background: #0005; border-left: 3px solid #c88a2a; font-size: 12.5px; line-height: 1.4; }
+.tground b { color: #ffe08a; }
+.tground.g-cayir { border-color: #6fb04a; }
+.tground.g-kum { border-color: #e0b060; }
+.tground.g-dag { border-color: #9a9aa8; }
+.tground small { display: block; opacity: .85; }
+.tground .ic { width: 34px; height: 34px; flex: none; }
+.result .rout { text-align: center; font-weight: 700; color: #ffd56a; margin: 2px 0 6px; letter-spacing: .5px; }
 
 .army { display: flex; gap: 6px; }
 .army .u { display: flex; align-items: center; gap: 3px; padding: 4px 8px; border-radius: 8px; background: #0004; border: 1px solid #5a3a1a; }

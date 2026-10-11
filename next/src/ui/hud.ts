@@ -1,6 +1,6 @@
 import { LORD_SERAIS, NEWS_GOLD, type Game, type Hint, type Quest, type Target } from "../game/game";
 import { BUILDINGS, DAY_SEC, NODE_NAME, RES_ICON, RES_KEYS, RES_NAME, UNITS, UNIT_KEYS, armySize, buildCost, buildTime, prodPerMin, unitUnlocked, xpNeed, type Army, type Res, type Unit } from "../game/data";
-import { ORDERS, ORDER_KEYS, TACTICS, TACTIC_KEYS, type BattleResult, type Boss, type Order, type Sim, type Tactic } from "../game/battle";
+import { GROUNDS, ORDERS, ORDER_KEYS, TACTICS, TACTIC_KEYS, type BattleResult, type Boss, type Field, type Order, type Sim, type Tactic } from "../game/battle";
 import { BattleField } from "./battleField";
 import { SpiritView, type Realm } from "./spirit";
 import { openDestan } from "./destan";
@@ -1263,7 +1263,7 @@ export class Hud {
     );
   }
 
-  tactics(title: string, enemy: Army, boss: Boss | null, foe: string, stance: Tactic | null, w: Record<Tactic, number>, opts: { t: Tactic; odds: number }[], last: Tactic, pick: (t: Tactic) => void, flee: string, onFlee: () => void, tell: string | null = null): void {
+  tactics(title: string, enemy: Army, boss: Boss | null, foe: string, stance: Tactic | null, w: Record<Tactic, number>, opts: { t: Tactic; odds: number }[], last: Tactic, pick: (t: Tactic) => void, flee: string, onFlee: () => void, tell: string | null = null, field: Field | null = null): void {
     this.battleOpen = true;
     this.close();
     const el = document.createElement("div");
@@ -1274,6 +1274,7 @@ export class Hud {
     el.innerHTML = `<div class="bbox tbox"><h2>${ic("swords")} ${title}</h2>
       <div class="tfoe">${ic(boss?.icon ?? "j_bandit", "bp" + (boss ? " boss" : ""))}<div><b>${boss?.name ?? foe}</b>${armySize(enemy) ? armyHtml(enemy) : ""}</div></div>
       ${intel}
+      ${field ? `<div class="tground g-${field.ground}">${ic(GROUNDS[field.ground].icon)}<div><b>${t(GROUNDS[field.ground].name)}${field.night ? ` · ${t("Gece")}` : ""}</b><small>${t(GROUNDS[field.ground].text)}${field.night ? ` ${t("Karanlıkta oklar şaşar: okçu -%25.")}` : ""}</small></div></div>` : ""}
       <div class="tacts">${opts
         .map((o) => {
           const T = TACTICS[o.t];
@@ -2724,7 +2725,7 @@ export class Hud {
     return this.frame(h.name, s.free ? `${t("Seviye")} ${h.lv} · ${s.act3.ending ? `<b class="ttl">${endingOf(s.act3.ending)!.name}</b>${tl ? ` · ${tl.name}` : ""}` : s.kagan ? `<b class="ttl">${t("Kağan")}</b>${tl ? ` · ${tl.name}` : ""}` : tl ? `<b class="ttl">${tl.name}</b>` : s.beylik ? t("Bey") : t("Hür yiğit")}` : `${t("Seviye")} ${h.lv} · ${t("Köle")}`, assetUrl(g.face()), tabs + body);
   }
 
-  showBattle(title: string, before: Army, enemy: Army, sim: Sim, hero: { hpBefore: number; maxHp: number }, boss: Boss | null, foe: string, auto: boolean, apply: (res: BattleResult) => { xp: number; lvUp: boolean; note: string }, onClose: () => void): void {
+  showBattle(title: string, before: Army, enemy: Army, sim: Sim, hero: { hpBefore: number; maxHp: number }, boss: Boss | null, foe: string, auto: boolean, field: Field | null, apply: (res: BattleResult) => { xp: number; lvUp: boolean; note: string }, onClose: () => void): void {
     this.battleOpen = true;
     this.close();
     const el = document.createElement("div");
@@ -2735,17 +2736,27 @@ export class Hud {
     el.innerHTML = `<div class="bbox war${boss ? " epic" : ""}">
       <h2>${ic("swords")} ${title}</h2>
       <div class="sides">
-        <div class="side me">${ic(face, "bp")}<b>${this.g.s.hero.name}</b><div class="bar hero"><i></i><span></span></div>${n0a ? `<div class="bar hp"><i></i></div>` : ""}<div class="arm"></div></div>
+        <div class="side me">${ic(face, "bp")}<b>${this.g.s.hero.name}</b><div class="bar hero"><i></i><span></span></div>${n0a ? `<div class="bar hp"><i></i></div><div class="bar mor"><i></i><span></span></div>` : ""}<div class="arm"></div></div>
         <div class="vs">VS</div>
-        <div class="side foe">${ic(boss?.icon ?? "j_bandit", "bp" + (boss ? " boss" : ""))}<b>${boss?.name ?? foe}</b>${boss ? `<div class="bar boss"><i></i><span></span></div>` : ""}${n0b ? `<div class="bar hp foe"><i></i></div>` : ""}<div class="arm"></div></div>
+        <div class="side foe">${ic(boss?.icon ?? "j_bandit", "bp" + (boss ? " boss" : ""))}<b>${boss?.name ?? foe}</b>${boss ? `<div class="bar boss"><i></i><span></span></div>` : ""}${n0b ? `<div class="bar hp foe"><i></i></div><div class="bar mor"><i></i><span></span></div>` : ""}<div class="arm"></div></div>
       </div>
+      ${field ? `<div class="fground">${t(GROUNDS[field.ground].name)}${field.night ? ` · ${t("Gece")}` : ""}</div>` : ""}
       <canvas class="field"></canvas>
       <div class="orders">${ORDER_KEYS.map((o) => `<button class="btn sm ord" data-o="${o}" title="${ORDERS[o].text}">${ic(ORDERS[o].icon)} ${ORDERS[o].name}</button>`).join("")}<button class="btn sm fast" title="Hızlandır">⏩</button></div>
       <div class="rlog">Savaş başladı…</div>
       <div class="result"></div>
     </div>`;
     this.root.appendChild(el);
-    const field = new BattleField(el.querySelector("canvas.field")!, before, enemy, assetUrl(face), boss ? assetUrl(boss.icon) : null);
+    const bf = new BattleField(el.querySelector("canvas.field")!, before, enemy, assetUrl(face), boss ? assetUrl(boss.icon) : null, field);
+    const setMor = (sel: string, m: number | undefined) => {
+      const b = el.querySelector(`${sel} .bar.mor`);
+      if (!b || m === undefined) return;
+      (b.querySelector("i") as HTMLElement).style.width = `${m}%`;
+      b.classList.toggle("low", m < 35);
+      b.querySelector("span")!.textContent = `${t("Moral")} ${Math.round(m)}`;
+    };
+    setMor(".me", 100);
+    setMor(".foe", 100);
     let pending: Order | undefined;
     let fast = auto;
     const ordBtns = [...el.querySelectorAll<HTMLButtonElement>(".ord")];
@@ -2804,7 +2815,9 @@ export class Hud {
         setSide(".me", r.a, n0a, r.hp);
         setSide(".foe", r.b, n0b);
         setBoss(r.bhp);
-        field.round(r.a, r.b, r.order, fast ? 380 : 760, r.ev);
+        setMor(".me", r.ma);
+        setMor(".foe", r.mb);
+        bf.round(r.a, r.b, r.order, fast ? 380 : 760, r.ev);
         box.classList.remove("shake");
         void box.offsetWidth;
         box.classList.add("shake");
@@ -2820,18 +2833,21 @@ export class Hud {
       const res = sim.finish();
       const { xp, lvUp, note: extra } = apply(res);
       const last = res.rounds[res.rounds.length - 1];
-      field.round(last.a, last.b, undefined, 500);
-      field.finish(res.win);
-      setTimeout(() => field.stop(), 2400);
+      bf.round(last.a, last.b, undefined, 500);
+      bf.finish(res.win);
+      setTimeout(() => bf.stop(), 2400);
+      setMor(".me", last.ma);
+      setMor(".foe", last.mb);
       setSide(".me", last.a, n0a, last.hp);
       setSide(".foe", last.b, n0b);
       setBoss(last.bhp);
       audio.play(res.win ? "win" : "lose");
       haptic(res.win ? [30, 60, 30] : 200);
       if (lvUp) setTimeout(() => audio.play("level"), 900);
-      log.textContent = res.win ? (boss ? `${boss.name} yıkıldı!` : "Düşman kaçıyor!") : res.heroDown ? "Yere düştün…" : "Geri çekilmek zorunda kaldın.";
+      log.textContent = res.win ? (boss ? `${boss.name} yıkıldı!` : res.rout === "b" ? t("Düşman bozguna uğradı!") : "Düşman kaçıyor!") : res.heroDown ? "Yere düştün…" : res.rout === "a" ? t("Askerlerin dağıldı!") : "Geri çekilmek zorunda kaldın.";
       el.querySelector(".result")!.innerHTML = `
         <div class="rt ${res.win ? "win" : "lose"}">${res.win ? "ZAFER" : "YENİLGİ"}</div>
+        ${res.rout ? `<div class="rout">${t(res.rout === "b" ? "Bozgun! Düşman safları çözüldü." : "Bozgun! Safların çözüldü.")}</div>` : ""}
         <div class="stats"><div>Kayıpların: <b>${armySize(res.lostA)}</b></div><div>Düşman kaybı: <b>${armySize(res.lostB)}</b></div><div>${ic("scroll")}+${xp} TP${lvUp ? " · <b class='gold'>SEVİYE ATLADIN!</b>" : ""}</div></div>
         ${extra ? `<p class="loot">${extra}</p>` : ""}
         <button class="btn go big">Devam</button>`;

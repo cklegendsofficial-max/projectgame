@@ -1,5 +1,5 @@
 import { UNIT_KEYS, armySize, type Army, type Unit } from "../game/data";
-import type { Order } from "../game/battle";
+import type { Field, Ground, Order } from "../game/battle";
 import { assetUrl } from "../render/worldView";
 import { t as tr } from "../i18n";
 
@@ -50,11 +50,12 @@ const SIDE_COLOR = ["#f0c860", "#e0563f"];
 const UNIT_ICON: Record<Unit, string> = { spear: "u_spear", archer: "u_archer", horse: "u_cavalry" };
 const SPR = 44;
 
-let ground: HTMLImageElement | null = null;
+const GROUND_TEX: Record<Ground, string> = { bozkir: "tex/steppe", cayir: "tex/grass", kum: "tex/sand", dag: "tex/rock" };
+const grounds: Partial<Record<Ground, HTMLImageElement>> = {};
 const icons: Partial<Record<Unit, HTMLImageElement>> = {};
 function loadArt(): void {
-  if (ground) return;
-  ground = Object.assign(new Image(), { src: assetUrl("tex/steppe") });
+  if (grounds.bozkir) return;
+  for (const k of Object.keys(GROUND_TEX) as Ground[]) grounds[k] = Object.assign(new Image(), { src: assetUrl(GROUND_TEX[k]) });
   for (const u of UNIT_KEYS) icons[u] = Object.assign(new Image(), { src: assetUrl(UNIT_ICON[u]) });
 }
 
@@ -80,7 +81,7 @@ export class BattleField {
   private sprites = new Map<string, HTMLCanvasElement>();
   private bg: HTMLCanvasElement | null = null;
 
-  constructor(private cv: HTMLCanvasElement, a: Army, b: Army, heroSrc: string, bossSrc: string | null) {
+  constructor(private cv: HTMLCanvasElement, a: Army, b: Army, heroSrc: string, bossSrc: string | null, private field: Field | null = null) {
     loadArt();
     this.ctx = cv.getContext("2d")!;
     this.heroImg = Object.assign(new Image(), { src: heroSrc });
@@ -143,6 +144,8 @@ export class BattleField {
     else if (order === "kanat") this.calls.push({ text: "Kanatlar dolanıyor!", t0: now, color: "#ffe39a" });
     else if (order === "nara") this.calls.push({ text: "Nara!", t0: now, color: "#ffe39a" });
     else if (ev.includes("Kritik!")) this.calls.push({ text: "Kritik!", t0: now, color: "#fff" });
+    if (ev.includes("Düşman bozguna uğradı!")) this.calls.push({ text: "Düşman bozguna uğradı!", t0: now + 80, color: "#ffd56a" });
+    if (ev.includes("Askerlerin dağıldı!")) this.calls.push({ text: "Askerlerin dağıldı!", t0: now + 80, color: "#ff7a5a" });
     this.calls = this.calls.filter((c) => now - c.t0 < 1600);
     [a, b].forEach((arm, s) => {
       for (const u of UNIT_KEYS) {
@@ -206,12 +209,33 @@ export class BattleField {
     c.width = w;
     c.height = h;
     const g = c.getContext("2d")!;
+    const ground = grounds[this.field?.ground ?? "bozkir"];
     if (ground?.complete && ground.naturalWidth) {
       g.fillStyle = g.createPattern(ground, "repeat")!;
       g.fillRect(0, 0, w, h);
     } else {
       g.fillStyle = "#6d5a33";
       g.fillRect(0, 0, w, h);
+    }
+    if (this.field?.ground === "dag") {
+      g.fillStyle = "rgba(60,48,40,0.55)";
+      for (let k = 0; k < 7; k++) {
+        const x = ((k * 0.17 + 0.05) % 1) * w;
+        g.beginPath();
+        g.moveTo(x - 40, 0);
+        g.lineTo(x, h * 0.16);
+        g.lineTo(x + 46, 0);
+        g.fill();
+      }
+    }
+    if (this.field?.ground === "cayir") {
+      for (let k = 0; k < 14; k++) {
+        const x = ((k * 0.0731 + 0.02) % 1) * w;
+        g.fillStyle = "rgba(30,60,20,0.6)";
+        g.beginPath();
+        g.ellipse(x, 6 + (k % 3) * 4, 16, 10, 0, 0, Math.PI * 2);
+        g.fill();
+      }
     }
     const sh = g.createLinearGradient(0, 0, 0, h);
     sh.addColorStop(0, "rgba(255,226,160,0.18)");
@@ -224,6 +248,10 @@ export class BattleField {
     v.addColorStop(1, "rgba(20,10,2,0.55)");
     g.fillStyle = v;
     g.fillRect(0, 0, w, h);
+    if (this.field?.night) {
+      g.fillStyle = "rgba(10,18,48,0.5)";
+      g.fillRect(0, 0, w, h);
+    }
     if (ground?.complete) this.bg = c;
     return c;
   }

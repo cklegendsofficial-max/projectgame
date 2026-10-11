@@ -30,6 +30,26 @@ export interface Round {
   bhp: number;
   ev: string[];
   order?: Order;
+  ma?: number;
+  mb?: number;
+}
+
+export type Ground = "bozkir" | "cayir" | "kum" | "dag";
+export interface Field {
+  ground: Ground;
+  night: boolean;
+}
+export const GROUNDS: Record<Ground, { name: string; icon: string; mul: Partial<Record<Unit, number>>; text: string }> = {
+  bozkir: { name: "Açık bozkır", icon: "u_cavalry", mul: { horse: 1.3 }, text: "Atlılar için uçsuz meydan: atlı hasarı +%30." },
+  cayir: { name: "Çayır ve koru", icon: "u_spear", mul: { spear: 1.2, archer: 0.85 }, text: "Ağaçlar okları keser, mızrak safı sağlam durur: mızraklı +%20, okçu -%15." },
+  kum: { name: "Kum tepeleri", icon: "u_archer", mul: { horse: 1.1, spear: 0.85 }, text: "Ayak kumda batar: mızraklı -%15, atlı +%10." },
+  dag: { name: "Dağ geçidi", icon: "u_archer", mul: { archer: 1.3, horse: 0.7 }, text: "Yüksekten atılan ok ölümcül, atlar kayalıkta tökezler: okçu +%30, atlı -%30." },
+};
+export function fieldMul(f: Field | null): Partial<Record<Unit, number>> {
+  if (!f) return {};
+  const m = { ...GROUNDS[f.ground].mul };
+  if (f.night) m.archer = (m.archer ?? 1) * 0.75;
+  return m;
 }
 
 export interface BattleResult {
@@ -41,6 +61,7 @@ export interface BattleResult {
   heroDown: boolean;
   bossDown: boolean;
   orders: Order[];
+  rout: "a" | "b" | null;
 }
 
 export type Order = "nara" | "kanat" | "ricat";
@@ -111,8 +132,13 @@ export class Sim {
   private slay: number;
   private rally: number;
   private luckEv: string[];
+  private fm: Partial<Record<Unit, number>>;
+  ma = 100;
+  mb = 100;
+  rout: "a" | "b" | null = null;
 
-  constructor(private a0: Army, aBonus0: number, private b0: Army, private bBonus = 0, private champ: Champion | null = null, boss0: Boss | null = null) {
+  constructor(private a0: Army, aBonus0: number, private b0: Army, private bBonus = 0, private champ: Champion | null = null, boss0: Boss | null = null, field: Field | null = null) {
+    this.fm = fieldMul(field);
     this.a = { ...a0 };
     this.b = { ...b0 };
     const c = (this.c = champ ? { ...champ } : null);
@@ -128,13 +154,14 @@ export class Sim {
     this.rally = this.sk("rally").reduce((t, s) => t + s.pow, 0);
     this.maxR = this.boss ? 16 : 12;
     this.luckEv = luck > 0.25 ? ["Rüzgâr arkanda"] : luck < -0.25 ? ["Talih yüz çevirdi"] : [];
-    this.rounds = [{ a: { ...this.a }, b: { ...this.b }, hp: c?.hp ?? 0, bhp: this.boss?.hp ?? 0, ev: [] }];
+    this.rounds = [{ a: { ...this.a }, b: { ...this.b }, hp: c?.hp ?? 0, bhp: this.boss?.hp ?? 0, ev: [], ma: 100, mb: 100 }];
     if (c?.firstStrike) {
       const ev = ["Gölge Darbesi"];
       const r = hit(NONE, this.b, this.aBonus, this.hpB, this.champHit(ev) * 1.5, this.boss, BOSS_WEIGHT);
       this.b = r.out;
       this.hurtBoss(r.toChamp);
-      this.rounds.push({ a: { ...this.a }, b: { ...this.b }, hp: c.hp, bhp: this.boss?.hp ?? 0, ev });
+      this.mb -= 8;
+      this.rounds.push({ a: { ...this.a }, b: { ...this.b }, hp: c.hp, bhp: this.boss?.hp ?? 0, ev, ma: this.ma, mb: this.mb });
     }
   }
 
@@ -241,10 +268,13 @@ export class Sim {
         ev.push(s.name);
       }
     if (this.rally && r === 1) for (const s of this.sk("rally")) ev.push(s.name);
+    for (const u of UNIT_KEYS) if (this.fm[u]) uMul[u] = (uMul[u] ?? 1) * this.fm[u]!;
     const bonus = (1 + this.aBonus + this.rally * Math.min(1, r / 4)) * ordMul - 1;
+    const prevA = armySize(this.a);
+    const prevB = armySize(this.b);
     const atkB = hit(ordMul ? this.a : NONE, this.b, bonus, this.hpB, extra * ordMul, boss, BOSS_WEIGHT, uMul);
     const bossDmg = boss && boss.hp > 0 ? boss.atk * inMul : 0;
-    const atkA = hit(this.b, this.a, (1 + this.bBonus) * inMul - 1, this.hpA, bossDmg, c, CHAMP_WEIGHT);
+    const atkA = hit(this.b, this.a, (1 + this.bBonus) * inMul - 1, this.hpA, bossDmg, c, CHAMP_WEIGHT, this.fm);
     this.hurtBoss(atkB.toChamp);
     if (c) {
       if (c.dodge > 0 && Math.random() < c.dodge) ev.push("Sıyrıldın");
@@ -257,9 +287,11 @@ export class Sim {
     this.a = atkA.out;
     this.b = atkB.out;
     if (boss && boss.hp <= 0) ev.push(`${boss.name} düştü!`);
-    const round: Round = { a: { ...this.a }, b: { ...this.b }, hp: c?.hp ?? 0, bhp: boss?.hp ?? 0, ev, order };
+    this.morale(prevA, prevB, order, ev);
+    const round: Round = { a: { ...this.a }, b: { ...this.b }, hp: c?.hp ?? 0, bhp: boss?.hp ?? 0, ev, order, ma: this.ma, mb: this.mb };
     this.rounds.push(round);
     if (
+      !!this.rout ||
       this.r >= this.maxR ||
       !this.aAlive() ||
       !this.bAlive() ||
@@ -271,6 +303,33 @@ export class Sim {
     return round;
   }
 
+  private morale(prevA: number, prevB: number, order: Order | undefined, ev: string[]): void {
+    const { c, boss } = this;
+    const nA0 = Math.max(1, armySize(this.a0));
+    const nB0 = Math.max(1, armySize(this.b0));
+    let da = 2 - ((prevA - armySize(this.a)) / nA0) * 150;
+    let db = 2 - ((prevB - armySize(this.b)) / nB0) * 150;
+    if (order === "nara") da += 14;
+    if (order === "kanat") db -= 8;
+    if (ev.includes("Turan taktiği: düşman yemi yuttu!")) db -= 16;
+    if (ev.includes("Safları bozuldu!")) db -= 6;
+    if (c) {
+      if (c.hp <= 0) da -= 40;
+      else if (c.hp > c.maxHp * 0.5) da += 2;
+      else if (c.hp < c.maxHp * 0.3) da -= 4;
+    }
+    if (boss && boss.hp > 0) db = Math.max(db, 0);
+    this.ma = Math.max(0, Math.min(100, this.ma + da));
+    this.mb = Math.max(boss && boss.hp > 0 ? 30 : 0, Math.min(100, this.mb + db));
+    if (this.mb <= 0 && !boss && armySize(this.b) > 0) {
+      this.rout = "b";
+      ev.push("Düşman bozguna uğradı!");
+    } else if (this.ma <= 0 && armySize(this.a) > 0) {
+      this.rout = "a";
+      ev.push("Askerlerin dağıldı!");
+    }
+  }
+
   finish(): BattleResult {
     while (!this.over) this.step();
     const { c, boss, a0, b0, aBonus, bBonus } = this;
@@ -278,7 +337,8 @@ export class Sim {
     let b = this.b;
     const heroDown = !!c && c.hp <= 0;
     let win: boolean;
-    if (boss) win = boss.hp <= 0 && !heroDown && this.aAlive();
+    if (this.rout) win = this.rout === "b" && !heroDown;
+    else if (boss) win = boss.hp <= 0 && !heroDown && this.aAlive();
     else {
       const startA = armyPower(a0, aBonus) + champPow(c, this.champ?.hp ?? 0);
       const endA = armyPower(a, aBonus) + champPow(c, c?.hp ?? 0);
@@ -292,12 +352,12 @@ export class Sim {
     const rounds = [...this.rounds, { a: { ...a }, b: { ...b }, hp: c?.hp ?? 0, bhp: boss?.hp ?? 0, ev: [] }];
     const lostA = { spear: a0.spear - a.spear, archer: a0.archer - a.archer, horse: a0.horse - a.horse };
     const lostB = { spear: b0.spear - b.spear, archer: b0.archer - b.archer, horse: b0.horse - b.horse };
-    return { rounds, win, lostA, lostB, heroHp: Math.round(c?.hp ?? 0), heroDown, bossDown: !!boss && boss.hp <= 0, orders: [...this.used] };
+    return { rounds, win, lostA, lostB, heroHp: Math.round(c?.hp ?? 0), heroDown, bossDown: !!boss && boss.hp <= 0, orders: [...this.used], rout: this.rout };
   }
 }
 
-export function fight(a0: Army, aBonus0: number, b0: Army, bBonus = 0, champ: Champion | null = null, boss0: Boss | null = null): BattleResult {
-  return new Sim(a0, aBonus0, b0, bBonus, champ, boss0).finish();
+export function fight(a0: Army, aBonus0: number, b0: Army, bBonus = 0, champ: Champion | null = null, boss0: Boss | null = null, field: Field | null = null): BattleResult {
+  return new Sim(a0, aBonus0, b0, bBonus, champ, boss0, field).finish();
 }
 
 export type Tactic = "hucum" | "duvar" | "pusu";
@@ -323,8 +383,8 @@ export function stanceWeights(b: Army, boss: Boss | null): Record<Tactic, number
   return { hucum: w.hucum / t, duvar: w.duvar / t, pusu: w.pusu / t };
 }
 
-export function odds(a: Army, aBonus: number, b: Army, bBonus = 0, champ: Champion | null = null, boss: Boss | null = null): number {
+export function odds(a: Army, aBonus: number, b: Army, bBonus = 0, champ: Champion | null = null, boss: Boss | null = null, field: Field | null = null): number {
   let w = 0;
-  for (let k = 0; k < 40; k++) if (fight(a, aBonus, b, bBonus, champ, boss).win) w++;
+  for (let k = 0; k < 40; k++) if (fight(a, aBonus, b, bBonus, champ, boss, field).win) w++;
   return w / 40;
 }
