@@ -8196,7 +8196,9 @@ export class Game {
     const n = act3 ? this.s.act3.ch : act2 ? this.s.act2.ch : this.s.story.ch;
     const next = this.chapter();
     if (next) this.hud.story(`${act3 ? "Gök Tengri Destanı · " : act2 ? "Erlik Destanı · " : ""}Bölüm ${n + 1}: ${next.title}`, next.img, `${next.intro}<br><br><b>Hedef:</b> ${next.goal}`, "Yola çık");
-    this.addXp((act3 ? 300 : act2 ? 120 : 40) * n);
+    const xp = Math.max((act3 ? 300 : act2 ? 120 : 40) * n, Math.round(xpNeed(this.s.hero.lv) * 0.5));
+    this.addXp(xp);
+    this.hud.toast(tr("Destan ilerledi: +{n} tecrübe", { n: xp }), "good");
     saveGame(this.s);
   }
 

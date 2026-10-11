@@ -686,6 +686,7 @@ const EN: Record<string, string> = {
   "Mancınık kur": "Build catapult",
   "Kuşat!": "Besiege!",
   "Destan seni bekliyor": "Your saga awaits",
+  "Destan ilerledi: +{n} tecrübe": "Saga advanced: +{n} XP",
   "stat puanı": "stat points",
   "yetenek puanı": "talent points",
   "beceri puanı": "skill points",
