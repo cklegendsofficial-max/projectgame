@@ -30,12 +30,13 @@ await dismiss();
 await ev(`g.s.res.gold = 300; const c = g.targetPos({kind:"capital"}); g.s.hero.x = c.x; g.s.hero.y = c.y; g.buyFreedom();`);
 await dismiss();
 
-const fight = async (garrison: string) => {
+const fight = async (garrison: string, shrink = false) => {
   await ev(`g.s.hero.lv = 10; g.s.hero.army = {spear: 14, archer: 10, horse: 8}; g.s.hero.hp = g.maxHp(); const c = g.s.camps.filter((c) => c.alive && c.tier <= 3)[0]; c.garrison = ${garrison}; const h = g.s.hero; h.x = c.x + 20; h.y = c.y; g.attackCamp(g.s.camps.indexOf(c));`);
   await page.waitForSelector(".tact, .bbox.war", { timeout: 5000 });
   if (await page.locator(".tact").count()) await page.locator(".tact").nth(1).click();
   await page.waitForSelector(".battle .result .btn", { timeout: 40000 });
   const note = (await page.locator(".battle .result").textContent()) ?? "";
+  if (shrink) await ev(`g.s.hero.army = {spear: 4, archer: 2, horse: 2};`);
   await page.locator(".battle .result .btn").click();
   return note;
 };
@@ -59,7 +60,7 @@ await page.locator(".spk").nth(2).click();
 await page.waitForTimeout(900);
 check((await ev<number>(`return g.s.hero.bag.length;`)) === bag0 + 1, "eşya heybeye kondu");
 
-await fight(`{spear: 8, archer: 8, horse: 8}`);
+await fight(`{spear: 8, archer: 8, horse: 8}`, true);
 await page.waitForSelector(".bbox.spoil", { timeout: 4000 });
 const army0 = await ev<number>(`return Object.values(g.s.hero.army).reduce((a, b) => a + b, 0);`);
 await page.locator(".spk").nth(1).click();
