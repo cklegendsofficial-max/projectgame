@@ -175,7 +175,7 @@ body.nomini .mini { display: none; }
 .rbest .ni, .rbest img { width: 26px; height: 26px; }
 .rbest small { display: block; font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: #ffd56a; }
 .lvup { position: absolute; left: 50%; top: 26%; z-index: 7; transform: translateX(-50%); width: 260px; padding: 16px 18px 12px; text-align: center; border-radius: 16px; cursor: pointer; color: #fff4d6; background: radial-gradient(circle at 50% 30%, #6a4314f2, #24160af2 70%); border: 2px solid #ffd56a; box-shadow: 0 0 0 3px #3a240c, 0 10px 40px #000c, 0 0 40px #ffd56a55; animation: lvin .7s cubic-bezier(.2, 1.5, .4, 1); transition: opacity .4s, transform .4s; overflow: hidden; }
-.lvup.out { opacity: 0; transform: translateX(-50%) translateY(-20px) scale(.9); }
+.lvup.out { pointer-events: none; opacity: 0; transform: translateX(-50%) translateY(-20px) scale(.9); }
 .lvup > * { position: relative; }
 .lvup .lvrays { position: absolute; left: 50%; top: 58px; width: 420px; height: 420px; margin: -210px 0 0 -210px; background: repeating-conic-gradient(#ffd56a33 0 8deg, transparent 8deg 22deg); border-radius: 50%; animation: lvspin 9s linear infinite; mask: radial-gradient(circle, #000 20%, transparent 65%); }
 .lvup small { display: block; font: 700 13px Georgia, serif; letter-spacing: 2px; text-transform: uppercase; color: #ffd56a; }

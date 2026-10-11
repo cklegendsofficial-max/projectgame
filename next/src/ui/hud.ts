@@ -141,6 +141,11 @@ export class Hud {
   private sel: Army = { spear: 0, archer: 0, horse: 0 };
   battleOpen = false;
   private storyOpen = false;
+
+  /** Ekranı kaplayan bir savaş/hikâye penceresi açık mı. */
+  get covered(): boolean {
+    return this.battleOpen || this.storyOpen || !!this.root.querySelector(".battle");
+  }
   private sagaOpen = false;
   private craftTier = 1;
   private forgePick: SetId = "gokkurt";

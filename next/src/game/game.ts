@@ -3801,7 +3801,7 @@ export class Game {
 
   /** Seviye atlama sunumu: savaş ekranı kapanınca altın sütun + başlık kartı. */
   private lvTick(): void {
-    if (this.lvQ === null || this.battleLock || this.hud.battleOpen) return;
+    if (this.lvQ === null || this.battleLock || this.hud.covered) return;
     const h = this.s.hero, n = h.lv - this.lvQ;
     this.lvQ = null;
     const gains = [`+${3 * n} ${tr("stat puanı")}`, `+${n} ${tr("yetenek puanı")}`];
