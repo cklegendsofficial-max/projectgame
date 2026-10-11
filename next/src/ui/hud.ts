@@ -1,4 +1,4 @@
-import { LORD_SERAIS, NEWS_GOLD, type Game, type Hint, type Quest, type Target } from "../game/game";
+import { LORD_SERAIS, NEWS_GOLD, VAKIF, type Game, type Hint, type Quest, type Target } from "../game/game";
 import { BUILDINGS, DAY_SEC, NODE_NAME, RES_ICON, RES_KEYS, RES_NAME, UNITS, UNIT_KEYS, armySize, buildCost, buildTime, prodPerMin, unitUnlocked, xpNeed, type Army, type Res, type Unit } from "../game/data";
 import { GROUNDS, ORDERS, ORDER_KEYS, RESERVE_MIN, SKIES, TACTICS, TACTIC_KEYS, type BattleResult, type Boss, type Field, type Order, type Sim, type Tactic } from "../game/battle";
 import { BattleField } from "./battleField";
@@ -387,7 +387,7 @@ export class Hud {
     this.story(
       "Kervan Krallık",
       "heroes/slave",
-      `${this.originIntro()}Adın ${this.g.s.hero.name}, yolun ${this.g.cls().name} yolu. Ama önce: bir baskında ailenden koparıldın ve Semerkant'ta bir tüccara köle olarak satıldın.<br><br>Efendin sana bir söz verdi: <b>80 akçe</b> biriktirirsen hürriyetini geri alabilirsin. Şehrin yakınındaki ormanda, taş ocağında ve tarlalarda çalış, her vardiyada birkaç akçe kazan.<br><br>Özgürlüğünü kazandıktan sonra İpek Yolu seni bekliyor: ${this.g.cls().name} silahlarını al, talim yap, ticaret yap, haramileri yen ve bir gün kendi beyliğini kur.`,
+      `${this.originIntro()}Adın ${this.g.s.hero.name}, yolun ${this.g.cls().name} yolu. Ama önce: bir baskında ailenden koparıldın ve Semerkant'ta bir tüccara köle olarak satıldın.<br><br>Efendin sana bir söz verdi: <b>100 akçe</b> biriktirirsen hürriyetini geri alabilirsin. Şehrin yakınındaki ormanda, taş ocağında ve tarlalarda çalış, her vardiyada birkaç akçe kazan.<br><br>Özgürlüğünü kazandıktan sonra İpek Yolu seni bekliyor: ${this.g.cls().name} silahlarını al, talim yap, ticaret yap, haramileri yen ve bir gün kendi beyliğini kur.`,
       "Çalışmaya başla",
     );
   }
@@ -1098,6 +1098,23 @@ export class Hud {
     this.root.appendChild(el);
     audio.play("click");
     setTimeout(drop, ttl);
+  }
+
+  private feastHtml(city: string, near: boolean): string {
+    const g = this.g, s = g.s;
+    if (!s.free) return "";
+    const on = g.buff("ziyafet");
+    const n = armySize(s.hero.army);
+    const lv = g.vakifLv(city);
+    const v = VAKIF[lv];
+    return (
+      `<div class="brow">${ic("food", "bimg")}<div class="bi2"><b>${t("Ordu şöleni")}</b><small>${on ? t("Şölen bereketi sürüyor: {n} savaş daha +%10 güç.", { n: s.buffs.ziyafet }) : t("Kazanlar kaynar, kımız akar: sonraki üç savaşta ordun +%10 güçlü.")}</small></div><button class="btn sm ${!near || on || !n || s.res.gold < g.feastCost() ? "off" : ""}" data-a="${this.act(() => g.armyFeast())}">${t("Şölen ver")}<br>${ic("coins")}${g.feastCost()}</button></div>` +
+      `<h3>${ic("crown")} ${t("Vakıf")} <em>${lv}/${VAKIF.length}</em></h3>` +
+      VAKIF.map((x, i) => `<div class="qrow ${i < lv ? "cheap" : "dim"}">${i < lv ? "✓" : "·"} <b>${t(x.name)}</b> — ${t(x.perk)}</div>`).join("") +
+      (v
+        ? `<div class="brow">${ic("crown", "bimg")}<div class="bi2"><b>${t(v.name)} ${t("yaptır")}</b><small>+${v.renown} ${t("şöhret")}, kut +${v.kut}. ${t(v.perk)}</small></div><button class="btn sm ${!near || s.res.gold < v.cost ? "off" : ""}" data-a="${this.act(() => g.endow(city))}">${t("Yaptır")}<br>${ic("coins")}${fmt(v.cost)}</button></div>`
+        : `<p class="dim">${t("Bu şehirdeki bütün vakıfları sen yaptırdın; adın kitabelere kazındı.")}</p>`)
+    );
   }
 
   private recHtml(): string {
@@ -2001,7 +2018,7 @@ export class Hud {
               ? `<div class="brow">${ic("map/serai", "bimg")}<div class="bi2">${bar(sr.coffer, g.seraiCap(c.id), "", `Kasa ${Math.floor(sr.coffer)}/${Math.round(g.seraiCap(c.id))}`)}<small>Dakikada ${g.seraiRate(c.id).toFixed(1)} altın · Ağında ${g.seraiCount()} kervansaray · Bedava konaklama, ticarette %${2 * sr.lv} avantaj</small>${swhy && sr.lv < 3 ? `<small class="why">${swhy}</small>` : ""}</div>${sr.lv < 3 ? `<button class="btn sm ${swhy ? "off" : ""}" data-a="${this.act(() => g.buildSerai(c.id))}">Geliştir<br>${ic("coins")}${g.seraiCost(c.id)}</button>` : ""}</div>`
               : `<div class="brow">${ic("map/serai", "bimg")}<div class="bi2"><b>${CITY_NAME[c.id]} yolunda kendi hanın</b><small>Kasası her dakika altın biriktirir, uğradığında toplarsın. Burada konaklama bedava, emanet teslimine %25 prim. Her yeni kervansaray tüm ağın gelirini %15 artırır.</small>${swhy ? `<small class="why">${swhy}</small>` : ""}</div><button class="btn sm ${swhy || !near ? "off" : ""}" data-a="${this.act(() => g.buildSerai(c.id))}">Kur<br>${ic("coins")}${g.seraiCost(c.id)}</button></div>`);
       body = `${nearNote}<div class="brow">${ic("han", "bimg")}<div class="bi2"><b>Kervansaray odası</b><small>Canını ve enerjini tamamen doldurur.</small></div><button class="btn ${!near || g.act ? "off" : ""}" data-a="${this.act(() => g.rest())}">Uyu ${g.restCost() ? `${ic("coins")}${g.restCost()}` : "· bedava"}</button></div>
-        ${this.boardHtml(c.id, near)}${serai}${this.stableHtml(c.id, near)}${this.birdShopHtml(c.id, near)}${rumor}
+        ${this.feastHtml(c.id, near)}${this.boardHtml(c.id, near)}${serai}${this.stableHtml(c.id, near)}${this.birdShopHtml(c.id, near)}${rumor}
         <h3>${ic("wanted")} Ödül ilanları</h3>` +
         (bl.map(({ b, i }) => {
           const cp = s.camps[b.camp];
@@ -2794,7 +2811,7 @@ export class Hud {
           return `<div class="comp on"><img src="${assetUrl(cp.icon)}" alt=""><div class="bi2"><b>${cp.name} <em>${cp.role}</em></b><small class="cheap">${cp.perk}</small>${bar(Math.max(0, bv + 100), 200, `bond ${tier.cls}`, `${en ? tier.en : tier.name} ${Math.round(bv)}`)}<small class="dim">${t("Sever")}: ${(en ? BOND_LIKES_EN : BOND_LIKES)[cp.id]}</small>${qs}</div></div>`;
         }).join("") || `<p class="dim">${t("Henüz yoldaşın yok. Destan seni yeni dostlarla buluşturacak; bazı şehirlerin hanlarında da yolcular bekler (en fazla {n} paralı yoldaş).", { n: COMP_MAX })}</p>`}
         <p class="dim">${s.free ? t("Köylerden gönüllü topla ya da şehir hanlarından paralı asker tut. Askerlerin ücretini altınla ödersin; altının biterse terk ederler. Liderlik birlik sınırını ve askerlerin gücünü artırır.") : t("Henüz bir kölesin. Hürriyetini kazanınca birlik kurabilirsin.")}</p>
-        <h3>${t("Toplam")}</h3><div class="stats"><div>${ic("j_bandit")}${t("Yenilen düşman")}: <b>${s.kills}</b></div><div>${ic("quest")}${t("Görev")}: <b>${s.quest}/${g.QUESTS.length}</b></div><div>${t("Ticaret kârı")}: <b>${s.c.profit}</b></div></div>`;
+        <h3>${t("Toplam")}</h3><div class="stats"><div>${ic("j_bandit")}${t("Yenilen düşman")}: <b>${s.kills}</b></div><div>${ic("quest")}${t("Görev")}: <b>${g.questsDone()}/${g.QUESTS.length}</b></div><div>${t("Ticaret kârı")}: <b>${s.c.profit}</b></div></div>`;
     }
     const tl = s.title ? titleOf(s.title) : null;
     return this.frame(h.name, s.free ? `${t("Seviye")} ${h.lv} · ${s.act3.ending ? `<b class="ttl">${endingOf(s.act3.ending)!.name}</b>${tl ? ` · ${tl.name}` : ""}` : s.kagan ? `<b class="ttl">${t("Kağan")}</b>${tl ? ` · ${tl.name}` : ""}` : tl ? `<b class="ttl">${tl.name}</b>` : s.beylik ? t("Bey") : t("Hür yiğit")}` : `${t("Seviye")} ${h.lv} · ${t("Köle")}`, assetUrl(g.face()), tabs + body);
@@ -3110,7 +3127,7 @@ export class Hud {
        <div class="res spd ${(settings.speed ?? 1) > 1 ? "fast" : ""}" data-spd title="${t("Oyun hızı (T)")}"><b>${"▶".repeat(settings.speed ?? 1)}</b></div>`);
     const q = g.quest();
     this.setHtml(this.questEl, q
-      ? `${ic("quest", "qi")}<div><small>${t("Görev")} ${s.quest + 1}/${g.QUESTS.length}</small><b>${q.title}</b><span>${q.text}</span><em>${costHtml(q.reward, g)}</em></div>`
+      ? `${ic("quest", "qi")}<div><small>${t("Görev")} ${g.questsDone() + 1}/${g.QUESTS.length}</small><b>${q.title}</b><span>${q.text}</span><em>${costHtml(q.reward, g)}</em></div>`
       : `${ic("crown", "qi")}<div><b>Tüm görevler bitti</b><span>Kampları temizle, beyliğini büyüt, batıya doğru keşfet.</span></div>`);
     const ch = g.chapter();
     this.questEl.classList.toggle("hidden", !q && !!ch && s.free);

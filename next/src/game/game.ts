@@ -104,6 +104,11 @@ const DUEL_MIN = 25;
 const WOUNDED_SHARE = 0.3;
 /** Ganimet seçimi için en az düşman sayısı ve esirlerden saflara geçen pay. */
 const SPOIL_MIN = 20;
+export const VAKIF = [
+  { name: "Çeşme", cost: 500, renown: 15, kut: 3, perk: "Bu şehirde konaklama bedava." },
+  { name: "İmaret", cost: 2000, renown: 30, kut: 4, perk: "Bu şehirde paralı asker %15 ucuz." },
+  { name: "Medrese", cost: 6000, renown: 60, kut: 5, perk: "Her gün +2 şöhret." },
+];
 const SPOIL_CAPTIVE = 0.12;
 const DUEL_FOES = ["Kara Buğa", "Demir Kıyak", "Bars Tegin", "Tolun Er", "Aybars", "Kılıç Arslan", "Böri Han", "Yağmur Alp"];
 const HAGGLE = [
@@ -132,6 +137,9 @@ const TRIP_SEASON: Record<string, string[]> = {
 };
 const CAP_I = CITIES.findIndex((c) => c.id === "samarkand");
 const RES_SELL: Record<keyof Res, number> = { gold: 1, wood: 3, stone: 4, food: 2 };
+/** Bir şehrin günlük ham madde pazarı: RES_SAT adette fiyat tabana (RES_SAT_MIN) iner. */
+const RES_SAT = 600;
+const RES_SAT_MIN = 0.3;
 const WAGE: Record<Unit, number> = { spear: 0.5, archer: 0.8, horse: 1.4 };
 export const LORD_SERAIS = 8;
 let wiped = false;
@@ -695,7 +703,7 @@ export class Game {
   }
 
   heroBonus(): number {
-    return 0.025 * this.stat("lid") + 0.02 * (this.s.hero.lv - 1) + this.cls().mods.army + this.compMods().army + 0.03 * this.tal("nara") + (this.buff("davul") ? 0.15 : 0) + (this.buff("surek") ? 0.08 : 0) + (this.buff("yug") ? 0.05 : 0) + (this.buff("ulgen") ? 0.12 : 0) + (this.buff("ata") ? 0.05 : 0) + balbalBonus(this.s.foes ?? []) + (this.gearMods().army ?? 0) + this.heroRankBonus() + this.allyBonus() + (hasLegacy("tengri") ? 0.06 : 0) + vetBonus(this.s.vets ?? []) + (this.s.beylik ? kutArmy(this.s.kut ?? 50) : 0) + this.famBonus() + this.moonBonus();
+    return 0.025 * this.stat("lid") + 0.02 * (this.s.hero.lv - 1) + this.cls().mods.army + this.compMods().army + 0.03 * this.tal("nara") + (this.buff("davul") ? 0.15 : 0) + (this.buff("ziyafet") ? 0.1 : 0) + (this.buff("surek") ? 0.08 : 0) + (this.buff("yug") ? 0.05 : 0) + (this.buff("ulgen") ? 0.12 : 0) + (this.buff("ata") ? 0.05 : 0) + balbalBonus(this.s.foes ?? []) + (this.gearMods().army ?? 0) + this.heroRankBonus() + this.allyBonus() + (hasLegacy("tengri") ? 0.06 : 0) + vetBonus(this.s.vets ?? []) + (this.s.beylik ? kutArmy(this.s.kut ?? 50) : 0) + this.famBonus() + this.moonBonus();
   }
 
   addKut(n: number, why = ""): void {
@@ -1370,8 +1378,9 @@ export class Game {
     if (el <= 0) return;
     s.resAt = now;
     const cap = this.cap();
+    const wage = this.wagePerMin();
     for (const k of RES_KEYS) {
-      const r = this.ratePerMin(k) * el;
+      const r = k === "gold" ? (this.ratePerMin(k) + wage) * el - (wage * dt) / 60 : this.ratePerMin(k) * el;
       if (r >= 0) s.res[k] = Math.max(s.res[k], Math.min(cap, s.res[k] + r));
       else s.res[k] = Math.max(0, s.res[k] + r);
     }
@@ -1584,7 +1593,7 @@ export class Game {
 
   restCost(): number {
     const ci = this.nearCity();
-    if (ci >= 0 && (this.s.serais[CITIES[ci].id] || this.s.owned[CITIES[ci].id])) return 0;
+    if (ci >= 0 && (this.s.serais[CITIES[ci].id] || this.s.owned[CITIES[ci].id] || this.vakifLv(CITIES[ci].id) >= 1)) return 0;
     return 2 + this.s.hero.lv * 2;
   }
 
@@ -1737,8 +1746,54 @@ export class Game {
         } },
         { label: "Sus, başını belaya sokma", cls: "", fn: () => say("Başını öne eğip çalışmaya döndün.") },
       ]);
-    } else if (n >= 9 && s.res.gold < this.freedomCost() && once("kacis")) {
-      this.hud.choice("Gece kaçışı", "master", `Gece ahırda Oğuz adlı bir köle yanına sokuldu: "Surun kuzeyinde bir gedik var. Bu gece gidiyorum. Gel benimle; 80 akçeyi beklersen yaşlanırsın."`, [
+    } else if (n >= 8 && once("oglan")) {
+      this.hud.choice("Efendinin oğlu", "u_spear", `Efendinin oğlu Timur avluda tahta kılıçla talim ediyordu. Seni görünce güldü: "Köle, gel de bir el dövüşelim. Yenersen bir akçe senin."`, [
+        { label: "Dövüş, gerçekten yenmeye çalış · Güç", cls: "", fn: () => {
+          if (Math.random() < 0.35 + this.stat("guc") * 0.05) {
+            s.res.gold += 6;
+            s.hero.skills.silah += 40;
+            this.addXp(10);
+            say("Timur toz içinde kaldı. Sözünü tuttu, üstüne 5 akçe ekledi. Silah ustalığı +40", "good");
+          } else {
+            s.hero.hp = Math.max(1, s.hero.hp - this.maxHp() * 0.2);
+            s.hero.skills.silah += 20;
+            say("Tahta kılıç kaburgana indi. Yine de bir şey öğrendin. Silah ustalığı +20", "info");
+          }
+        } },
+        { label: "Bilerek yenil, gönlünü kazan", cls: "", fn: () => {
+          s.res.gold += 3;
+          this.addKut(-1);
+          say("Timur keyiflendi, sana 3 akçe attı. Ama içinde bir şey kırıldı. Kut -1", "info");
+        } },
+        { label: "Reddet: \"Kölenin elinde kılıç olmaz.\"", cls: "", fn: () => {
+          s.hero.skills.emek += 20;
+          say("Timur omuz silkti. Sen de tarlaya döndün. Emek +20");
+        } },
+      ]);
+    } else if (n >= 11 && once("pazar")) {
+      this.hud.choice("Pazar günü", "merchant", `Efendin seni pazara yük taşımaya gönderdi. Bir tüccar sana göz kırptı: "Şu çuvalı benim tezgâha bırakırsan sana 6 akçe veririm. Efendin bir çuval eksik saysa ne olur?"`, [
+        { label: "Çuvalı sat · 6 akçe, yakalanırsan sopa", cls: "bad", fn: () => {
+          if (Math.random() < 0.6) {
+            s.res.gold += 6;
+            say("Kimse fark etmedi. Kesende 6 akçe şıngırdıyor.", "good");
+          } else {
+            s.res.gold = Math.max(0, s.res.gold - 10);
+            s.hero.hp = Math.max(1, s.hero.hp - this.maxHp() * 0.3);
+            say("Kâhya saydı, eksik çıktı. 10 akçe ceza ve sopa.", "bad");
+          }
+        } },
+        { label: "Tüccarla pazarlık öğren", cls: "", fn: () => {
+          s.hero.skills.ticaret += 35;
+          say("Tüccar ticaretin inceliklerini anlattı. Ticaret +35", "good");
+        } },
+        { label: "Yükü dürüstçe teslim et", cls: "", fn: () => {
+          s.res.gold += 2;
+          this.addKut(1);
+          say("Efendin yükü tam bulunca 2 akçe bahşiş verdi. Kut +1", "good");
+        } },
+      ]);
+    } else if (n >= 13 && s.res.gold < this.freedomCost() && once("kacis")) {
+      this.hud.choice("Gece kaçışı", "master", `Gece ahırda Oğuz adlı bir köle yanına sokuldu: "Surun kuzeyinde bir gedik var. Bu gece gidiyorum. Gel benimle; 100 akçeyi beklersen yaşlanırsın."`, [
         { label: "Kaçışa katıl · aranırsın, Karahanlılar küser", cls: "bad", fn: () => {
           this.freeHero(true);
           s.wanted = Math.max(s.wanted, 2);
@@ -1759,7 +1814,7 @@ export class Game {
   }
 
   freedomCost(): number {
-    return 80;
+    return 100;
   }
 
   buyFreedom(): void {
@@ -1978,7 +2033,45 @@ export class Game {
 
   eliteCost(city: string, u: Unit): number {
     const f = FACTIONS[factionOf(city)];
-    return Math.round(this.hireCost(u) * (f.unit === u && this.cityRank(city) >= 2 ? 0.7 : 1));
+    return Math.round(this.hireCost(u) * (f.unit === u && this.cityRank(city) >= 2 ? 0.7 : 1) * ((this.s.vakif?.[city] ?? 0) >= 2 ? 0.85 : 1));
+  }
+
+  // ---------- altın harcama yerleri ----------
+
+  feastCost(): number {
+    return 20 + 4 * armySize(this.s.hero.army);
+  }
+
+  /** Şehirde orduya şölen: sonraki üç savaşta +%10 güç. */
+  armyFeast(): void {
+    const s = this.s;
+    if (!s.free || this.nearCity() < 0 || armySize(s.hero.army) < 1) return;
+    if (this.buff("ziyafet")) return this.hud.toast(tr("Askerlerin hâlâ son şölenin tadını çıkarıyor."), "info");
+    if (!this.pay({ gold: this.feastCost() })) return this.hud.toast(tr("Altın yetersiz"), "bad");
+    s.buffs.ziyafet = 3;
+    this.bondEvent("win");
+    audio.play("coin");
+    this.hud.toast(tr("Kazanlar kaynadı, kımız aktı. Ordun sonraki üç savaşta +%10 güçlü."), "good");
+  }
+
+  vakifLv(city: string): number {
+    return this.s.vakif?.[city] ?? 0;
+  }
+
+  /** Bir şehirde imaret/vakıf: her basamak katlanarak pahalı, şöhret + kut ve kalıcı yerel fayda verir. */
+  endow(city: string): void {
+    const s = this.s;
+    const lv = this.vakifLv(city);
+    const v = VAKIF[lv];
+    if (!v || !s.free || this.nearCity() < 0 || CITIES[this.nearCity()].id !== city) return;
+    if (!this.pay({ gold: v.cost })) return this.hud.toast(tr("Altın yetersiz"), "bad");
+    (s.vakif ??= {})[city] = lv + 1;
+    s.renown += v.renown;
+    this.addKut(v.kut);
+    this.addRep(factionOf(city), 5 + 5 * lv, tr("vakıf"));
+    this.chron(`${s.hero.name}, ${CITY_NAME[city]} şehrinde ${v.name.toLocaleLowerCase("tr")} yaptırdı.`);
+    audio.play("quest");
+    this.hud.toast(`${tr(v.name)}: +${v.renown} ${tr("şöhret")}, kut +${v.kut} · ${tr(v.perk)}`, "good");
   }
 
   buyGood(city: string, g: Good, n: number): void {
@@ -2028,17 +2121,36 @@ export class Game {
     this.hud.toast(`${k0} ${GOODS[g].name} satıldı: +${got} altın (${profit >= 0 ? "kâr" : "zarar"} ${Math.abs(profit)})`, profit >= 0 ? "good" : "bad");
   }
 
+  /** Bugün bu şehre satılan ham madde; pazar doydukça fiyat düşer. */
+  private resSold(): Record<string, number> {
+    const s = this.s, day = this.dayOf().day;
+    if (!s.resMkt || s.resMkt.day !== day) s.resMkt = { day, sold: {} };
+    return s.resMkt.sold;
+  }
+
+  private resSat(sold: number): number {
+    return Math.max(RES_SAT_MIN, 1 - sold / RES_SAT);
+  }
+
   resPrice(k: keyof Res): number {
-    return Math.max(1, Math.round(RES_SELL[k] * this.sellFactor()));
+    const ci = this.nearCity();
+    const sat = ci >= 0 ? this.resSat(this.resSold()[CITIES[ci].id] ?? 0) : 1;
+    return Math.max(1, Math.round(RES_SELL[k] * this.sellFactor() * sat * 10) / 10);
   }
 
   sellRes(k: keyof Res, n: number): void {
     const q = Math.min(n, Math.floor(this.s.res[k]));
-    if (q <= 0 || k === "gold") return;
+    const ci = this.nearCity();
+    if (q <= 0 || k === "gold" || ci < 0) return;
+    const sold = this.resSold();
+    const id = CITIES[ci].id;
+    const s0 = sold[id] ?? 0;
+    const sat = (this.resSat(s0) + this.resSat(s0 + q)) / 2;
+    sold[id] = s0 + q;
     this.s.res[k] -= q;
-    const got = q * this.resPrice(k);
+    const got = Math.max(1, Math.round(q * RES_SELL[k] * this.sellFactor() * sat));
     this.s.res.gold += got;
-    this.hud.toast(`${q} ${({ wood: "kereste", stone: "taş", food: "yiyecek" } as Record<string, string>)[k]} satıldı: +${got} altın`, "good");
+    this.hud.toast(`${q} ${({ wood: "kereste", stone: "taş", food: "yiyecek" } as Record<string, string>)[k]} satıldı: +${got} altın${sat < 0.9 ? ` · ${tr("pazar doydu, fiyat düştü")}` : ""}`, "good");
   }
 
   // ---------- smith & items ----------
@@ -7562,6 +7674,8 @@ export class Game {
     const day = this.dayOf().day;
     if (day !== s.evDay) {
       s.evDay = day;
+      const imaret = Object.values(s.vakif ?? {}).filter((l) => l >= 3).length;
+      if (imaret) s.renown += 2 * imaret;
       s.events = s.events.filter((e) => e.until >= day);
       if (s.events.length < 3 && Math.random() < 0.75) this.newMarketEvent(day);
     }
@@ -9162,7 +9276,7 @@ export class Game {
 
   readonly QUESTS: Quest[] = [
     { title: "Efendinin ocakları", text: "Semerkant yakınındaki ormana, taş ocağına ya da tarlaya git ve 3 vardiya çalış.", done: (g) => g.s.c.shifts >= 3, reward: { gold: 5 }, goto: (g) => g.s.nodes[0] },
-    { title: "Hürriyet bedeli", text: "80 akçe biriktir, Semerkant'a dön ve efendinden hürriyetini satın al.", done: (g) => g.s.free, reward: { gold: 20 }, goto: () => ({ x: CAPITAL.x, y: CAPITAL.y }) },
+    { title: "Hürriyet bedeli", text: "100 akçe biriktir, Semerkant'a dön ve efendinden hürriyetini satın al.", done: (g) => g.s.free, reward: { gold: 20 }, goto: () => ({ x: CAPITAL.x, y: CAPITAL.y }) },
     { title: "İlk silah", text: "Semerkant demircisinden bir silah al ve kuşan.", done: (g) => !!g.eq("silah"), reward: { gold: 15 }, goto: () => ({ x: CAPITAL.x, y: CAPITAL.y }) },
     { title: "Talim", text: "Bir şehrin talim meydanında kılıç ya da ok talimi yap.", done: (g) => g.s.c.trains >= 1, reward: { gold: 20 }, goto: () => ({ x: CAPITAL.x, y: CAPITAL.y }) },
     { title: "Yoldaşlar", text: "Bir köye git ve en az 3 gönüllü topla.", done: (g) => g.s.c.recruits >= 3, reward: { gold: 30 }, goto: (g) => g.nearest(g.s.villages) },
@@ -9194,14 +9308,25 @@ export class Game {
     return this.QUESTS[this.s.quest] ?? null;
   }
 
+  questsDone(): number {
+    return this.s.qdone?.length ?? this.s.quest;
+  }
+
+  /** Öğretici görevler sırasız tamamlanabilir; her tikte en çok bir ödül verilir, takipçi ilk bitmemiş görevi gösterir. */
   private quests(): void {
-    const q = this.quest();
-    if (q && q.done(this)) {
+    const s = this.s;
+    const done = (s.qdone ??= Array.from({ length: s.quest }, (_, i) => i));
+    const i = this.QUESTS.findIndex((q, k) => !done.includes(k) && q.done(this));
+    if (i >= 0) {
+      const q = this.QUESTS[i];
       this.gain(q.reward);
-      this.s.quest++;
+      done.push(i);
       this.hud.questDone(q);
-      saveGame(this.s);
+      saveGame(s);
     }
+    let first = 0;
+    while (first < this.QUESTS.length && done.includes(first)) first++;
+    s.quest = first;
   }
 
   cityName(i: number): string {

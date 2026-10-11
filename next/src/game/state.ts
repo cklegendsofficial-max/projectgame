@@ -222,6 +222,12 @@ export interface GameState {
   /** Haritadaki taze savaş yerleri: t savaş anı (s.time), n toplam ölü. */
   scars?: { x: number; y: number; t: number; n: number; w?: Army }[];
   rec?: BattleRec;
+  /** Tamamlanan öğretici görevlerin sırası (sırasız tamamlanabilir). */
+  qdone?: number[];
+  /** Şehir başına yaptırılan vakıf basamağı (1 çeşme, 2 imaret, 3 medrese). */
+  vakif?: Record<string, number>;
+  /** Günlük ham madde satışı (şehir başına adet). */
+  resMkt?: { day: number; sold: Record<string, number> };
   res: Res;
   resAt: number;
   buildings: Record<BuildingId, { lv: number; until: number }>;
