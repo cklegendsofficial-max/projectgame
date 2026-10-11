@@ -141,6 +141,8 @@ export class Sim {
   rout: "a" | "b" | null = null;
   resv: Army = { ...NONE };
   private fresh = 0;
+  /** Düşman narası: 0 henüz atılmadı, >0 kalan tur, <0 tükendi. */
+  private foeCry = 0;
 
   constructor(private a0: Army, aBonus0: number, private b0: Army, private bBonus = 0, private champ: Champion | null = null, boss0: Boss | null = null, field: Field | null = null, reserve = false) {
     this.fm = fieldMul(field);
@@ -306,6 +308,15 @@ export class Sim {
     if (armySize(this.resv) > 0) inMul *= 0.92;
     for (const u of UNIT_KEYS) if (this.fm[u]) uMul[u] = (uMul[u] ?? 1) * this.fm[u]!;
     const bonus = (1 + this.aBonus + this.rally * Math.min(1, r / 4)) * ordMul - 1;
+    if (this.foeCry === 0 && !boss && r >= 2 && this.mb < 40 && armySize(this.b) >= 6) {
+      this.foeCry = 2;
+      this.mb = Math.min(100, this.mb + 5);
+      ev.push("Düşman komutanı nara attı!");
+    }
+    if (this.foeCry > 0) {
+      inMul *= 1.12;
+      if (--this.foeCry === 0) this.foeCry = -1;
+    }
     const prevA = armySize(this.a);
     const prevB = armySize(this.b);
     const atkB = hit(ordMul ? this.a : NONE, this.b, bonus, this.hpB, extra * ordMul, boss, BOSS_WEIGHT, uMul);

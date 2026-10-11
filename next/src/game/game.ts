@@ -3654,7 +3654,7 @@ export class Game {
         h.army[u] += k;
         revived += k;
       }
-    const xp = Math.round((armyPower(enemy) + (boss ? boss.atk * Math.sqrt(boss.hp) * 0.8 : 0)) * (res.win ? 0.7 : 0.15) * (this.readEdge ? 1.25 : 1) * this.eraXp()) + 3;
+    const xp = Math.round((armyPower(enemy) + (boss ? boss.atk * Math.sqrt(boss.hp) * 0.8 : 0)) * (res.win ? 0.7 : 0.15) * (this.readEdge ? 1.25 : 1) * (res.win && res.rout === "b" ? 1.15 : 1) * this.eraXp()) + 3;
     if (this.readEdge) this.s.c.reads = (this.s.c.reads ?? 0) + 1;
     this.readEdge = false;
     const lvUp = this.addXp(xp);
@@ -3679,7 +3679,13 @@ export class Game {
       fled = `${res.heroDown ? "Ağır yaralandın. " : ""}Kalanlar seni ${CITY_NAME[c.id]} şehrine taşıdı.`;
     }
     const vetNote = this.vetsAfter(before, res, title);
-    const note = [tline, extra || fled, revived ? `Ruh Çağrısı: ${revived} asker hayata döndü` : "", vetNote].filter(Boolean).join("<br>");
+    let routNote = "";
+    if (res.win && res.rout === "b") {
+      const loot = Math.round(armySize(enemy) * 1.5) + 5;
+      this.s.res.gold += loot;
+      routNote = tr("Bozgun: kaçanları kovaladın, +{g} altın ve +%15 TP", { g: loot });
+    }
+    const note = [tline, extra || fled, routNote, revived ? `Ruh Çağrısı: ${revived} asker hayata döndü` : "", vetNote].filter(Boolean).join("<br>");
     return { xp, lvUp, note };
   }
 

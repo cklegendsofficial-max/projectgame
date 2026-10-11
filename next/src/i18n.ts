@@ -714,6 +714,8 @@ const EN: Record<string, string> = {
   "Savaşa!": "To battle!",
   "Er meydanını kazandın!": "You won the duel!",
   "Erin yere serildi": "Your champion fell",
+  "Düşman komutanı nara attı!": "The enemy commander roars a war cry!",
+  "Bozgun: kaçanları kovaladın, +{g} altın ve +%15 TP": "Rout: you chased down the fleeing, +{g} gold and +15% XP",
   Oynanış: "Gameplay",
   İpuçları: "Tips",
   "Beceri puanın var! Kahraman panelinden güç, çeviklik ya da liderliğe harca.": "You have a skill point! Spend it on strength, agility or leadership in the hero panel.",

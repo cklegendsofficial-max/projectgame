@@ -171,6 +171,7 @@ export class BattleField {
     else if (order === "kanat") this.calls.push({ text: "Kanatlar dolanıyor!", t0: now, color: "#ffe39a" });
     else if (order === "nara") this.calls.push({ text: "Nara!", t0: now, color: "#ffe39a" });
     else if (ev.includes("Kritik!")) this.calls.push({ text: "Kritik!", t0: now, color: "#fff" });
+    if (ev.includes("Düşman komutanı nara attı!")) this.calls.push({ text: "Düşman komutanı nara attı!", t0: now, color: "#ff9a7a" });
     if (ev.includes("Yedekler meydana indi!")) this.calls.push({ text: "Yedekler meydana indi!", t0: now, color: "#9ad0ff" });
     if (ev.includes("Düşman bozguna uğradı!")) this.calls.push({ text: "Düşman bozguna uğradı!", t0: now + 80, color: "#ffd56a" });
     if (ev.includes("Askerlerin dağıldı!")) this.calls.push({ text: "Askerlerin dağıldı!", t0: now + 80, color: "#ff7a5a" });
