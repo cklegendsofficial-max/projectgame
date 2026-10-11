@@ -204,6 +204,8 @@ export class WorldView {
   private life: Life | null = null;
   private mark: { x: number; y: number; t: number } | null = null;
   private time = 0;
+  private sagaT = -9;
+  private sagaAt: { x: number; y: number } | null = null;
   private visT = 0;
 
   constructor(private app: Application, private world: World) {}
@@ -469,6 +471,19 @@ export class WorldView {
       this.smoke(fx, fy - 10, 1, 0x3a3430, inv);
       const sw = 22 * inv;
       g.moveTo(fx - sw, fy - sw - 30).lineTo(fx + sw, fy + sw - 30).moveTo(fx + sw, fy - sw - 30).lineTo(fx - sw, fy + sw - 30).stroke({ color: 0xfff0d0, width: 5 * inv, alpha: 0.9 });
+    }
+    if (this.time - this.sagaT > 1) {
+      this.sagaT = this.time;
+      this.sagaAt = s.free ? (game.chapter()?.goto(game) ?? null) : null;
+    }
+    const sp = this.sagaAt;
+    if (sp) {
+      const pr = (this.time * 0.6) % 1;
+      g.ellipse(sp.x, sp.y, (40 + pr * 60) * inv, (16 + pr * 24) * inv).stroke({ color: 0xc89bff, width: 3 * inv, alpha: 0.7 * (1 - pr) });
+      g.rect(sp.x - 6 * inv, sp.y - 150 * inv, 12 * inv, 150 * inv).fill({ color: 0xb07cff, alpha: 0.16 });
+      g.rect(sp.x - 2 * inv, sp.y - 150 * inv, 4 * inv, 150 * inv).fill({ color: 0xe6d0ff, alpha: 0.35 });
+      const by = sp.y - 170 * inv - Math.abs(Math.sin(this.time * 3)) * 14 * inv;
+      g.poly([sp.x - 14 * inv, by - 14 * inv, sp.x + 14 * inv, by - 14 * inv, sp.x, by + 6 * inv]).fill({ color: 0xc89bff }).stroke({ color: 0x2a0e44, width: 2 * inv });
     }
     for (const c of CITIES) {
       const occ = w.occ[c.id];

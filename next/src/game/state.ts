@@ -46,6 +46,7 @@ export interface Camp {
   alive: boolean;
   respawnAt: number;
   garrison: Army;
+  clears?: number;
 }
 
 export interface ResNode {
@@ -226,6 +227,9 @@ export interface GameState {
   qdone?: number[];
   /** Şehir başına yaptırılan vakıf basamağı (1 çeşme, 2 imaret, 3 medrese). */
   vakif?: Record<string, number>;
+  nemAt?: number;
+  evSeen?: Record<string, number>;
+  sagaCall?: number;
   /** Günlük ham madde satışı (şehir başına adet). */
   resMkt?: { day: number; sold: Record<string, number> };
   res: Res;
