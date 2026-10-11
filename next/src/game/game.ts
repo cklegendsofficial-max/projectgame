@@ -100,6 +100,8 @@ export interface Hint {
 const TRIP_MIN = 600;
 const TELL_TRUE = 0.7;
 const DUEL_MIN = 25;
+/** Yenilgide düşen askerlerin savaş yerinde kurtarılmayı bekleyen payı. */
+const WOUNDED_SHARE = 0.3;
 const DUEL_FOES = ["Kara Buğa", "Demir Kıyak", "Bars Tegin", "Tolun Er", "Aybars", "Kılıç Arslan", "Böri Han", "Yağmur Alp"];
 const HAGGLE = [
   { label: "Nazikçe iste", gain: 0.04, base: 0.7, loss: 0.02 },
@@ -1310,6 +1312,7 @@ export class Game {
     this.sideTick();
     this.tipTick(dt);
     this.lvTick();
+    this.woundTick();
     this.saveT += dt;
     if (this.saveT > 8) {
       this.saveT = 0;
@@ -3649,10 +3652,14 @@ export class Game {
     const h = this.s.hero;
     if (res.orders.includes("ricat")) this.s.c.turan = (this.s.c.turan ?? 0) + 1;
     const dead = armySize(res.lostA) + armySize(res.lostB);
+    let woundNote = "";
     if (!this.deep && !this.delve && dead >= 4) {
       const sc = (this.s.scars ??= []);
-      sc.push({ x: Math.round(h.x), y: Math.round(h.y), t: this.s.time, n: dead });
+      const w = Object.fromEntries(UNIT_KEYS.map((u) => [u, Math.floor(res.lostA[u] * WOUNDED_SHARE)])) as Army;
+      const keep = !res.win && armySize(w) >= 2;
+      sc.push({ x: Math.round(h.x), y: Math.round(h.y), t: this.s.time, n: dead, ...(keep ? { w } : {}) });
       if (sc.length > 12) sc.shift();
+      if (keep) woundNote = tr("{n} yaralı yiğidin savaş yerinde bekliyor; üç gün içinde dönüp onları kurtar.", { n: armySize(w) });
     }
     const rec = this.battleRec();
     rec.fights++;
@@ -3702,7 +3709,7 @@ export class Game {
       this.s.res.gold += loot;
       routNote = tr("Bozgun: kaçanları kovaladın, +{g} altın ve +%15 TP", { g: loot });
     }
-    const note = [tline, extra || fled, routNote, revived ? `Ruh Çağrısı: ${revived} asker hayata döndü` : "", vetNote].filter(Boolean).join("<br>");
+    const note = [tline, extra || fled, woundNote, routNote, revived ? `Ruh Çağrısı: ${revived} asker hayata döndü` : "", vetNote].filter(Boolean).join("<br>");
     return { xp, lvUp, note };
   }
 
@@ -3767,6 +3774,27 @@ export class Game {
     }
     if (up) this.lvQ ??= lv0;
     return up;
+  }
+
+  /** Yenilgi yerine dönen kahraman orada bekleyen yaralıları toplar. */
+  private woundTick(): void {
+    const s = this.s, h = s.hero;
+    if (this.battleLock || this.deep || this.delve) return;
+    for (const c of s.scars ?? []) {
+      if (!c.w || Math.hypot(c.x - h.x, c.y - h.y) > 60) continue;
+      let room = Math.max(0, this.heroCap() - armySize(h.army));
+      let got = 0;
+      for (const u of UNIT_KEYS) {
+        const k = Math.min(room, c.w[u]);
+        h.army[u] += k;
+        room -= k;
+        got += k;
+      }
+      const left = armySize(c.w) - got;
+      delete c.w;
+      this.hud.toast(got ? tr("Savaş yerinde yaralı yiğitlerini buldun: {n} asker yeniden saflarında.", { n: got }) + (left ? " " + tr("{n} kişiye yer yoktu, köylerine döndüler.", { n: left }) : "") : tr("Yaralıların seni bekliyordu ama birliğinde yer yok; köylerine döndüler."), got ? "good" : "info");
+      if (got) audio.play("quest");
+    }
   }
 
   private lvQ: number | null = null;

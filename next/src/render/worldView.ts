@@ -929,6 +929,16 @@ export class WorldView {
           air.circle(sx, c.y - ph * 70, 6 + ph * 16).fill({ color: 0x4a4540, alpha: 0.4 * (1 - ph) * (1 - age / 0.6) });
         }
       }
+      if (c.w) {
+        const fx = c.x + r * 0.4, fy = c.y + 2, wv = Math.sin(this.time * 4 + i) * 2;
+        const pr = (this.time * 0.8 + i * 0.3) % 1;
+        air.ellipse(c.x, c.y + 6, r + 6 + pr * 30, (r + 6 + pr * 30) * 0.45).stroke({ color: 0xfff0c8, width: 3, alpha: 0.7 * (1 - pr) });
+        air.rect(fx - 1.2, fy - 44, 2.4, 44).fill({ color: 0x3a2410 });
+        air.poly([fx + 1, fy - 44, fx + 24, fy - 40 + wv, fx + 22, fy - 31 + wv, fx + 1, fy - 30]).fill({ color: 0xf2e6c8 });
+        air.poly([fx + 1, fy - 44, fx + 24, fy - 40 + wv, fx + 23, fy - 37 + wv, fx + 1, fy - 40]).fill({ color: 0xc8302a });
+        air.ellipse(c.x - 8, c.y + 8, 7, 3).fill({ color: 0x6a4a2a, alpha: 0.9 });
+        air.ellipse(c.x + 6, c.y + 12, 7, 3).fill({ color: 0x6a4a2a, alpha: 0.9 });
+      }
       const crows = c.n >= 20 ? 4 : 2;
       for (let k = 0; k < crows; k++) {
         const a = this.time * (0.7 + k * 0.13) + (k * Math.PI * 2) / crows + i;

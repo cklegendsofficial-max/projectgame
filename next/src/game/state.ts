@@ -220,7 +220,7 @@ export interface GameState {
   /** Gösterilmiş bağlamsal ipuçları. */
   tips?: string[];
   /** Haritadaki taze savaş yerleri: t savaş anı (s.time), n toplam ölü. */
-  scars?: { x: number; y: number; t: number; n: number }[];
+  scars?: { x: number; y: number; t: number; n: number; w?: Army }[];
   rec?: BattleRec;
   res: Res;
   resAt: number;
