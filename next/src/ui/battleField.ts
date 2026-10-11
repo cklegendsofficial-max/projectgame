@@ -28,7 +28,7 @@ interface Puff {
   vy: number;
   t0: number;
   life: number;
-  kind: "dust" | "spark" | "blood";
+  kind: "dust" | "spark" | "blood" | "gold";
 }
 
 interface Callout {
@@ -81,6 +81,27 @@ export class BattleField {
   private bossImg: HTMLImageElement | null;
   private sprites = new Map<string, HTMLCanvasElement>();
   private bg: HTMLCanvasElement | null = null;
+  private lag = 0;
+  private frozen = 0;
+  private lastReal = performance.now();
+
+  /** Vuruş duraklamasında duran sahne saati. */
+  private clock(): number {
+    const real = performance.now();
+    if (real < this.frozen) this.lag += real - this.lastReal;
+    else if (this.lastReal < this.frozen) this.lag += this.frozen - this.lastReal;
+    this.lastReal = real;
+    return real - this.lag;
+  }
+
+  announce(text: string, color: string, delay = 0): void {
+    this.calls.push({ text, t0: this.clock() + delay, color });
+  }
+
+  hitStop(ms: number): void {
+    this.clock();
+    this.frozen = performance.now() + ms;
+  }
 
   constructor(private cv: HTMLCanvasElement, a: Army, b: Army, heroSrc: string, bossSrc: string | null, private field: Field | null = null) {
     loadArt();
@@ -88,8 +109,8 @@ export class BattleField {
     this.heroImg = Object.assign(new Image(), { src: heroSrc });
     this.bossImg = bossSrc ? Object.assign(new Image(), { src: bossSrc }) : null;
     this.cur = [{ ...a }, { ...b }];
-    if (bossSrc) this.calls.push({ text: "Destan savaşı!", t0: performance.now() + 150, color: "#d9a8ff" });
-    else if (armySize(a) + armySize(b) >= 80) this.calls.push({ text: "Meydan muharebesi!", t0: performance.now() + 150, color: "#ffe39a" });
+    if (bossSrc) this.calls.push({ text: "Destan savaşı!", t0: this.clock() + 150, color: "#d9a8ff" });
+    else if (armySize(a) + armySize(b) >= 80) this.calls.push({ text: "Meydan muharebesi!", t0: this.clock() + 150, color: "#ffe39a" });
     this.resize();
     [a, b].forEach((arm, s) => {
       const per = (this.per[s] = Math.max(1, Math.ceil(armySize(arm) / 36)));
@@ -107,7 +128,7 @@ export class BattleField {
       // derinlik sırası: üstteki önce çizilsin
       this.sides[s].sort((p, q) => p.y - q.y);
     });
-    this.t0 = performance.now() - 10000;
+    this.t0 = this.clock() - 10000;
     const loop = () => {
       this.draw();
       this.raf = requestAnimationFrame(loop);
@@ -130,12 +151,17 @@ export class BattleField {
   }
 
   finish(win: boolean): void {
-    this.end = { win, t0: performance.now() };
-    this.calls.push({ text: win ? "Zafer!" : "Bozgun", t0: performance.now(), color: win ? "#ffd56a" : "#ff7a5a" });
+    this.end = { win, t0: this.clock() };
+    if (win)
+      for (let k = 0; k < 60; k++) {
+        const t0 = this.end.t0 + 200 + Math.random() * 900;
+        this.puffs.push({ x: 0.05 + Math.random() * 0.5, y: 0.3 + Math.random() * 0.7, vx: (Math.random() - 0.5) * 0.05, vy: -0.4 - Math.random() * 0.5, t0, life: 1200 + Math.random() * 600, kind: "gold" });
+      }
+    this.calls.push({ text: win ? "Zafer!" : "Bozgun", t0: this.clock(), color: win ? "#ffd56a" : "#ff7a5a" });
   }
 
   round(a: Army, b: Army, order: Order | undefined, dur: number, ev: string[] = []): void {
-    const now = performance.now();
+    const now = this.clock();
     this.t0 = now;
     this.dur = dur;
     this.order = order;
@@ -196,7 +222,7 @@ export class BattleField {
     const k = Math.sin(Math.PI * Math.min(1, p));
     if (this.end) {
       const lost = this.end.win ? 1 : 0;
-      const q = Math.min(1, (performance.now() - this.end.t0) / 1400);
+      const q = Math.min(1, (this.clock() - this.end.t0) / 1400);
       return s === lost ? -q * 0.5 : q * 0.04;
     }
     if (this.order === "ricat") {
@@ -293,7 +319,7 @@ export class BattleField {
   private draw(): void {
     const { ctx, w, h } = this;
     if (this.cv.clientWidth && (Math.abs(this.cv.clientWidth - w) > 2 || Math.abs(this.cv.clientHeight - h) > 2)) this.resize();
-    const now = performance.now();
+    const now = this.clock();
     const p = (now - this.t0) / this.dur;
     ctx.drawImage(this.ground(), 0, 0, w, h);
     const size = Math.max(18, Math.min(36, h / 5.2));
@@ -359,10 +385,22 @@ export class BattleField {
         ctx.beginPath();
         ctx.arc(x, y, 4 + t * 12, 0, Math.PI * 2);
         ctx.fill();
+      } else if (d.kind === "gold") {
+        const tw = 0.6 + 0.4 * Math.sin(now / 60 + d.x * 40);
+        ctx.fillStyle = `rgba(255,${200 + Math.round(40 * tw)},110,${(1 - t) * tw})`;
+        ctx.fillRect(x - 1.5, Y(d.y) + d.vy * t * h, 3, 3);
       } else {
         ctx.fillStyle = d.kind === "blood" ? `rgba(150,20,10,${1 - t})` : `rgba(255,220,140,${1 - t})`;
         ctx.fillRect(x, y, 2, 2);
       }
+    }
+    if (performance.now() < this.frozen) {
+      ctx.fillStyle = "rgba(255,245,220,0.14)";
+      ctx.fillRect(0, 0, w, h);
+    }
+    if (this.end && !this.end.win) {
+      ctx.fillStyle = `rgba(30,6,2,${0.4 * Math.min(1, (now - this.end.t0) / 1600)})`;
+      ctx.fillRect(0, 0, w, h);
     }
     ctx.textAlign = "center";
     ctx.font = `bold ${Math.round(Math.max(11, Math.min(14, h / 16)))}px Georgia, serif`;

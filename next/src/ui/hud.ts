@@ -2869,8 +2869,11 @@ export class Hud {
       b.classList.toggle("low", m < 35);
       b.querySelector("span")!.textContent = `${t("Moral")} ${Math.round(m)}`;
     };
-    setMor(".me", 100);
-    setMor(".foe", 100);
+    const r0 = sim.rounds[0];
+    setMor(".me", r0.ma ?? 100);
+    setMor(".foe", r0.mb ?? 100);
+    if (r0.ev.includes("Er meydanını kazandın!")) bf.announce("Er meydanını kazandın!", "#ffd56a", 300);
+    else if (r0.ev.includes("Erin yere serildi")) bf.announce("Erin yere serildi", "#ff7a5a", 300);
     let pending: Order | undefined;
     let fast = auto;
     const ordBtns = [...el.querySelectorAll<HTMLButtonElement>(".ord")];
@@ -2932,11 +2935,14 @@ export class Hud {
         setMor(".me", r.ma);
         setMor(".foe", r.mb);
         bf.round(r.a, r.b, r.order, fast ? 380 : 760, r.ev);
-        box.classList.remove("shake");
+        const dead = armySize(p.a) - armySize(r.a) + armySize(p.b) - armySize(r.b);
+        const heavy = r.ev.some((e) => e === "Kritik!" || e.endsWith("düştü!") || e.includes("bozguna") || e.includes("dağıldı")) || dead >= Math.max(6, (n0a + n0b) * 0.12) || (!!boss && p.bhp - r.bhp > boss.hp * 0.15);
+        box.classList.remove("shake", "shake2");
         void box.offsetWidth;
-        box.classList.add("shake");
+        box.classList.add(heavy ? "shake2" : "shake");
+        if (heavy && !fast) setTimeout(() => bf.hitStop(110), 760 * 0.42);
         audio.play("hit");
-        haptic(18);
+        haptic(heavy ? [30, 40, 30] : 18);
         log.textContent = `${r.ev.length ? r.ev.join(" · ") + " — " : ""}${i}. tur: ${p.hp >= r.hp ? `${Math.round(p.hp - r.hp)} hasar aldın` : `${Math.round(r.hp - p.hp)} can yeniledin`}${n0a ? `, ${armySize(p.a) - armySize(r.a)} asker kaybın` : ""} · düşman kaybı ${armySize(p.b) - armySize(r.b)}`;
         i++;
         setTimeout(step, fast ? 420 : 900);
@@ -2965,6 +2971,18 @@ export class Hud {
         <div class="stats"><div>Kayıpların: <b>${armySize(res.lostA)}</b></div><div>Düşman kaybı: <b>${armySize(res.lostB)}</b></div><div>${ic("scroll")}+${xp} TP${lvUp ? " · <b class='gold'>SEVİYE ATLADIN!</b>" : ""}</div></div>
         ${extra ? `<p class="loot">${extra}</p>` : ""}
         <button class="btn go big">Devam</button>`;
+      box.classList.add(res.win ? "won" : "lost");
+      el.querySelectorAll<HTMLElement>(".result .stats b").forEach((b) => {
+        const to = Number(b.textContent);
+        if (!Number.isFinite(to) || to <= 0) return;
+        const t0 = performance.now();
+        const tick = () => {
+          const q = Math.min(1, (performance.now() - t0) / 700);
+          b.textContent = String(Math.round(to * (1 - Math.pow(1 - q, 3))));
+          if (q < 1) requestAnimationFrame(tick);
+        };
+        tick();
+      });
       setTimeout(() => box.scrollTo({ top: box.scrollHeight, behavior: "smooth" }), 650);
       el.querySelector(".result .btn")!.addEventListener("click", () => {
         el.remove();

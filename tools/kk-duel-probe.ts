@@ -30,7 +30,7 @@ await ev(`g.s.res.gold = 300; const c = g.targetPos({kind:"capital"}); g.s.hero.
 await dismiss();
 
 const fightOnce = async (aim: boolean) => {
-  await ev(`g.s.hero.lv = 8; g.s.hero.army = {spear: 16, archer: 12, horse: 10}; g.s.hero.hp = g.maxHp(); const c = g.s.camps.filter((c) => c.tier <= 4).sort((a, b) => b.tier - a.tier)[${aim ? 0 : 1}]; c.garrison = {spear: 22, archer: 16, horse: 12}; g.s.hero.x = c.x + 20; g.s.hero.y = c.y; g.cam.flyTo(c.x, c.y, 0.9); g.attackCamp(g.s.camps.indexOf(c));`);
+  await ev(`g.s.hero.lv = 8; g.s.hero.army = {spear: 16, archer: 12, horse: 10}; g.s.hero.hp = g.maxHp(); const c = g.s.camps.filter((c) => c.tier <= 4).sort((a, b) => b.tier - a.tier)[${aim ? 0 : 1}]; c.garrison = ${aim ? "{spear: 20, archer: 14, horse: 10}" : "{spear: 22, archer: 16, horse: 12}"}; g.s.hero.x = c.x + 20; g.s.hero.y = c.y; g.cam.flyTo(c.x, c.y, 0.9); g.attackCamp(g.s.camps.indexOf(c));`);
   await page.waitForSelector(".tact", { timeout: 5000 }).catch(async (e) => {
     console.log("no tact", await ev(`return { lock: g.battleLock, open: g.hud.battleOpen, html: document.querySelector(".battle")?.textContent?.slice(0, 200) };`));
     throw e;
@@ -38,9 +38,11 @@ const fightOnce = async (aim: boolean) => {
   await page.evaluate(() => {
     const w = window as unknown as { __r: () => number };
     w.__r = Math.random;
-    Math.random = () => 0.1;
+    let n = 0;
+    Math.random = () => (++n <= 2 ? 0.5 : 0.1);
   });
-  await page.locator(".tact").nth(0).click();
+  const odds = (await page.locator(".tact .odds").allTextContents()).map((s) => Number(s.replace(/\D/g, "")));
+  await page.locator(".tact").nth(odds.indexOf(Math.max(...odds))).click();
   await page.evaluate(() => {
     Math.random = (window as unknown as { __r: () => number }).__r;
   });
@@ -70,6 +72,10 @@ const fightOnce = async (aim: boolean) => {
   const mor = await page.locator(".bbox.war .bar.mor span").allTextContents();
   if (aim) await page.screenshot({ path: `${out}-03-battle.png` });
   await page.waitForSelector(".battle .result .btn", { timeout: 30000 });
+  if (aim) {
+    await page.waitForTimeout(900);
+    await page.screenshot({ path: `${out}-04-result.png` });
+  }
   await page.locator(".battle .result .btn").click();
   await dismiss();
   return { msg, mor };

@@ -712,6 +712,8 @@ const EN: Record<string, string> = {
   "Er meydanını kazandın! Düşmanın morali çöktü.": "You won the duel! The enemy's morale collapsed.",
   "Erin yere serildi; askerlerin sarsıldı.": "You were thrown down; your soldiers are shaken.",
   "Savaşa!": "To battle!",
+  "Er meydanını kazandın!": "You won the duel!",
+  "Erin yere serildi": "Your champion fell",
   Oynanış: "Gameplay",
   İpuçları: "Tips",
   "Beceri puanın var! Kahraman panelinden güç, çeviklik ya da liderliğe harca.": "You have a skill point! Spend it on strength, agility or leadership in the hero panel.",

@@ -310,6 +310,14 @@ body.nomini .mini { display: none; }
 .bbox { width: min(560px, 94vw); padding: 18px; border-radius: 16px; background: linear-gradient(#3b2614f8, #1d1209f8); border: 2px solid #b8843e; box-shadow: 0 10px 40px #000c; }
 .bbox.shake { animation: shake .3s; }
 @keyframes shake { 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
+.bbox.shake2 { animation: shake2 .42s; }
+@keyframes shake2 { 15% { transform: translate(-9px, 3px) rotate(-.4deg); } 35% { transform: translate(8px, -3px) rotate(.3deg); } 55% { transform: translate(-5px, 2px); } 75% { transform: translate(3px, -1px); } }
+.bbox.war.won { box-shadow: 0 0 0 2px #ffd56a, 0 0 40px #ffd56a55, 0 10px 40px #000a; transition: box-shadow .6s; }
+.bbox.war.lost { box-shadow: 0 0 0 2px #8a2a1a, 0 0 40px #ff3a1a33, 0 10px 40px #000a; transition: box-shadow .6s; }
+.bbox.won .rt.win { animation: qin .4s cubic-bezier(.2, 1.6, .5, 1), rtglow 1.8s .4s ease-in-out infinite alternate; }
+@keyframes rtglow { to { text-shadow: 0 0 32px #ffd56acc, 0 0 6px #fff8; letter-spacing: 2px; } }
+.bbox.lost .rt.lose { animation: rtsink .7s ease-out; }
+@keyframes rtsink { from { opacity: 0; transform: translateY(-14px) scale(1.15); filter: blur(3px); } }
 .bbox h2 { margin: 0 0 12px; text-align: center; font: bold 22px Georgia, serif; color: #ffe7a8; display: flex; justify-content: center; align-items: center; gap: 8px; }
 .bbox h2 .ic { width: 30px; height: 30px; }
 .sides { display: flex; align-items: center; gap: 10px; }
