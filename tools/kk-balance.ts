@@ -1,3 +1,4 @@
+import "./node-shim";
 import { odds, type Champion } from "../next/src/game/battle";
 import { army } from "../next/src/game/data";
 import { kurganBoss, kurganGuard, campGarrison } from "../next/src/game/state";

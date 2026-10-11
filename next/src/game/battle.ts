@@ -359,7 +359,7 @@ export class Sim {
       else if (c.hp < c.maxHp * 0.3) da -= 4;
     }
     if (boss && boss.hp > 0) db = Math.max(db, 0);
-    this.ma = Math.max(0, Math.min(100, this.ma + da));
+    this.ma = Math.max(c && c.hp > c.maxHp * 0.5 ? 25 : 0, Math.min(100, this.ma + da));
     this.mb = Math.max(boss && boss.hp > 0 ? 30 : 0, Math.min(100, this.mb + db));
     if (this.mb <= 0 && !boss && armySize(this.b) > 0) {
       this.rout = "b";
